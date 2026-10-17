@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Brick Runner - Collect the Stars!</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            touch-action: none;
+        }
+        .game-container {
+            text-align: center;
+            width: 100%;
+            max-width: 800px;
+            padding: 10px;
+        }
+        h1 {
+            color: #ffd700;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            font-size: clamp(18px, 5vw, 28px);
+        }
+        #gameCanvas {
+            border: 4px solid #8b4513;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            width: 100%;
+            max-width: 800px;
+            height: auto;
+        }
+        .info {
+            color: #fff;
+            margin-top: 10px;
+            font-size: clamp(12px, 3vw, 14px);
+        }
+        .controls {
+            color: #aaa;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+        #ui {
+            display: flex;
+            justify-content: space-between;
+            max-width: 800px;
+            margin: 0 auto 10px auto;
+            color: #fff;
+            font-size: clamp(14px, 4vw, 18px);
+            padding: 0 10px;
+        }
+        .stars-count {
+            color: #ffd700;
+        }
+
+        /* Mobile touch controls */
+        .touch-controls {
+            display: none;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 800px;
+            margin: 15px auto 0 auto;
+            padding: 0 10px;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .dpad {
+            display: flex;
+            gap: 10px;
+        }
+
+        .touch-btn {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: 3px solid rgba(255,255,255,0.5);
+            background: rgba(255,255,255,0.2);
+            color: white;
+            font-size: 28px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.1s, transform 0.1s;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .touch-btn:active, .touch-btn.active {
+            background: rgba(255,255,255,0.5);
+            transform: scale(0.95);
+        }
+
+        .jump-btn {
+            width: 90px;
+            height: 90px;
+            background: rgba(255, 107, 107, 0.4);
+            border-color: rgba(255, 107, 107, 0.7);
+        }
+
+        .jump-btn:active, .jump-btn.active {
+            background: rgba(255, 107, 107, 0.7);
+        }
+
+        .action-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .restart-btn {
+            width: 50px;
+            height: 50px;
+            font-size: 20px;
+            background: rgba(255, 165, 0, 0.3);
+            border-color: rgba(255, 165, 0, 0.6);
+        }
+
+        .restart-btn:active, .restart-btn.active {
+            background: rgba(255, 165, 0, 0.6);
+        }
+
+        .mode-btn {
+            background: rgba(78, 205, 196, 0.2);
+            border: 1px solid rgba(78, 205, 196, 0.6);
+            color: #fff;
+            font-family: inherit;
+            font-size: clamp(11px, 3vw, 13px);
+            padding: 6px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .mode-btn:hover, .mode-btn:active {
+            background: rgba(78, 205, 196, 0.45);
+        }
+
+        .mode-btn.active {
+            background: rgba(78, 205, 196, 0.6);
+            border-color: #4ecdc4;
+        }
+
+        /* Show touch controls on touch devices */
+        @media (pointer: coarse), (max-width: 900px) {
+            .touch-controls {
+                display: flex;
+            }
+            .controls {
+                display: none;
+            }
+        }
+
+        /* Hide keyboard instructions on mobile */
+        @media (max-width: 600px) {
+            h1 {
+                margin-bottom: 5px;
+            }
+            .game-container {
+                padding: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>Brick Runner</h1>
+        <div id="ui">
+            <span>Stars: <span id="starCount" class="stars-count">0</span> / <span id="totalStars">0</span></span>
+            <span id="levelDisplay">Level 1</span>
+            <span id="message"></span>
+        </div>
+        <canvas id="gameCanvas" width="800" height="500"></canvas>
+        <p class="info" id="statusText">Collect all the stars and reach the flag!</p>
+        <p class="controls" id="controlsText">Controls: Arrow Keys or WASD to move | SPACE to jump | R to restart</p>
+        <button class="mode-btn" id="modeBtn">2 Player Co-op (connect another device)</button>
+
+        <!-- Mobile Touch Controls -->
+        <div class="touch-controls">
+            <div class="dpad">
+                <button class="touch-btn" id="leftBtn">&#9664;</button>
+                <button class="touch-btn" id="rightBtn">&#9654;</button>
+            </div>
+            <button class="touch-btn restart-btn" id="restartBtn">&#8635;</button>
+            <button class="touch-btn jump-btn" id="jumpBtn">JUMP</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const starCountEl = document.getElementById('starCount');
+        const totalStarsEl = document.getElementById('totalStars');
+        const levelDisplayEl = document.getElementById('levelDisplay');
+        const messageEl = document.getElementById('message');
+        const statusTextEl = document.getElementById('statusText');
+        const controlsTextEl = document.getElementById('controlsText');
+        const modeBtn = document.getElementById('modeBtn');
+
+        // Game constants
+        const GRAVITY = 0.5;
+        const JUMP_FORCE = -12;
+        const MOVE_SPEED = 5;
+        const BRICK_WIDTH = 80;
+        const BRICK_HEIGHT = 25;
+
+        // Game state
+        let player, remotePlayer, platforms, stars, finishFlag, waterLevel, collectedStars, gameState, currentLevel;
+        let playerStartPos;
+
+        // Co-op networking state. Each device fully simulates only its own
+        // `player`; the other device's character is a `remotePlayer` driven by
+        // position updates received over the WebSocket relay.
+        let numPlayers = 1;
+        let ws = null;
+        let myRole = null;
+        let peerConnected = false;
+        let remoteTarget = { x: 0, y: 0 };
+        let netTick = 0;
+
+        function wsSend(msg) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(msg));
+            }
+        }
+
+        function connectCoop() {
+            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${proto}//${location.host}/ws/brick-runner`);
+
+            ws.addEventListener('open', () => {
+                statusTextEl.textContent = 'Waiting for Player 2 to join...';
+            });
+
+            ws.addEventListener('message', (event) => {
+                let msg;
+                try {
+                    msg = JSON.parse(event.data);
+                } catch (e) {
+                    return;
+                }
+                handleNetMessage(msg);
+            });
+
+            ws.addEventListener('close', () => {
+                peerConnected = false;
+                if (numPlayers === 2) {
+                    statusTextEl.textContent = 'Co-op connection lost.';
+                }
+            });
+
+            ws.addEventListener('error', () => {
+                statusTextEl.textContent = 'Could not connect for co-op.';
+            });
+        }
+
+        function disconnectCoop() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            peerConnected = false;
+            myRole = null;
+        }
+
+        function handleNetMessage(msg) {
+            switch (msg.type) {
+                case 'role':
+                    myRole = msg.role;
+                    modeBtn.textContent = myRole === 'player2'
+                        ? '2 Player Co-op (You: Player 2)'
+                        : '2 Player Co-op (You: Player 1)';
+                    initLevel(currentLevel);
+                    break;
+                case 'room_full':
+                    statusTextEl.textContent = 'Co-op room already has 2 players.';
+                    disconnectCoop();
+                    numPlayers = 1;
+                    modeBtn.classList.remove('active');
+                    modeBtn.textContent = '2 Player Co-op (connect another device)';
+                    break;
+                case 'peer_status':
+                    peerConnected = msg.connected;
+                    if (numPlayers === 2) {
+                        statusTextEl.textContent = peerConnected
+                            ? 'Player 2 connected! Collect stars and both reach the flag.'
+                            : 'Waiting for Player 2 to join...';
+                    }
+                    break;
+                case 'pos': {
+                    const dx = msg.x - remoteTarget.x;
+                    const dy = msg.y - remoteTarget.y;
+                    if (Math.abs(dx) > 100 || Math.abs(dy) > 100) {
+                        messageEl.textContent = 'Splash! Partner respawned';
+                        messageEl.style.color = '#ff0000';
+                    }
+                    remoteTarget.x = msg.x;
+                    remoteTarget.y = msg.y;
+                    break;
+                }
+                case 'star':
+                    if (stars[msg.i] && !stars[msg.i].collected) {
+                        stars[msg.i].collected = true;
+                        collectedStars++;
+                        starCountEl.textContent = collectedStars;
+                    }
+                    break;
+                case 'won':
+                    gameState = 'won';
+                    statusTextEl.textContent = currentLevel < levels.length - 1
+                        ? 'Level Complete! Tap restart for next level!'
+                        : 'Congratulations! You beat all levels!';
+                    messageEl.textContent = 'Victory!';
+                    messageEl.style.color = '#00ff00';
+                    break;
+                case 'sync':
+                    currentLevel = msg.level;
+                    initLevel(currentLevel);
+                    break;
+            }
+        }
+
+        // Levels configuration
+        const levels = [
+            // Level 1 - Easy introduction
+            {
+                platforms: [
+                    {x: 0, y: 400, width: 120},
+                    {x: 150, y: 370, width: 100},
+                    {x: 280, y: 340, width: 100},
+                    {x: 420, y: 310, width: 120},
+                    {x: 570, y: 280, width: 100},
+                    {x: 700, y: 250, width: 100},
+                ],
+                stars: [
+                    {x: 190, y: 330},
+                    {x: 320, y: 300},
+                    {x: 470, y: 270},
+                    {x: 610, y: 240},
+                ],
+                playerStart: {x: 50, y: 350},
+                flagPos: {x: 740, y: 210}
+            },
+            // Level 2 - Gaps and jumps
+            {
+                platforms: [
+                    {x: 0, y: 420, width: 110},
+                    {x: 150, y: 390, width: 90},
+                    {x: 290, y: 410, width: 90},
+                    {x: 420, y: 360, width: 90},
+                    {x: 550, y: 320, width: 90},
+                    {x: 680, y: 270, width: 120},
+                ],
+                stars: [
+                    {x: 170, y: 350},
+                    {x: 310, y: 370},
+                    {x: 440, y: 320},
+                    {x: 570, y: 280},
+                    {x: 690, y: 230},
+                ],
+                playerStart: {x: 40, y: 370},
+                flagPos: {x: 725, y: 230}
+            },
+            // Level 3 - Complex platforming
+            {
+                platforms: [
+                    {x: 0, y: 430, width: 100},
+                    {x: 140, y: 400, width: 80},
+                    {x: 260, y: 430, width: 80},
+                    {x: 380, y: 380, width: 80},
+                    {x: 500, y: 340, width: 80},
+                    {x: 380, y: 290, width: 80},
+                    {x: 500, y: 240, width: 80},
+                    {x: 600, y: 200, width: 80},
+                    {x: 680, y: 160, width: 120},
+                ],
+                stars: [
+                    {x: 170, y: 360},
+                    {x: 290, y: 390},
+                    {x: 410, y: 340},
+                    {x: 410, y: 250},
+                    {x: 530, y: 200},
+                    {x: 610, y: 160},
+                ],
+                playerStart: {x: 30, y: 380},
+                flagPos: {x: 725, y: 120}
+            },
+            // Level 4 - Stepping it up
+            {
+                platforms: [
+                    {x: 0, y: 420, width: 100},
+                    {x: 170, y: 390, width: 70},
+                    {x: 300, y: 420, width: 70},
+                    {x: 430, y: 370, width: 70},
+                    {x: 540, y: 320, width: 70},
+                    {x: 440, y: 270, width: 70},
+                    {x: 560, y: 220, width: 70},
+                    {x: 670, y: 170, width: 120},
+                ],
+                stars: [
+                    {x: 200, y: 350},
+                    {x: 330, y: 380},
+                    {x: 460, y: 330},
+                    {x: 570, y: 280},
+                    {x: 470, y: 230},
+                    {x: 690, y: 130},
+                ],
+                playerStart: {x: 40, y: 370},
+                flagPos: {x: 715, y: 130}
+            },
+            // Level 5 - Easy stretch
+            {
+                platforms: [
+                    {x: 0, y: 430, width: 120},
+                    {x: 170, y: 410, width: 100},
+                    {x: 320, y: 430, width: 100},
+                    {x: 470, y: 390, width: 90},
+                    {x: 610, y: 350, width: 90},
+                    {x: 700, y: 300, width: 100},
+                ],
+                stars: [
+                    {x: 210, y: 370},
+                    {x: 360, y: 390},
+                    {x: 505, y: 350},
+                    {x: 645, y: 310},
+                    {x: 740, y: 260},
+                ],
+                playerStart: {x: 40, y: 380},
+                flagPos: {x: 735, y: 260}
+            },
+            // Level 6 - Final challenge
+            {
+                platforms: [
+                    {x: 0, y: 430, width: 90},
+                    {x: 180, y: 400, width: 60},
+                    {x: 330, y: 430, width: 60},
+                    {x: 480, y: 380, width: 60},
+                    {x: 380, y: 320, width: 60},
+                    {x: 520, y: 270, width: 60},
+                    {x: 670, y: 230, width: 60},
+                    {x: 560, y: 170, width: 60},
+                    {x: 680, y: 130, width: 120},
+                ],
+                stars: [
+                    {x: 210, y: 360},
+                    {x: 360, y: 390},
+                    {x: 510, y: 340},
+                    {x: 410, y: 280},
+                    {x: 550, y: 230},
+                    {x: 700, y: 190},
+                    {x: 710, y: 90},
+                ],
+                playerStart: {x: 40, y: 380},
+                flagPos: {x: 725, y: 90}
+            }
+        ];
+
+        // Player object
+        function createPlayer(x, y, color) {
+            return {
+                x: x,
+                y: y,
+                width: 30,
+                height: 40,
+                vx: 0,
+                vy: 0,
+                onGround: false,
+                color: color
+            };
+        }
+
+        // Restart current level, syncing the co-op partner if connected
+        function restartLevel() {
+            initLevel(currentLevel);
+            if (numPlayers === 2) wsSend({ type: 'sync', level: currentLevel });
+        }
+
+        // Advance to next level on a win (or restart if not won yet)
+        function restartOrAdvance() {
+            if (document.getElementById('lb-overlay').style.display !== 'none') return;
+            if (gameState === 'won') {
+                if (currentLevel >= levels.length - 1) { runScore = 0; }
+                currentLevel = currentLevel < levels.length - 1 ? currentLevel + 1 : 0;
+            }
+            initLevel(currentLevel);
+            if (numPlayers === 2) wsSend({ type: 'sync', level: currentLevel });
+        }
+
+        // Input handling
+        const keys = {};
+        document.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+                e.preventDefault();
+            }
+            if (e.code === 'KeyR') {
+                restartLevel();
+            }
+            if ((e.code === 'Space' || e.code === 'Enter') && gameState === 'won') {
+                restartOrAdvance();
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+        // Touch controls
+        const leftBtn = document.getElementById('leftBtn');
+        const rightBtn = document.getElementById('rightBtn');
+        const jumpBtn = document.getElementById('jumpBtn');
+        const restartBtn = document.getElementById('restartBtn');
+
+        // Touch state
+        const touchState = {
+            left: false,
+            right: false,
+            jump: false
+        };
+
+        // Helper to handle touch events
+        function setupTouchButton(btn, key, action) {
+            const startHandler = (e) => {
+                e.preventDefault();
+                touchState[key] = true;
+                btn.classList.add('active');
+                if (action) action();
+            };
+
+            const endHandler = (e) => {
+                e.preventDefault();
+                touchState[key] = false;
+                btn.classList.remove('active');
+            };
+
+            btn.addEventListener('touchstart', startHandler, { passive: false });
+            btn.addEventListener('touchend', endHandler, { passive: false });
+            btn.addEventListener('touchcancel', endHandler, { passive: false });
+
+            // Also support mouse for testing
+            btn.addEventListener('mousedown', startHandler);
+            btn.addEventListener('mouseup', endHandler);
+            btn.addEventListener('mouseleave', endHandler);
+        }
+
+        setupTouchButton(leftBtn, 'left');
+        setupTouchButton(rightBtn, 'right');
+        setupTouchButton(jumpBtn, 'jump');
+
+        // Restart button
+        restartBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            restartBtn.classList.add('active');
+            restartOrAdvance();
+        }, { passive: false });
+
+        restartBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            restartBtn.classList.remove('active');
+        }, { passive: false });
+
+        restartBtn.addEventListener('click', () => {
+            restartOrAdvance();
+        });
+
+        // Prevent scrolling on touch
+        document.body.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+        }, { passive: false });
+
+        // Co-op toggle: connects to the server's WebSocket relay so a second
+        // device on the LAN can join as Player 2.
+        modeBtn.addEventListener('click', () => {
+            if (numPlayers === 1) {
+                numPlayers = 2;
+                modeBtn.classList.add('active');
+                modeBtn.textContent = 'Connecting...';
+                connectCoop();
+            } else {
+                numPlayers = 1;
+                modeBtn.classList.remove('active');
+                modeBtn.textContent = '2 Player Co-op (connect another device)';
+                disconnectCoop();
+                initLevel(currentLevel);
+            }
+        });
+
+        // Initialize level
+        function initLevel(levelIndex) {
+            const level = levels[levelIndex];
+
+            playerStartPos = { x: level.playerStart.x, y: level.playerStart.y };
+
+            const myColor = myRole === 'player2' ? '#4ecdc4' : '#ff6b6b';
+            const peerColor = myRole === 'player2' ? '#ff6b6b' : '#4ecdc4';
+            player = createPlayer(level.playerStart.x, level.playerStart.y, myColor);
+            remotePlayer = createPlayer(level.playerStart.x, level.playerStart.y, peerColor);
+            remoteTarget.x = remotePlayer.x;
+            remoteTarget.y = remotePlayer.y;
+
+            platforms = level.platforms.map(p => ({
+                x: p.x,
+                y: p.y,
+                width: p.width,
+                height: BRICK_HEIGHT
+            }));
+
+            stars = level.stars.map(s => ({
+                x: s.x,
+                y: s.y,
+                radius: 15,
+                collected: false,
+                angle: Math.random() * Math.PI * 2
+            }));
+
+            finishFlag = {
+                x: level.flagPos.x,
+                y: level.flagPos.y,
+                width: 20,
+                height: 50
+            };
+
+            waterLevel = 470;
+            collectedStars = 0;
+            gameState = 'playing';
+
+            totalStarsEl.textContent = stars.length;
+            starCountEl.textContent = '0';
+            levelDisplayEl.textContent = `Level ${levelIndex + 1}`;
+            messageEl.textContent = '';
+            statusTextEl.textContent = (numPlayers === 2 && !peerConnected)
+                ? 'Waiting for Player 2 to join...'
+                : 'Collect all the stars and reach the flag!';
+        }
+
+        // Collision detection
+        function rectCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        function circleRectCollision(circle, rect) {
+            const closestX = Math.max(rect.x, Math.min(circle.x, rect.x + rect.width));
+            const closestY = Math.max(rect.y, Math.min(circle.y, rect.y + rect.height));
+            const distanceX = circle.x - closestX;
+            const distanceY = circle.y - closestY;
+            return (distanceX * distanceX + distanceY * distanceY) < (circle.radius * circle.radius);
+        }
+
+        // Update game state
+        function update() {
+            // Smoothly glide the networked partner's sprite toward their last
+            // reported position, regardless of gameState, so it doesn't freeze mid-air.
+            // A respawn after falling in water jumps a long distance in one update,
+            // so snap instantly instead of lerping - otherwise the sprite visibly
+            // slides/glitches across the whole level back to the start.
+            if (numPlayers === 2 && peerConnected) {
+                const dx = remoteTarget.x - remotePlayer.x;
+                const dy = remoteTarget.y - remotePlayer.y;
+                if (Math.abs(dx) > 100 || Math.abs(dy) > 100) {
+                    remotePlayer.x = remoteTarget.x;
+                    remotePlayer.y = remoteTarget.y;
+                } else {
+                    remotePlayer.x += dx * 0.3;
+                    remotePlayer.y += dy * 0.3;
+                }
+            }
+
+            if (gameState !== 'playing') return;
+
+            // Handle input (keyboard + touch) - this device only ever drives its own player
+            if (keys['ArrowLeft'] || keys['KeyA'] || touchState.left) {
+                player.vx = -MOVE_SPEED;
+            } else if (keys['ArrowRight'] || keys['KeyD'] || touchState.right) {
+                player.vx = MOVE_SPEED;
+            } else {
+                player.vx = 0;
+            }
+
+            if ((keys['Space'] || keys['ArrowUp'] || keys['KeyW'] || touchState.jump) && player.onGround) {
+                player.vy = JUMP_FORCE;
+                player.onGround = false;
+            }
+
+            // Apply gravity
+            player.vy += GRAVITY;
+
+            // Update position
+            player.x += player.vx;
+            player.y += player.vy;
+
+            // Platform collision
+            player.onGround = false;
+            for (const platform of platforms) {
+                if (rectCollision(player, platform)) {
+                    // Landing on top
+                    if (player.vy > 0 && player.y + player.height - player.vy <= platform.y + 5) {
+                        player.y = platform.y - player.height;
+                        player.vy = 0;
+                        player.onGround = true;
+                    }
+                    // Hitting from below
+                    else if (player.vy < 0 && player.y - player.vy >= platform.y + platform.height - 5) {
+                        player.y = platform.y + platform.height;
+                        player.vy = 0;
+                    }
+                    // Side collision
+                    else if (player.vx > 0) {
+                        player.x = platform.x - player.width;
+                    } else if (player.vx < 0) {
+                        player.x = platform.x + platform.width;
+                    }
+                }
+            }
+
+            // Screen bounds
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+
+            // Star collection - this device only collects stars its own player touches,
+            // then tells the partner device so its copy of the shared pool stays in sync.
+            for (let i = 0; i < stars.length; i++) {
+                const star = stars[i];
+                if (!star.collected) {
+                    star.angle += 0.05;
+                    if (circleRectCollision(star, player)) {
+                        star.collected = true;
+                        collectedStars++;
+                        starCountEl.textContent = collectedStars;
+                        wsSend({ type: 'star', i });
+                    }
+                }
+            }
+
+            // Check finish - in co-op, both players must be at the flag together
+            const coopActive = numPlayers === 2 && peerConnected;
+            const remoteAtFlag = !coopActive || rectCollision(
+                { x: remoteTarget.x, y: remoteTarget.y, width: remotePlayer.width, height: remotePlayer.height },
+                finishFlag
+            );
+            if (rectCollision(player, finishFlag) && remoteAtFlag) {
+                if (collectedStars === stars.length) {
+                    runScore += collectedStars * 50 + 200;
+                    gameState = 'won';
+                    if (currentLevel < levels.length - 1) {
+                        statusTextEl.textContent = 'Level Complete! Tap restart for next level!';
+                    } else {
+                        statusTextEl.textContent = 'Congratulations! You beat all levels!';
+                        setTimeout(() => showLB(runScore), 1500);
+                    }
+                    messageEl.textContent = 'Victory!';
+                    messageEl.style.color = '#00ff00';
+                    wsSend({ type: 'won' });
+                } else {
+                    statusTextEl.textContent = `Collect all stars first! (${collectedStars}/${stars.length})`;
+                }
+            }
+
+            // Water death - in co-op only the player who fell respawns, so one
+            // person's mistake doesn't wipe out the partner's progress
+            if (player.y > waterLevel) {
+                if (coopActive) {
+                    player.x = playerStartPos.x;
+                    player.y = playerStartPos.y;
+                    player.vx = 0;
+                    player.vy = 0;
+                    player.onGround = false;
+                    statusTextEl.textContent = 'Splash! You fell in - back to the start.';
+                    messageEl.textContent = 'Splash!';
+                    messageEl.style.color = '#ff0000';
+                    wsSend({ type: 'pos', x: player.x, y: player.y });
+                } else {
+                    gameState = 'dead';
+                    statusTextEl.textContent = 'You fell in the water! Tap restart';
+                    messageEl.textContent = 'Splash!';
+                    messageEl.style.color = '#ff0000';
+                }
+            }
+
+            // Broadcast position at a throttled rate to keep LAN traffic light
+            netTick++;
+            if (coopActive && netTick % 3 === 0) {
+                wsSend({ type: 'pos', x: player.x, y: player.y });
+            }
+        }
+
+        // Draw functions
+        function drawWater() {
+            const gradient = ctx.createLinearGradient(0, waterLevel, 0, canvas.height);
+            gradient.addColorStop(0, '#0077be');
+            gradient.addColorStop(1, '#004080');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, waterLevel, canvas.width, canvas.height - waterLevel);
+
+            // Waves
+            ctx.strokeStyle = '#00a0e4';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let x = 0; x < canvas.width; x += 20) {
+                const waveY = waterLevel + Math.sin((x + Date.now() / 200) * 0.05) * 3;
+                if (x === 0) ctx.moveTo(x, waveY);
+                else ctx.lineTo(x, waveY);
+            }
+            ctx.stroke();
+        }
+
+        function drawPlatform(platform) {
+            // Brick pattern
+            const brickHeight = platform.height;
+            const brickWidth = 40;
+
+            for (let bx = 0; bx < platform.width; bx += brickWidth) {
+                const actualWidth = Math.min(brickWidth - 2, platform.width - bx - 2);
+
+                // Brick gradient
+                const gradient = ctx.createLinearGradient(
+                    platform.x + bx, platform.y,
+                    platform.x + bx, platform.y + brickHeight
+                );
+                gradient.addColorStop(0, '#d4642a');
+                gradient.addColorStop(0.5, '#b8532a');
+                gradient.addColorStop(1, '#8b4513');
+
+                ctx.fillStyle = gradient;
+                ctx.fillRect(platform.x + bx, platform.y, actualWidth, brickHeight - 2);
+
+                // Brick outline
+                ctx.strokeStyle = '#5c3317';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(platform.x + bx, platform.y, actualWidth, brickHeight - 2);
+            }
+        }
+
+        function drawStar(star) {
+            if (star.collected) return;
+
+            ctx.save();
+            ctx.translate(star.x, star.y);
+            ctx.rotate(star.angle);
+
+            // Glow effect
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#ffd700';
+
+            // Star shape
+            ctx.fillStyle = '#ffd700';
+            ctx.beginPath();
+            for (let i = 0; i < 5; i++) {
+                const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
+                const x = Math.cos(angle) * star.radius;
+                const y = Math.sin(angle) * star.radius;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+
+            // Inner star
+            ctx.fillStyle = '#ffed4a';
+            ctx.beginPath();
+            for (let i = 0; i < 5; i++) {
+                const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
+                const x = Math.cos(angle) * (star.radius * 0.5);
+                const y = Math.sin(angle) * (star.radius * 0.5);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawFlag() {
+            // Pole
+            ctx.fillStyle = '#8b4513';
+            ctx.fillRect(finishFlag.x, finishFlag.y, 5, finishFlag.height);
+
+            // Flag
+            const flagWave = Math.sin(Date.now() / 200) * 3;
+            ctx.fillStyle = '#00ff00';
+            ctx.beginPath();
+            ctx.moveTo(finishFlag.x + 5, finishFlag.y);
+            ctx.lineTo(finishFlag.x + 35 + flagWave, finishFlag.y + 12);
+            ctx.lineTo(finishFlag.x + 5, finishFlag.y + 25);
+            ctx.closePath();
+            ctx.fill();
+
+            // Checkered pattern
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(finishFlag.x + 8, finishFlag.y + 3, 6, 6);
+            ctx.fillRect(finishFlag.x + 17, finishFlag.y + 10, 6, 6);
+        }
+
+        function drawPlayer(player) {
+            // Body
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+
+            // Face
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(player.x + 6, player.y + 8, 6, 6);
+            ctx.fillRect(player.x + 18, player.y + 8, 6, 6);
+
+            // Pupils
+            ctx.fillStyle = '#000';
+            ctx.fillRect(player.x + 8, player.y + 10, 3, 3);
+            ctx.fillRect(player.x + 20, player.y + 10, 3, 3);
+
+            // Smile
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(player.x + 15, player.y + 22, 8, 0.1 * Math.PI, 0.9 * Math.PI);
+            ctx.stroke();
+        }
+
+        function drawBackground() {
+            // Sky gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, waterLevel);
+            gradient.addColorStop(0, '#87ceeb');
+            gradient.addColorStop(1, '#e0f6ff');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, waterLevel);
+
+            // Clouds
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            drawCloud(100, 60, 40);
+            drawCloud(300, 90, 50);
+            drawCloud(550, 50, 35);
+            drawCloud(700, 100, 45);
+        }
+
+        function drawCloud(x, y, size) {
+            ctx.beginPath();
+            ctx.arc(x, y, size * 0.5, 0, Math.PI * 2);
+            ctx.arc(x + size * 0.4, y - size * 0.1, size * 0.4, 0, Math.PI * 2);
+            ctx.arc(x + size * 0.8, y, size * 0.5, 0, Math.PI * 2);
+            ctx.arc(x + size * 0.4, y + size * 0.2, size * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Main render function
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            drawBackground();
+            drawWater();
+
+            // Draw platforms
+            for (const platform of platforms) {
+                drawPlatform(platform);
+            }
+
+            // Draw stars
+            for (const star of stars) {
+                drawStar(star);
+            }
+
+            // Draw flag
+            drawFlag();
+
+            // Draw players
+            if (gameState !== 'dead') {
+                drawPlayer(player);
+                if (numPlayers === 2 && peerConnected) {
+                    drawPlayer(remotePlayer);
+                }
+            }
+        }
+
+        // Game loop
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start game
+        currentLevel = 0;
+        let runScore = 0;
+        initLevel(currentLevel);
+        gameLoop();
+
+        // ── Leaderboard ───────────────────────────────────────────────────────
+        const LB_GAME = 'brick-runner';
+        let _lbScore = 0;
+        function showLB(s) {
+          _lbScore = s;
+          document.getElementById('lb-score').textContent = 'SCORE: ' + s.toLocaleString();
+          document.getElementById('lb-form').style.display = 'flex';
+          document.getElementById('lb-name').value = '';
+          document.getElementById('lb-overlay').style.display = 'flex';
+          lbLoad(false);
+        }
+        function lbLoad(done) {
+          fetch('/scores/' + LB_GAME).then(r => r.json()).then(list => lbRender(list, done)).catch(() => lbRender([], done));
+        }
+        function lbRender(list, done) {
+          const el = document.getElementById('lb-rows');
+          const ac = '#ffd700';
+          if (!list.length) { el.innerHTML = '<div style="color:#334;padding:8px 0;font-size:.8rem">No scores yet — be first!</div>'; return; }
+          el.innerHTML = list.slice(0, 10).map((s, i) => {
+            const hi = done && s.score === _lbScore;
+            return `<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid #111;font-size:.82rem">
+              <span style="color:#446;width:20px">${i + 1}.</span>
+              <span style="flex:1;color:${hi ? ac : '#aaa'}">${s.name}</span>
+              <span style="color:${hi ? ac : '#ff0'}">${s.score.toLocaleString()}</span></div>`;
+          }).join('');
+        }
+        document.addEventListener('DOMContentLoaded', () => {
+          document.getElementById('lb-btn').addEventListener('click', () => {
+            const name = (document.getElementById('lb-name').value.trim().toUpperCase() || 'ANON').slice(0, 12);
+            fetch('/scores/' + LB_GAME, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, score: _lbScore }) })
+              .then(r => r.json()).then(list => { lbRender(list, true); document.getElementById('lb-form').style.display = 'none'; })
+              .catch(() => document.getElementById('lb-form').style.display = 'none');
+          });
+          document.getElementById('lb-name').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('lb-btn').click(); });
+          document.getElementById('lb-again').addEventListener('click', () => {
+            document.getElementById('lb-overlay').style.display = 'none';
+            runScore = 0; currentLevel = 0; initLevel(0);
+          });
+        });
+    </script>
+<div id="lb-overlay" style="position:fixed;inset:0;z-index:100;background:rgba(0,0,16,.93);display:none;align-items:center;justify-content:center">
+  <div style="background:#06061a;border:1px solid #ffd700;border-radius:12px;padding:28px 30px;width:min(340px,88vw);text-align:center;font-family:'Courier New',monospace;color:#fff;box-shadow:0 0 40px rgba(255,215,0,.1)">
+    <div style="color:#ffd700;font-size:.9rem;letter-spacing:4px;text-transform:uppercase;margin-bottom:8px">High Scores</div>
+    <div id="lb-score" style="color:#ff0;font-size:1.3rem;font-weight:bold;margin-bottom:14px"></div>
+    <div id="lb-rows" style="margin-bottom:14px;text-align:left;min-height:40px"></div>
+    <div id="lb-form" style="display:flex;gap:8px;margin-bottom:14px">
+      <input id="lb-name" maxlength="12" placeholder="YOUR NAME" autocomplete="off" spellcheck="false"
+        style="flex:1;background:#0a0a20;border:1px solid #ffd700;color:#fff;padding:8px;border-radius:6px;font-family:'Courier New',monospace;font-size:.9rem;text-transform:uppercase;outline:none">
+      <button id="lb-btn" style="background:rgba(255,215,0,.15);border:1px solid #ffd700;color:#ffd700;padding:8px 12px;border-radius:6px;font-family:'Courier New',monospace;font-size:.85rem;cursor:pointer;font-weight:bold">OK</button>
+    </div>
+    <div id="lb-again" style="color:#446;font-size:.8rem;cursor:pointer;padding:4px">▶ PLAY AGAIN</div>
+  </div>
+</div>
+</body>
+</html>

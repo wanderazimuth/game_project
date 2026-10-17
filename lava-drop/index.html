@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Lava Drop</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: #000; touch-action: none; }
+canvas { display: block; }
+#err { display:none; position:fixed; top:0; left:0; right:0; padding:12px;
+       background:#a00; color:#fff; font:13px monospace; z-index:99; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<div id="err"></div>
+<canvas id="c"></canvas>
+<script>
+window.onerror = function(msg, src, line, col, err) {
+  var d = document.getElementById('err');
+  d.style.display = 'block';
+  d.textContent = 'JS Error (line ' + line + '): ' + msg;
+  return true;
+};
+
+var canvas = document.getElementById('c');
+var ctx = canvas.getContext('2d');
+var W, H, dpr;
+
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (player) player.y = groundY();
+}
+window.addEventListener('resize', resize);
+resize();
+
+function groundY() { return H - 128; }
+function lavaY()   { return H - 82; }
+function rand(a, b) { return a + Math.random() * (b - a); }
+
+var LEVEL_CFG = [
+  { duration: 20, spawnRate: 1.5,  minSpeed: 110, maxSpeed: 175, minR: 18, maxR: 32, drift: 12 },
+  { duration: 20, spawnRate: 1.1,  minSpeed: 145, maxSpeed: 215, minR: 16, maxR: 36, drift: 22 },
+  { duration: 20, spawnRate: 0.85, minSpeed: 180, maxSpeed: 265, minR: 14, maxR: 40, drift: 34 },
+  { duration: 20, spawnRate: 0.65, minSpeed: 220, maxSpeed: 320, minR: 13, maxR: 42, drift: 46 },
+  { duration: 22, spawnRate: 0.48, minSpeed: 265, maxSpeed: 375, minR: 12, maxR: 44, drift: 58 },
+  { duration: 25, spawnRate: 0.32, minSpeed: 310, maxSpeed: 450, minR: 12, maxR: 46, drift: 70 },
+];
+
+var state = 'menu';
+var level = 1;
+var lives = 3;
+var score = 0;
+var levelTimer = 0;
+var levelClearTimer = 0;
+var spawnTimer = 0;
+var flashTimer = 0;
+var lastTime = 0;
+
+var player = null;
+var asteroids = [];
+var particles = [];
+var embers = [];
+
+var keys = {};
+var touchX = null;
+
+window.addEventListener('keydown', function(e) {
+  keys[e.key] = true;
+  if (e.key === ' ' || e.key === 'Enter') onAction();
+});
+window.addEventListener('keyup', function(e) { keys[e.key] = false; });
+
+canvas.addEventListener('touchstart', function(e) {
+  e.preventDefault();
+  onAction();
+  if (state === 'playing') touchX = e.changedTouches[0].clientX;
+}, { passive: false });
+canvas.addEventListener('touchmove', function(e) {
+  e.preventDefault();
+  if (state === 'playing') touchX = e.changedTouches[0].clientX;
+}, { passive: false });
+canvas.addEventListener('touchend', function(e) {
+  e.preventDefault();
+  touchX = null;
+}, { passive: false });
+
+function onAction() {
+  if (document.getElementById('lb-overlay').style.display !== 'none') return;
+  if (state === 'menu' || state === 'gameover' || state === 'win') initGame();
+}
+
+function makeRockPts(r) {
+  var n = 8 + Math.floor(Math.random() * 4);
+  var pts = [];
+  for (var i = 0; i < n; i++) {
+    var angle = (i / n) * Math.PI * 2 + rand(-0.18, 0.18);
+    var dist  = r * rand(0.62, 0.98);
+    pts.push([Math.cos(angle) * dist, Math.sin(angle) * dist]);
+  }
+  return pts;
+}
+
+function spawnAsteroid() {
+  var c = LEVEL_CFG[level - 1];
+  var r = rand(c.minR, c.maxR);
+  asteroids.push({
+    x: rand(r + 8, W - r - 8),
+    y: -r - 6,
+    r: r,
+    vx: rand(-c.drift, c.drift),
+    vy: rand(c.minSpeed, c.maxSpeed),
+    rotation: rand(0, Math.PI * 2),
+    rotSpeed: rand(-1.8, 1.8),
+    pts: makeRockPts(r),
+  });
+}
+
+function makeEmber() {
+  return {
+    x: rand(0, W),
+    y: lavaY() + rand(0, 8),
+    vx: rand(-18, 18),
+    vy: rand(-90, -35),
+    life: rand(0.7, 2.2),
+    maxLife: rand(0.7, 2.2) + 0.01,
+    r: rand(1.5, 3.5),
+    bright: Math.random() < 0.45,
+  };
+}
+
+function seedEmbers() {
+  embers = [];
+  for (var i = 0; i < 14; i++) embers.push(makeEmber());
+}
+
+function initGame() {
+  level = 1;
+  lives = 3;
+  score = 0;
+  beginLevel();
+}
+
+function beginLevel() {
+  levelTimer = 0;
+  spawnTimer = 0;
+  asteroids = [];
+  particles = [];
+  seedEmbers();
+  player = { x: W / 2, y: groundY(), w: 13, h: 26, invincible: 0 };
+  state = 'playing';
+}
+
+function circleHitsRect(cx, cy, cr, rx, ry, rw, rh) {
+  var nearX = Math.max(rx - rw / 2, Math.min(rx + rw / 2, cx));
+  var nearY = Math.max(ry - rh / 2, Math.min(ry + rh / 2, cy));
+  var dx = cx - nearX, dy = cy - nearY;
+  return dx * dx + dy * dy < cr * cr * 0.55;
+}
+
+function update(dt) {
+  var c = LEVEL_CFG[level - 1];
+  var spd = 340;
+
+  if (keys['ArrowLeft'] || keys['a']) player.x -= spd * dt;
+  if (keys['ArrowRight'] || keys['d']) player.x += spd * dt;
+  if (touchX !== null) {
+    player.x += (touchX - player.x) * Math.min(1, 14 * dt);
+  }
+  player.x = Math.max(player.w / 2 + 8, Math.min(W - player.w / 2 - 8, player.x));
+  player.y = groundY();
+
+  if (player.invincible > 0) player.invincible -= dt;
+  if (flashTimer > 0) flashTimer -= dt;
+
+  spawnTimer += dt;
+  if (spawnTimer >= c.spawnRate) {
+    spawnTimer -= c.spawnRate;
+    spawnAsteroid();
+    if (level >= 4 && Math.random() < 0.45) spawnAsteroid();
+    if (level >= 6 && Math.random() < 0.35) spawnAsteroid();
+  }
+
+  for (var i = asteroids.length - 1; i >= 0; i--) {
+    var a = asteroids[i];
+    a.x += a.vx * dt;
+    a.y += a.vy * dt;
+    a.rotation += a.rotSpeed * dt;
+    if (a.x < a.r && a.vx < 0) a.vx = -a.vx;
+    if (a.x > W - a.r && a.vx > 0) a.vx = -a.vx;
+
+    if (a.y > H + a.r + 20) {
+      asteroids.splice(i, 1);
+      score += 5;
+      continue;
+    }
+
+    if (player.invincible <= 0 &&
+        circleHitsRect(a.x, a.y, a.r, player.x, player.y, player.w, player.h)) {
+      spawnExplosion(a.x, a.y);
+      asteroids.splice(i, 1);
+      lives--;
+      flashTimer = 0.45;
+      if (lives <= 0) { state = 'gameover'; setTimeout(function() { showLB(score); }, 1500); }
+      else { player.invincible = 2.5; }
+      continue;
+    }
+  }
+
+  for (var j = embers.length - 1; j >= 0; j--) {
+    var e = embers[j];
+    e.x += e.vx * dt;
+    e.y += e.vy * dt;
+    e.life -= dt;
+    if (e.life <= 0) { embers.splice(j, 1); embers.push(makeEmber()); }
+  }
+
+  for (var k = particles.length - 1; k >= 0; k--) {
+    var p = particles[k];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 240 * dt;
+    p.life -= dt;
+    if (p.life <= 0) particles.splice(k, 1);
+  }
+
+  levelTimer += dt;
+  if (levelTimer >= c.duration) {
+    score += 100 * level;
+    state = 'levelclear';
+    levelClearTimer = 2.8;
+  }
+}
+
+function updateLevelClear(dt) {
+  levelClearTimer -= dt;
+  for (var j = embers.length - 1; j >= 0; j--) {
+    var e = embers[j];
+    e.x += e.vx * dt;
+    e.y += e.vy * dt;
+    e.life -= dt;
+    if (e.life <= 0) { embers.splice(j, 1); embers.push(makeEmber()); }
+  }
+  if (levelClearTimer <= 0) {
+    if (level >= 6) { state = 'win'; setTimeout(function() { showLB(score); }, 1500); }
+    else { level++; beginLevel(); }
+  }
+}
+
+function spawnExplosion(x, y) {
+  var colors = ['#ff4400', '#ff7700', '#ffaa00', '#ffdd00', '#ff2200'];
+  for (var i = 0; i < 22; i++) {
+    var angle = rand(0, Math.PI * 2);
+    var speed = rand(70, 240);
+    var life  = rand(0.3, 0.75);
+    particles.push({
+      x: x, y: y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 80,
+      life: life, maxLife: life,
+      r: rand(2, 5.5),
+      color: colors[Math.floor(Math.random() * colors.length)],
+    });
+  }
+}
+
+function draw(t) {
+  ctx.clearRect(0, 0, W, H);
+
+  // Background - dark red
+  ctx.fillStyle = '#1a0400';
+  ctx.fillRect(0, 0, W, H);
+
+  // Sky gradient overlay
+  var bg = ctx.createLinearGradient(0, 0, 0, H * 0.7);
+  bg.addColorStop(0, 'rgba(0,0,0,0.7)');
+  bg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H * 0.7);
+
+  // Lava glow from bottom
+  var glow = ctx.createLinearGradient(0, lavaY() - 80, 0, lavaY());
+  glow.addColorStop(0, 'rgba(255,80,0,0)');
+  glow.addColorStop(1, 'rgba(255,90,0,0.3)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, lavaY() - 80, W, 80);
+
+  // Embers
+  var ei;
+  for (ei = 0; ei < embers.length; ei++) {
+    var em = embers[ei];
+    ctx.globalAlpha = (em.life / em.maxLife) * 0.9;
+    ctx.fillStyle = em.bright ? '#ffee44' : '#ff7700';
+    ctx.beginPath();
+    ctx.arc(em.x, em.y, em.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Lava surface
+  var ly = lavaY();
+  ctx.beginPath();
+  ctx.moveTo(0, ly);
+  var lx;
+  for (lx = 0; lx <= W; lx += 7) {
+    var wave = Math.sin(lx * 0.042 + t * 1.9) * 4.5 + Math.sin(lx * 0.016 + t * 1.15) * 7;
+    ctx.lineTo(lx, ly + wave);
+  }
+  ctx.lineTo(W, H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fillStyle = '#ff6600';
+  ctx.fill();
+
+  // Lava darker interior
+  ctx.beginPath();
+  ctx.moveTo(0, ly + 12);
+  for (lx = 0; lx <= W; lx += 7) {
+    var wave2 = Math.sin(lx * 0.042 + t * 1.9) * 4.5 + Math.sin(lx * 0.016 + t * 1.15) * 7;
+    ctx.lineTo(lx, ly + 12 + wave2);
+  }
+  ctx.lineTo(W, H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fillStyle = '#991100';
+  ctx.fill();
+
+  // Rocky ground platform (between player feet and lava)
+  var groundTop = groundY() + 13; // player feet
+  ctx.fillStyle = '#3a1a00';
+  ctx.fillRect(0, groundTop, W, ly - groundTop);
+  // platform surface edge (dark highlight)
+  ctx.fillStyle = '#5a2a08';
+  ctx.fillRect(0, groundTop, W, 4);
+  // some rocky texture bumps along the top edge
+  ctx.fillStyle = '#2a1000';
+  for (var bx2 = 0; bx2 < W; bx2 += 38) {
+    var bh2 = 4 + Math.floor((bx2 * 7 + 3) % 7);
+    ctx.fillRect(bx2, groundTop - bh2 + 4, 28, bh2);
+  }
+
+  // Touch zone hint at very bottom
+  ctx.fillStyle = 'rgba(255,100,0,0.06)';
+  ctx.fillRect(0, ly, W, H - ly);
+  ctx.fillStyle = 'rgba(255,140,0,0.18)';
+  ctx.font = '11px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('drag here to move', W / 2, H - 10);
+  ctx.textAlign = 'left';
+
+  // Particles
+  var pi;
+  for (pi = 0; pi < particles.length; pi++) {
+    var p = particles[pi];
+    ctx.globalAlpha = p.life / p.maxLife;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * (p.life / p.maxLife), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Asteroids
+  var ai;
+  for (ai = 0; ai < asteroids.length; ai++) {
+    var ast = asteroids[ai];
+    ctx.save();
+    ctx.translate(ast.x, ast.y);
+    ctx.rotate(ast.rotation);
+    ctx.beginPath();
+    ctx.moveTo(ast.pts[0][0], ast.pts[0][1]);
+    for (var pi2 = 1; pi2 < ast.pts.length; pi2++) {
+      ctx.lineTo(ast.pts[pi2][0], ast.pts[pi2][1]);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#cc4400';
+    ctx.fill();
+    ctx.strokeStyle = '#ff8833';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Player
+  if (state === 'playing' || state === 'levelclear') drawPlayer(t);
+
+  drawHUD(t);
+
+  if (flashTimer > 0) {
+    ctx.fillStyle = 'rgba(200,0,0,' + ((flashTimer / 0.45) * 0.38) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  if (state === 'menu')       drawMenu(t);
+  if (state === 'levelclear') drawLevelClear();
+  if (state === 'gameover')   drawGameOver();
+  if (state === 'win')        drawWin();
+}
+
+function drawPlayer(t) {
+  var x = player.x, y = player.y, w = player.w, h = player.h;
+  if (player.invincible > 0 && Math.floor(player.invincible * 9) % 2 === 0) return;
+
+  var swing = Math.sin(t * 9) * 7;
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(x, groundY() + 4, 12, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Legs
+  ctx.strokeStyle = '#bb5500';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x, y + 4); ctx.lineTo(x - 5 + swing, y + h / 2 + 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x, y + 4); ctx.lineTo(x + 5 - swing, y + h / 2 + 2); ctx.stroke();
+
+  // Body
+  ctx.fillStyle = '#cc5500';
+  ctx.fillRect(x - w / 2, y - h / 2 + 5, w, h / 2 + 2);
+
+  // Arms
+  ctx.strokeStyle = '#cc5500';
+  ctx.lineWidth = 3.5;
+  ctx.beginPath(); ctx.moveTo(x - w / 2, y - h / 4 + 2); ctx.lineTo(x - w / 2 - 8, y + 3); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x + w / 2, y - h / 4 + 2); ctx.lineTo(x + w / 2 + 8, y + 3); ctx.stroke();
+
+  // Helmet
+  ctx.fillStyle = '#ffcc88';
+  ctx.beginPath();
+  ctx.arc(x, y - h / 2 + 1, w / 2 + 1, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Visor
+  ctx.fillStyle = '#ff5500';
+  ctx.globalAlpha = 0.65;
+  ctx.fillRect(x - 5, y - h / 2 - 1, 10, 6);
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD(t) {
+  ctx.fillStyle = '#ffcc88';
+  ctx.font = '14px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('SCORE ' + score, 12, 26);
+
+  ctx.fillStyle = '#ff8844';
+  ctx.font = 'bold 15px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('LEVEL ' + level + ' / 6', W / 2, 26);
+
+  ctx.font = '19px monospace';
+  ctx.textAlign = 'right';
+  for (var i = 0; i < 3; i++) {
+    ctx.fillStyle = i < lives ? '#ff3300' : '#3a1000';
+    ctx.fillText('♥', W - 12 - i * 24, 28);
+  }
+  ctx.textAlign = 'left';
+
+  if (state === 'playing') {
+    var cfg = LEVEL_CFG[level - 1];
+    var pct = Math.min(1, levelTimer / cfg.duration);
+    var bx = 16, by = 38, bw = W - 32, bh = 6;
+    var warn = pct > 0.8;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(bx, by, bw, bh);
+
+    ctx.fillStyle = warn ? '#ffdd00' : '#ff6600';
+    if (warn) ctx.globalAlpha = 0.7 + Math.sin(t * 10) * 0.3;
+    ctx.fillRect(bx, by, bw * pct, bh);
+    ctx.globalAlpha = 1;
+
+    ctx.strokeStyle = '#ff4400';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    var rem = Math.ceil(cfg.duration - levelTimer);
+    ctx.fillStyle = '#ffaa44';
+    ctx.font = '11px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(rem + 's', bx + bw, by - 2);
+    ctx.textAlign = 'left';
+  }
+}
+
+function panel(alpha) {
+  ctx.fillStyle = 'rgba(0,0,0,' + alpha + ')';
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawMenu(t) {
+  panel(0.6);
+  ctx.textAlign = 'center';
+
+  ctx.fillStyle = '#ff8800';
+  ctx.font = 'bold 46px monospace';
+  ctx.fillText('LAVA DROP', W / 2, H / 2 - 60);
+
+  ctx.fillStyle = '#dd6600';
+  ctx.font = '16px monospace';
+  ctx.fillText('Dodge the falling asteroids!', W / 2, H / 2 - 15);
+  ctx.fillText('Survive all 6 levels to win', W / 2, H / 2 + 14);
+
+  ctx.fillStyle = '#ffaa44';
+  ctx.font = '18px monospace';
+  if (Math.sin(t * 4) > 0) {
+    ctx.fillText('Tap or press SPACE to start', W / 2, H / 2 + 62);
+  }
+
+  ctx.fillStyle = '#885522';
+  ctx.font = '12px monospace';
+  ctx.fillText('Arrow keys or A/D to move', W / 2, H / 2 + 96);
+  ctx.textAlign = 'left';
+}
+
+function drawLevelClear() {
+  panel(0.55);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffdd00';
+  ctx.font = 'bold 30px monospace';
+  ctx.fillText('LEVEL ' + level + ' CLEAR!', W / 2, H / 2 - 22);
+  ctx.fillStyle = '#ff8800';
+  ctx.font = '16px monospace';
+  ctx.fillText(level < 6 ? 'Brace for level ' + (level + 1) + '...' : 'Final level coming...', W / 2, H / 2 + 18);
+  ctx.textAlign = 'left';
+}
+
+function drawGameOver() {
+  panel(0.72);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ff3300';
+  ctx.font = 'bold 38px monospace';
+  ctx.fillText('CRUSHED', W / 2, H / 2 - 52);
+  ctx.fillStyle = '#ffaa44';
+  ctx.font = '20px monospace';
+  ctx.fillText('Score: ' + score, W / 2, H / 2 - 5);
+  ctx.fillStyle = '#cc6600';
+  ctx.font = '14px monospace';
+  ctx.fillText('Reached level ' + level + ' of 6', W / 2, H / 2 + 24);
+  ctx.fillStyle = '#ff8844';
+  ctx.font = '16px monospace';
+  ctx.fillText('Tap or press SPACE to try again', W / 2, H / 2 + 68);
+  ctx.textAlign = 'left';
+}
+
+function drawWin() {
+  panel(0.78);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ffee44';
+  ctx.font = 'bold 36px monospace';
+  ctx.fillText('YOU SURVIVED!', W / 2, H / 2 - 60);
+  ctx.fillStyle = '#ff8800';
+  ctx.font = '17px monospace';
+  ctx.fillText('All 6 levels conquered!', W / 2, H / 2 - 14);
+  ctx.fillStyle = '#ffcc88';
+  ctx.font = '24px monospace';
+  ctx.fillText('Final Score: ' + score, W / 2, H / 2 + 28);
+  ctx.fillStyle = '#cc6600';
+  ctx.font = '15px monospace';
+  ctx.fillText('Tap or press SPACE to play again', W / 2, H / 2 + 74);
+  ctx.textAlign = 'left';
+}
+
+player = { x: W / 2, y: groundY(), w: 13, h: 26, invincible: 0 };
+seedEmbers();
+
+function loop(ts) {
+  requestAnimationFrame(loop);
+  var dt = Math.min((ts - lastTime) / 1000, 0.05);
+  lastTime = ts;
+  var t = ts / 1000;
+
+  if (state === 'playing')    update(dt);
+  if (state === 'levelclear') updateLevelClear(dt);
+
+  draw(t);
+}
+
+requestAnimationFrame(loop);
+
+// ── Leaderboard ───────────────────────────────────────────────────────────────
+var LB_GAME = 'lava-drop';
+var _lbScore = 0;
+function showLB(s) {
+  _lbScore = s;
+  document.getElementById('lb-score').textContent = 'SCORE: ' + s.toLocaleString();
+  document.getElementById('lb-form').style.display = 'flex';
+  document.getElementById('lb-name').value = '';
+  document.getElementById('lb-overlay').style.display = 'flex';
+  lbLoad(false);
+}
+function lbLoad(done) {
+  fetch('/scores/' + LB_GAME).then(function(r) { return r.json(); }).then(function(list) { lbRender(list, done); }).catch(function() { lbRender([], done); });
+}
+function lbRender(list, done) {
+  var el = document.getElementById('lb-rows');
+  var ac = '#f80';
+  if (!list.length) { el.innerHTML = '<div style="color:#642;padding:8px 0;font-size:.8rem">No scores yet — be first!</div>'; return; }
+  el.innerHTML = list.slice(0, 10).map(function(s, i) {
+    var hi = done && s.score === _lbScore;
+    return '<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid #2a0a00;font-size:.82rem">'
+      + '<span style="color:#642;width:20px">' + (i + 1) + '.</span>'
+      + '<span style="flex:1;color:' + (hi ? ac : '#aaa') + '">' + s.name + '</span>'
+      + '<span style="color:' + (hi ? ac : '#ff0') + '">' + s.score.toLocaleString() + '</span></div>';
+  }).join('');
+}
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('lb-btn').addEventListener('click', function() {
+    var name = (document.getElementById('lb-name').value.trim().toUpperCase() || 'ANON').slice(0, 12);
+    fetch('/scores/' + LB_GAME, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name, score: _lbScore }) })
+      .then(function(r) { return r.json(); }).then(function(list) { lbRender(list, true); document.getElementById('lb-form').style.display = 'none'; })
+      .catch(function() { document.getElementById('lb-form').style.display = 'none'; });
+  });
+  document.getElementById('lb-name').addEventListener('keydown', function(e) { if (e.key === 'Enter') document.getElementById('lb-btn').click(); });
+  document.getElementById('lb-again').addEventListener('click', function() { document.getElementById('lb-overlay').style.display = 'none'; initGame(); });
+});
+</script>
+<div id="lb-overlay" style="position:fixed;inset:0;z-index:100;background:rgba(10,2,0,.93);display:none;align-items:center;justify-content:center">
+  <div style="background:#1a0600;border:1px solid #f80;border-radius:12px;padding:28px 30px;width:min(340px,88vw);text-align:center;font-family:'Courier New',monospace;color:#fff;box-shadow:0 0 40px rgba(255,100,0,.15)">
+    <div style="color:#f80;font-size:.9rem;letter-spacing:4px;text-transform:uppercase;margin-bottom:8px">High Scores</div>
+    <div id="lb-score" style="color:#ff0;font-size:1.3rem;font-weight:bold;margin-bottom:14px"></div>
+    <div id="lb-rows" style="margin-bottom:14px;text-align:left;min-height:40px"></div>
+    <div id="lb-form" style="display:flex;gap:8px;margin-bottom:14px">
+      <input id="lb-name" maxlength="12" placeholder="YOUR NAME" autocomplete="off" spellcheck="false"
+        style="flex:1;background:#0a0200;border:1px solid #f80;color:#fff;padding:8px;border-radius:6px;font-family:'Courier New',monospace;font-size:.9rem;text-transform:uppercase;outline:none">
+      <button id="lb-btn" style="background:rgba(255,136,0,.15);border:1px solid #f80;color:#f80;padding:8px 12px;border-radius:6px;font-family:'Courier New',monospace;font-size:.85rem;cursor:pointer;font-weight:bold">OK</button>
+    </div>
+    <div id="lb-again" style="color:#642;font-size:.8rem;cursor:pointer;padding:4px">▶ PLAY AGAIN</div>
+  </div>
+</div>
+</body>
+</html>

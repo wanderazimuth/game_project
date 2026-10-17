@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+
+# Editor swap files
+*.swp
+*.swo
+*~
+
+# Live high-score data (written by the server at runtime)
+game-server/scores.json
+
+# Local Claude Code settings
+.claude/settings.local.json

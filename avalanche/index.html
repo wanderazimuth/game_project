@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Avalanche</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#c8d8f0;touch-action:none}
+canvas{display:block}
+#btns{position:fixed;bottom:0;left:0;right:0;pointer-events:none;display:none}
+.mbtn{
+  position:absolute;width:84px;height:84px;border-radius:50%;bottom:20px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:28px;font-weight:bold;color:rgba(255,255,255,.8);
+  border:2px solid rgba(255,255,255,.3);background:rgba(255,255,255,.15);
+  pointer-events:auto;touch-action:none;user-select:none;-webkit-user-select:none
+}
+#btn-l{left:20px}#btn-r{right:20px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="btns">
+  <div class="mbtn" id="btn-l">&#9664;</div>
+  <div class="mbtn" id="btn-r">&#9654;</div>
+</div>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+let W,H;
+function resize(){
+  const d=devicePixelRatio||1;
+  W=innerWidth;H=innerHeight;
+  cv.width=W*d;cv.height=H*d;
+  cv.style.width=W+'px';cv.style.height=H+'px';
+  ctx.setTransform(d,0,0,d,0,0);
+}
+addEventListener('resize',resize);resize();
+
+// ── Constants ──────────────────────────────────────────────────────────────────
+const LATERAL=320;   // px/s left/right
+const SPD_MAX=720;   // px/s max downhill speed
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let state='menu';
+let playerX,speed,scrollY,avGap,obsList,ptcls,score,crashT,lastOY,shake;
+let lastT=0;
+
+function startGame(){
+  playerX=W/2;speed=200;scrollY=0;
+  avGap=H*0.48;
+  obsList=[];ptcls=[];score=0;crashT=0;shake=0;lastOY=H*0.6;
+  for(let wy=H*0.6;wy<H*4.5;wy+=spawnInterval())trySpawn(wy);
+  document.getElementById('btns').style.display='block';
+  for(const k in keys)delete keys[k];
+  state='playing';
+}
+
+function spawnInterval(){return 140+Math.random()*150;}
+
+function trySpawn(worldY){
+  const r=Math.random();
+  if(r<0.13){
+    obsList.push({x:W*0.12+Math.random()*(W*0.76),worldY,type:'gate',hit:false});
+  } else if(r<0.78){
+    const t=r<0.45?'tree':r<0.65?'rock':'boulder';
+    const x=W*0.05+Math.random()*(W*0.9);
+    obsList.push({x,worldY,type:t,
+      vx:t==='boulder'?(Math.random()<0.5?-1:1)*(38+Math.random()*55):0,
+      hit:false});
+    if(Math.random()<0.14&&t!=='boulder'){
+      let x2;let tries=0;
+      do{x2=W*0.05+Math.random()*(W*0.9);tries++;}while(tries<8&&Math.abs(x2-x)<75);
+      obsList.push({x:x2,worldY:worldY+20,type:Math.random()<0.65?'tree':'rock',vx:0,hit:false});
+    }
+  }
+}
+
+// ── Particles ──────────────────────────────────────────────────────────────────
+function boom(x,y,col,n=10){
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2,s=50+Math.random()*90;
+    ptcls.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:0.65,maxLife:0.65,col});
+  }
+}
+
+// ── Drawing ────────────────────────────────────────────────────────────────────
+function drawBg(py){
+  // Sky
+  const sg=ctx.createLinearGradient(0,0,0,py*0.55);
+  sg.addColorStop(0,'#7aaae0');sg.addColorStop(1,'#c0d8f8');
+  ctx.fillStyle=sg;ctx.fillRect(0,0,W,py*0.55);
+  // Distant mountain ridge
+  const t=scrollY*0.00018;
+  ctx.fillStyle='#a8c0e0';
+  ctx.beginPath();ctx.moveTo(0,py*0.55);
+  for(let x=0;x<=W+20;x+=20){
+    const h=py*0.28+Math.sin(x*0.009+t)*py*0.12+Math.sin(x*0.021-t*0.7)*py*0.07;
+    ctx.lineTo(x,py*0.55-h);
+  }
+  ctx.lineTo(W,py*0.55);ctx.closePath();ctx.fill();
+  // Snow slope
+  const ng=ctx.createLinearGradient(0,py*0.44,0,H);
+  ng.addColorStop(0,'#d8e8ff');ng.addColorStop(1,'#eef4ff');
+  ctx.fillStyle=ng;ctx.fillRect(0,py*0.44,W,H);
+  // Ski tracks
+  ctx.strokeStyle='rgba(150,175,225,0.5)';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(playerX-9,py);ctx.lineTo(playerX-9,H);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(playerX+9,py);ctx.lineTo(playerX+9,H);ctx.stroke();
+  ctx.lineWidth=1;
+}
+
+function drawTree(sx,sy){
+  ctx.fillStyle='#3a2008';ctx.fillRect(sx-4,sy,8,20);
+  ctx.fillStyle='#0a5a10';
+  ctx.beginPath();ctx.moveTo(sx,sy-36);ctx.lineTo(sx+18,sy+4);ctx.lineTo(sx-18,sy+4);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#0c7014';
+  ctx.beginPath();ctx.moveTo(sx,sy-48);ctx.lineTo(sx+13,sy-20);ctx.lineTo(sx-13,sy-20);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#0e8018';
+  ctx.beginPath();ctx.moveTo(sx,sy-56);ctx.lineTo(sx+9,sy-36);ctx.lineTo(sx-9,sy-36);ctx.closePath();ctx.fill();
+  // Snow
+  ctx.fillStyle='rgba(255,255,255,0.72)';
+  ctx.beginPath();ctx.moveTo(sx,sy-56);ctx.lineTo(sx+5,sy-42);ctx.lineTo(sx-5,sy-42);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(sx-13,sy-20);ctx.lineTo(sx+13,sy-20);ctx.lineTo(sx+10,sy-14);ctx.lineTo(sx-10,sy-14);ctx.closePath();ctx.fill();
+}
+
+function drawRock(sx,sy){
+  ctx.fillStyle='#686870';
+  ctx.beginPath();ctx.ellipse(sx,sy,15,10,0.15,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#868890';
+  ctx.beginPath();ctx.ellipse(sx-2,sy-3,9,6,-0.2,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,0.75)';
+  ctx.beginPath();ctx.ellipse(sx-3,sy-7,7,4,0,0,Math.PI*2);ctx.fill();
+}
+
+function drawBoulder(sx,sy){
+  ctx.fillStyle='#ccd8ee';
+  ctx.beginPath();ctx.arc(sx,sy,14,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='rgba(140,165,205,0.55)';ctx.lineWidth=2;
+  ctx.stroke();ctx.lineWidth=1;
+  ctx.fillStyle='rgba(255,255,255,0.55)';ctx.beginPath();ctx.arc(sx-4,sy-4,5,0,Math.PI*2);ctx.fill();
+}
+
+function drawGate(sx,sy){
+  ctx.fillStyle='#cc0000';
+  ctx.fillRect(sx-24,sy-32,5,32);ctx.fillRect(sx+19,sy-32,5,32);
+  ctx.fillStyle='rgba(220,0,0,0.72)';ctx.fillRect(sx-19,sy-32,38,11);
+  ctx.fillStyle='#ff2020';
+  ctx.beginPath();ctx.arc(sx-22,sy-32,6,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(sx+22,sy-32,6,0,Math.PI*2);ctx.fill();
+}
+
+function drawPlayer(py){
+  if(crashT>0&&Math.floor(crashT*9)%2===0)return;
+  const sx=playerX;
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.13)';
+  ctx.beginPath();ctx.ellipse(sx,py+14,13,4,0,0,Math.PI*2);ctx.fill();
+  // Skis
+  ctx.fillStyle='#cc1010';
+  ctx.save();ctx.translate(sx-7,py+4);ctx.rotate(-0.08);
+  ctx.fillRect(-3,0,6,24);ctx.restore();
+  ctx.save();ctx.translate(sx+7,py+4);ctx.rotate(0.08);
+  ctx.fillRect(-3,0,6,24);ctx.restore();
+  // Poles
+  ctx.strokeStyle='#999';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(sx-13,py-8);ctx.lineTo(sx-24,py+20);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(sx+13,py-8);ctx.lineTo(sx+24,py+20);ctx.stroke();
+  ctx.lineWidth=1;
+  // Body
+  ctx.fillStyle='#1a3a9a';
+  ctx.beginPath();ctx.ellipse(sx,py-2,9,14,0,0,Math.PI*2);ctx.fill();
+  // Helmet
+  ctx.fillStyle='#dd1010';
+  ctx.beginPath();ctx.arc(sx,py-18,10,0,Math.PI*2);ctx.fill();
+  // Visor
+  ctx.fillStyle='#ffee60';ctx.fillRect(sx-7,py-16,14,5);
+  // Goggles strap
+  ctx.fillStyle='#aa0000';ctx.fillRect(sx-10,py-20,20,3);
+}
+
+function drawAvalanche(py){
+  const ay=py-avGap;
+  // White mass above
+  const ag=ctx.createLinearGradient(0,Math.max(0,ay-60),0,ay+20);
+  ag.addColorStop(0,'rgba(215,230,255,0.98)');
+  ag.addColorStop(1,'rgba(248,252,255,0.99)');
+  ctx.fillStyle=ag;
+  // Churning bottom edge
+  const t=Date.now()/280;
+  ctx.beginPath();ctx.moveTo(0,ay);
+  for(let x=0;x<=W;x+=10){
+    const w=Math.sin(x*0.038+t)*11+Math.sin(x*0.085-t*1.4)*7+Math.sin(x*0.018+t*0.65)*16;
+    ctx.lineTo(x,ay+w);
+  }
+  ctx.lineTo(W,0);ctx.lineTo(0,0);ctx.closePath();ctx.fill();
+  // Foam balls on leading edge
+  ctx.fillStyle='rgba(255,255,255,0.7)';
+  for(let x=8;x<W;x+=22){
+    const w=Math.sin(x*0.038+t)*11+Math.sin(x*0.085-t*1.4)*7;
+    ctx.beginPath();ctx.arc(x,ay+w+2,4+Math.sin(x*0.2+t*2)*2,0,Math.PI*2);ctx.fill();
+  }
+  // Rumble cracks when very close
+  if(avGap<H*0.18){
+    ctx.strokeStyle=`rgba(180,200,240,${0.4*(1-avGap/(H*0.18))})`;ctx.lineWidth=1.5;
+    for(let i=0;i<4;i++){
+      const cx=W*0.1+Math.sin(Date.now()/200+i*2.1)*W*0.4+W*0.3;
+      const cy=py-avGap*0.4+i*20;
+      ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+14,cy+28);ctx.lineTo(cx-8,cy+50);ctx.stroke();
+    }
+    ctx.lineWidth=1;
+  }
+}
+
+function drawHUD(){
+  ctx.fillStyle='rgba(0,0,0,0.42)';ctx.fillRect(0,0,W,44);
+  // Distance
+  ctx.fillStyle='#fff';ctx.font='bold 16px monospace';ctx.textAlign='left';
+  ctx.fillText(Math.floor(score)+'m',12,28);
+  // Lead bar (avalanche gap indicator)
+  const bw=Math.min(160,W*0.35),bx=W/2-bw/2;
+  const pct=Math.max(0,Math.min(1,avGap/(H*0.48)));
+  ctx.fillStyle='#1a1a2a';ctx.fillRect(bx,10,bw,22);
+  const barCol=pct>0.55?'#00cc44':pct>0.25?'#ee8800':'#ee1111';
+  ctx.fillStyle=barCol;ctx.fillRect(bx,10,bw*pct,22);
+  ctx.strokeStyle='#558';ctx.lineWidth=1;ctx.strokeRect(bx,10,bw,22);ctx.lineWidth=1;
+  ctx.fillStyle='#fff';ctx.font='bold 10px monospace';ctx.textAlign='center';
+  ctx.fillText('LEAD',W/2,25);
+  // Speed
+  ctx.fillStyle='#8cf';ctx.font='13px monospace';ctx.textAlign='right';
+  ctx.fillText(Math.floor(speed/10)+'km/h',W-10,28);
+}
+
+function drawMenu(){
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#5880c8');g.addColorStop(1,'#e0ecff');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='rgba(0,0,0,0.58)';ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.font='bold 52px monospace';ctx.fillStyle='#fff';
+  ctx.fillText('AVALANCHE',W/2,H/2-100);
+  ctx.font='15px monospace';ctx.fillStyle='#8cf';
+  ctx.fillText('Ski for your life — the mountain is right behind you!',W/2,H/2-58);
+  ctx.font='12px monospace';ctx.fillStyle='#aaa';
+  ctx.fillText('Arrow keys / A D to steer     Ski through red gates for a boost',W/2,H/2-16);
+  ctx.fillText('Crashing lets the avalanche catch up!',W/2,H/2+8);
+  ctx.font='bold 20px monospace';ctx.fillStyle='#fff';
+  ctx.fillText('TAP OR PRESS SPACE TO START',W/2,H/2+62);
+}
+
+function drawGameOver(){
+  ctx.fillStyle='rgba(200,220,255,0.88)';ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  ctx.font='bold 42px monospace';ctx.fillStyle='#223070';
+  ctx.fillText('BURIED!',W/2,H/2-80);
+  ctx.font='16px monospace';ctx.fillStyle='#446';
+  ctx.fillText('The avalanche got you.',W/2,H/2-38);
+  ctx.font='24px monospace';ctx.fillStyle='#112';
+  ctx.fillText(Math.floor(score)+'m survived',W/2,H/2+8);
+  ctx.font='15px monospace';ctx.fillStyle='#668';
+  ctx.fillText('TAP TO SKI AGAIN',W/2,H/2+60);
+}
+
+// ── Main loop ──────────────────────────────────────────────────────────────────
+let lastT2=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  const dt=Math.min((ts-lastT2)/1000,0.05);
+  lastT2=ts;
+
+  if(state==='menu'){drawMenu();return;}
+  if(state==='gameover'){drawGameOver();return;}
+
+  // ── Update ────────────────────────────────────────────────
+  // Speed ramp
+  speed=Math.min(SPD_MAX,speed+4*dt);
+
+  // Scroll world
+  const moveSpeed=crashT>0?speed*0.4:speed;
+  scrollY+=moveSpeed*dt;
+  score=scrollY/8;
+
+  // Avalanche gap: drains over time, drains faster at higher speed
+  const drain=7+speed*0.012;
+  avGap-=drain*dt;
+  if(crashT>0)avGap-=60*dt; // extra drain during crash
+  avGap=Math.max(0,Math.min(H*0.56,avGap));
+
+  if(crashT>0)crashT-=dt;
+  if(shake>0)shake-=dt*4;
+
+  // Game over: avalanche caught player
+  if(avGap<=0){
+    state='gameover';
+    setTimeout(()=>showLB(Math.floor(score)),1500);
+    document.getElementById('btns').style.display='none';
+    return;
+  }
+
+  // Spawn new obstacles ahead
+  while(lastOY<scrollY+H*1.3){
+    lastOY+=spawnInterval();
+    trySpawn(lastOY);
+  }
+
+  // Player movement
+  let mvX=0;
+  if(keys['ArrowLeft']||keys['a']||keys['A']||btnL)mvX-=1;
+  if(keys['ArrowRight']||keys['d']||keys['D']||btnR)mvX+=1;
+  playerX+=mvX*LATERAL*dt;
+  playerX=Math.max(20,Math.min(W-20,playerX));
+
+  const py=H*0.42;
+
+  // Update boulders laterally
+  for(const o of obsList){
+    if(o.type==='boulder'&&!o.hit){
+      o.x+=o.vx*dt;
+      if(o.x<18||o.x>W-18)o.vx*=-1;
+    }
+  }
+
+  // Collisions
+  for(const o of obsList){
+    if(o.hit)continue;
+    const sy=py+(o.worldY-scrollY);
+    if(sy<-60||sy>H+20)continue;
+    // Only check objects near player's screen y
+    if(Math.abs(sy-py)>30)continue;
+    const hitR=o.type==='gate'?0:o.type==='tree'?14:o.type==='rock'?12:10;
+    if(o.type==='gate'){
+      // Collect if skiing between poles (x within 24px of center)
+      if(Math.abs(playerX-o.x)<24){
+        o.hit=true;avGap=Math.min(H*0.56,avGap+110);
+        boom(o.x,sy,'#ff4444',8);
+      }
+    } else if(crashT<=0&&Math.abs(playerX-o.x)<hitR+9){
+      o.hit=true;crashT=1.5;shake=0.5;
+      avGap=Math.max(0,avGap-110);
+      boom(playerX,py,'#fff',12);boom(playerX,py,'#aaccff',8);
+    }
+  }
+
+  // Remove old objects
+  for(let i=obsList.length-1;i>=0;i--){
+    if(obsList[i].worldY<scrollY-200)obsList.splice(i,1);
+  }
+
+  // Particles
+  for(let i=ptcls.length-1;i>=0;i--){
+    const p=ptcls[i];p.x+=p.vx*dt;p.y+=p.vy*dt;
+    p.vy+=300*dt;p.life-=dt;if(p.life<=0)ptcls.splice(i,1);
+  }
+
+  // ── Draw ──────────────────────────────────────────────────
+  const sk=shake>0?Math.sin(Date.now()/30)*(shake*7):0;
+  ctx.save();if(sk)ctx.translate(sk,0);
+
+  drawBg(py);
+  drawAvalanche(py);
+
+  // Draw objects in world order
+  const sorted=[...obsList].sort((a,b)=>a.worldY-b.worldY);
+  for(const o of sorted){
+    if(o.hit)continue;
+    const sy=py+(o.worldY-scrollY);
+    if(sy<-80||sy>H+20)continue;
+    const sx=o.x;
+    if(o.type==='tree')drawTree(sx,sy);
+    else if(o.type==='rock')drawRock(sx,sy);
+    else if(o.type==='boulder')drawBoulder(sx,sy);
+    else drawGate(sx,sy);
+  }
+
+  drawPlayer(py);
+
+  // Particles
+  for(const p of ptcls){
+    ctx.globalAlpha=p.life/p.maxLife;
+    ctx.fillStyle=p.col;ctx.beginPath();ctx.arc(p.x,p.y,4,0,Math.PI*2);ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
+  ctx.restore();
+  drawHUD();
+
+  // Danger flash overlay when very close
+  if(avGap<H*0.12){
+    const intensity=(1-avGap/(H*0.12))*0.18;
+    ctx.fillStyle=`rgba(200,220,255,${intensity})`;ctx.fillRect(0,0,W,H);
+  }
+}
+requestAnimationFrame(loop);
+
+// ── Controls ───────────────────────────────────────────────────────────────────
+const keys={};
+addEventListener('blur',()=>{for(const k in keys)delete keys[k];});
+addEventListener('keydown',e=>{
+  keys[e.key]=true;
+  if(['ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();
+  if(document.getElementById('lb-overlay').style.display!=='none')return;
+  if((e.key===' '||e.key==='Enter')&&(state==='menu'||state==='gameover'))startGame();
+});
+addEventListener('keyup',e=>{delete keys[e.key];});
+
+let btnL=false,btnR=false;
+document.addEventListener('DOMContentLoaded',()=>{
+  const BL=document.getElementById('btn-l'),BR=document.getElementById('btn-r');
+  BL.addEventListener('touchstart',e=>{e.preventDefault();btnL=true;},{passive:false});
+  BL.addEventListener('touchend',  e=>{e.preventDefault();btnL=false;},{passive:false});
+  BR.addEventListener('touchstart',e=>{e.preventDefault();btnR=true;},{passive:false});
+  BR.addEventListener('touchend',  e=>{e.preventDefault();btnR=false;},{passive:false});
+  cv.addEventListener('touchstart',e=>{
+    e.preventDefault();
+    if(document.getElementById('lb-overlay').style.display!=='none')return;
+    if(state==='menu'||state==='gameover')startGame();
+  },{passive:false});
+  document.getElementById('lb-btn').addEventListener('click',()=>{
+    const name=(document.getElementById('lb-name').value.trim().toUpperCase()||'ANON').slice(0,12);
+    fetch('/scores/'+LB_GAME,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,score:_lbScore})})
+      .then(r=>r.json()).then(list=>{lbRender(list,true);document.getElementById('lb-form').style.display='none';})
+      .catch(()=>document.getElementById('lb-form').style.display='none');
+  });
+  document.getElementById('lb-name').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('lb-btn').click();});
+  document.getElementById('lb-again').addEventListener('click',()=>{document.getElementById('lb-overlay').style.display='none';startGame();});
+});
+
+// ── Leaderboard ────────────────────────────────────────────────────────────────
+const LB_GAME='avalanche';
+let _lbScore=0;
+function showLB(s){
+  _lbScore=s;
+  document.getElementById('lb-score').textContent=s.toLocaleString()+'m survived';
+  document.getElementById('lb-form').style.display='flex';
+  document.getElementById('lb-name').value='';
+  document.getElementById('lb-overlay').style.display='flex';
+  lbLoad(false);
+}
+function lbLoad(done){
+  fetch('/scores/'+LB_GAME).then(r=>r.json()).then(list=>lbRender(list,done)).catch(()=>lbRender([],done));
+}
+function lbRender(list,done){
+  const el=document.getElementById('lb-rows');
+  if(!list.length){el.innerHTML='<div style="color:#334;padding:8px 0;font-size:.8rem">No scores yet — be first!</div>';return;}
+  el.innerHTML=list.slice(0,10).map((s,i)=>{
+    const hi=done&&s.score===_lbScore;
+    return `<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid #111828;font-size:.82rem">
+      <span style="color:#335;width:20px">${i+1}.</span>
+      <span style="flex:1;color:${hi?'#8cf':'#aaa'}">${s.name}</span>
+      <span style="color:${hi?'#8cf':'#4af'}">${s.score.toLocaleString()}m</span></div>`;
+  }).join('');
+}
+</script>
+
+<div id="lb-overlay" style="position:fixed;inset:0;z-index:100;background:rgba(0,10,30,.9);display:none;align-items:center;justify-content:center">
+  <div style="background:#080e1e;border:2px solid #4488cc;border-radius:12px;padding:28px 32px;min-width:280px;max-width:90vw;font-family:'Courier New',monospace">
+    <div style="color:#8cf;font-size:1.1rem;font-weight:bold;text-align:center;margin-bottom:6px">AVALANCHE</div>
+    <div id="lb-score" style="color:#fff;font-size:1.2rem;font-weight:bold;margin-bottom:14px;text-align:center"></div>
+    <div id="lb-rows" style="margin-bottom:14px;text-align:left;min-height:40px"></div>
+    <div id="lb-form" style="display:flex;gap:8px;margin-bottom:14px">
+      <input id="lb-name" maxlength="12" placeholder="YOUR NAME" autocomplete="off" spellcheck="false"
+        style="flex:1;background:rgba(100,160,220,.1);border:1px solid #4488cc;color:#8cf;padding:8px;border-radius:6px;font-family:'Courier New',monospace;font-size:.9rem;outline:none">
+      <button id="lb-btn" style="background:rgba(100,160,220,.15);border:1px solid #4488cc;color:#8cf;padding:8px 12px;border-radius:6px;font-family:'Courier New',monospace;font-size:.85rem;cursor:pointer;font-weight:bold">OK</button>
+    </div>
+    <div id="lb-again" style="color:#335;font-size:.8rem;cursor:pointer;padding:4px;text-align:center">&#9654; SKI AGAIN</div>
+  </div>
+</div>
+</body>
+</html>

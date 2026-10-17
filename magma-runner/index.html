@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Magma Runner</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a0000 0%, #2d0a00 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            touch-action: none;
+        }
+        .game-container {
+            text-align: center;
+            width: 100%;
+            max-width: 800px;
+            padding: 10px;
+        }
+        h1 {
+            color: #ff6600;
+            margin-bottom: 10px;
+            text-shadow: 0 0 12px #ff3300, 2px 2px 4px rgba(0,0,0,0.7);
+            font-size: clamp(18px, 5vw, 28px);
+        }
+        #gameCanvas {
+            border: 4px solid #cc4400;
+            border-radius: 8px;
+            box-shadow: 0 0 24px rgba(255,80,0,0.45);
+            width: 100%;
+            max-width: 800px;
+            height: auto;
+        }
+        .info {
+            color: #ffaa66;
+            margin-top: 10px;
+            font-size: clamp(12px, 3vw, 14px);
+        }
+        .controls {
+            color: #aa6633;
+            margin-top: 6px;
+            font-size: 12px;
+        }
+        #ui {
+            display: flex;
+            justify-content: space-between;
+            max-width: 800px;
+            margin: 0 auto 10px auto;
+            color: #ffcc88;
+            font-size: clamp(14px, 4vw, 18px);
+            padding: 0 10px;
+        }
+        .gem-count { color: #ff9944; }
+
+        .mode-btn {
+            background: rgba(180, 60, 0, 0.2);
+            border: 1px solid rgba(255, 120, 0, 0.5);
+            color: #ffaa66;
+            font-family: inherit;
+            font-size: clamp(11px, 3vw, 13px);
+            padding: 6px 14px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background 0.15s;
+            margin-top: 8px;
+        }
+        .mode-btn:hover, .mode-btn:active { background: rgba(220, 80, 0, 0.4); }
+        .mode-btn.active {
+            background: rgba(220, 80, 0, 0.55);
+            border-color: #ff6600;
+            color: #ffdd99;
+        }
+
+        .touch-controls {
+            display: none;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 800px;
+            margin: 15px auto 0 auto;
+            padding: 0 10px;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .dpad { display: flex; gap: 10px; }
+        .touch-btn {
+            width: 70px; height: 70px;
+            border-radius: 50%;
+            border: 3px solid rgba(255,140,50,0.5);
+            background: rgba(200,60,0,0.2);
+            color: #ffaa44;
+            font-size: 28px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.1s, transform 0.1s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .touch-btn:active, .touch-btn.active {
+            background: rgba(255,80,0,0.5);
+            transform: scale(0.95);
+        }
+        .jump-btn {
+            width: 90px; height: 90px;
+            background: rgba(220,60,0,0.3);
+            border-color: rgba(255,100,0,0.7);
+            font-size: 15px;
+            font-weight: bold;
+        }
+        .jump-btn:active, .jump-btn.active { background: rgba(255,70,0,0.6); }
+        .restart-btn {
+            width: 50px; height: 50px;
+            font-size: 20px;
+            background: rgba(180,70,0,0.3);
+            border-color: rgba(200,80,0,0.6);
+        }
+        .restart-btn:active, .restart-btn.active { background: rgba(200,80,0,0.6); }
+
+        @media (pointer: coarse), (max-width: 900px) {
+            .touch-controls { display: flex; }
+            .controls { display: none; }
+        }
+        @media (max-width: 600px) {
+            h1 { margin-bottom: 5px; }
+            .game-container { padding: 5px; }
+        }
+    </style>
+</head>
+<body>
+<div class="game-container">
+    <h1>Magma Runner</h1>
+    <div id="ui">
+        <span>Gems: <span id="gemCount" class="gem-count">0</span> / <span id="totalGems">0</span></span>
+        <span id="levelDisplay">Level 1</span>
+        <span id="message"></span>
+    </div>
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <p class="info" id="statusText">Collect all the gems and reach the flag!</p>
+    <p class="controls">Arrow Keys / WASD to move &bull; SPACE to jump &bull; R to restart</p>
+    <button class="mode-btn" id="modeBtn">2 Player Co-op (connect another device)</button>
+
+    <div class="touch-controls">
+        <div class="dpad">
+            <button class="touch-btn" id="leftBtn">&#9664;</button>
+            <button class="touch-btn" id="rightBtn">&#9654;</button>
+        </div>
+        <button class="touch-btn restart-btn" id="restartBtn">&#8635;</button>
+        <button class="touch-btn jump-btn" id="jumpBtn">JUMP</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const gemCountEl     = document.getElementById('gemCount');
+    const totalGemsEl    = document.getElementById('totalGems');
+    const levelDisplayEl = document.getElementById('levelDisplay');
+    const messageEl      = document.getElementById('message');
+    const statusTextEl   = document.getElementById('statusText');
+    const modeBtn        = document.getElementById('modeBtn');
+
+    const GRAVITY    = 0.5;
+    const JUMP_FORCE = -12;
+    const MOVE_SPEED = 5;
+    const PLAT_H     = 25;
+
+    let player, remotePlayer, platforms, gems, finishFlag, lavaLevel;
+    let collectedGems, gameState, currentLevel, playerStartPos;
+
+    // Co-op state
+    let numPlayers = 1;
+    let ws = null;
+    let myRole = null;
+    let peerConnected = false;
+    let remoteTarget = { x: 0, y: 0 };
+    let netTick = 0;
+
+    function wsSend(msg) {
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+    }
+
+    function connectCoop() {
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${proto}//${location.host}/ws/magma-runner`);
+        ws.addEventListener('open', () => {
+            statusTextEl.textContent = 'Waiting for Player 2 to join...';
+        });
+        ws.addEventListener('message', (event) => {
+            let msg;
+            try { msg = JSON.parse(event.data); } catch (e) { return; }
+            handleNetMessage(msg);
+        });
+        ws.addEventListener('close', () => {
+            peerConnected = false;
+            if (numPlayers === 2) statusTextEl.textContent = 'Co-op connection lost.';
+        });
+        ws.addEventListener('error', () => {
+            statusTextEl.textContent = 'Could not connect for co-op.';
+        });
+    }
+
+    function disconnectCoop() {
+        if (ws) { ws.close(); ws = null; }
+        peerConnected = false;
+        myRole = null;
+    }
+
+    function handleNetMessage(msg) {
+        switch (msg.type) {
+            case 'role':
+                myRole = msg.role;
+                modeBtn.textContent = myRole === 'player2'
+                    ? '2 Player Co-op (You: Player 2)'
+                    : '2 Player Co-op (You: Player 1)';
+                initLevel(currentLevel);
+                break;
+            case 'room_full':
+                statusTextEl.textContent = 'Co-op room already has 2 players.';
+                disconnectCoop();
+                numPlayers = 1;
+                modeBtn.classList.remove('active');
+                modeBtn.textContent = '2 Player Co-op (connect another device)';
+                break;
+            case 'peer_status':
+                peerConnected = msg.connected;
+                if (numPlayers === 2) {
+                    statusTextEl.textContent = peerConnected
+                        ? 'Partner connected! Collect gems and both reach the flag.'
+                        : 'Waiting for Player 2 to join...';
+                }
+                break;
+            case 'pos': {
+                const dx = msg.x - remoteTarget.x;
+                const dy = msg.y - remoteTarget.y;
+                if (Math.abs(dx) > 100 || Math.abs(dy) > 100) {
+                    messageEl.textContent = 'Partner respawned!';
+                    messageEl.style.color = '#ff6600';
+                }
+                remoteTarget.x = msg.x;
+                remoteTarget.y = msg.y;
+                break;
+            }
+            case 'gem':
+                if (gems[msg.i] && !gems[msg.i].collected) {
+                    gems[msg.i].collected = true;
+                    collectedGems++;
+                    gemCountEl.textContent = collectedGems;
+                }
+                break;
+            case 'won':
+                gameState = 'won';
+                statusTextEl.textContent = currentLevel < levels.length - 1
+                    ? 'Level Complete! Tap restart for next level!'
+                    : 'Congratulations! You conquered all levels!';
+                messageEl.textContent = 'Victory!';
+                messageEl.style.color = '#ffdd00';
+                break;
+            case 'sync':
+                currentLevel = msg.level;
+                initLevel(currentLevel);
+                break;
+        }
+    }
+
+    const levels = [
+        {
+            platforms: [
+                {x:0,y:400,w:120},{x:150,y:370,w:100},{x:280,y:340,w:100},
+                {x:420,y:310,w:120},{x:570,y:280,w:100},{x:700,y:250,w:100},
+            ],
+            gems: [{x:190,y:330},{x:320,y:300},{x:470,y:270},{x:610,y:240}],
+            start: {x:50,y:350}, flag: {x:740,y:210}
+        },
+        {
+            platforms: [
+                {x:0,y:420,w:110},{x:150,y:390,w:90},{x:290,y:410,w:90},
+                {x:420,y:360,w:90},{x:550,y:320,w:90},{x:680,y:270,w:120},
+            ],
+            gems: [{x:170,y:350},{x:310,y:370},{x:440,y:320},{x:570,y:280},{x:690,y:230}],
+            start: {x:40,y:370}, flag: {x:725,y:230}
+        },
+        {
+            platforms: [
+                {x:0,y:430,w:100},{x:140,y:400,w:80},{x:260,y:430,w:80},
+                {x:380,y:380,w:80},{x:500,y:340,w:80},{x:380,y:290,w:80},
+                {x:500,y:240,w:80},{x:600,y:200,w:80},{x:680,y:160,w:120},
+            ],
+            gems: [{x:170,y:360},{x:290,y:390},{x:410,y:340},{x:410,y:250},{x:530,y:200},{x:610,y:160}],
+            start: {x:30,y:380}, flag: {x:725,y:120}
+        },
+        {
+            platforms: [
+                {x:0,y:420,w:100},{x:170,y:390,w:70},{x:300,y:420,w:70},
+                {x:430,y:370,w:70},{x:540,y:320,w:70},{x:440,y:270,w:70},
+                {x:560,y:220,w:70},{x:670,y:170,w:120},
+            ],
+            gems: [{x:200,y:350},{x:330,y:380},{x:460,y:330},{x:570,y:280},{x:470,y:230},{x:690,y:130}],
+            start: {x:40,y:370}, flag: {x:715,y:130}
+        },
+        {
+            platforms: [
+                {x:0,y:430,w:120},{x:170,y:410,w:100},{x:320,y:430,w:100},
+                {x:470,y:390,w:90},{x:610,y:350,w:90},{x:700,y:300,w:100},
+            ],
+            gems: [{x:210,y:370},{x:360,y:390},{x:505,y:350},{x:645,y:310},{x:740,y:260}],
+            start: {x:40,y:380}, flag: {x:735,y:260}
+        },
+        {
+            platforms: [
+                {x:0,y:430,w:90},{x:180,y:400,w:60},{x:330,y:430,w:60},
+                {x:480,y:380,w:60},{x:380,y:320,w:60},{x:520,y:270,w:60},
+                {x:670,y:230,w:60},{x:560,y:170,w:60},{x:680,y:130,w:120},
+            ],
+            gems: [{x:210,y:360},{x:360,y:390},{x:510,y:340},{x:410,y:280},{x:550,y:230},{x:700,y:190},{x:710,y:90}],
+            start: {x:40,y:380}, flag: {x:725,y:90}
+        },
+    ];
+
+    function createPlayer(x, y, color) {
+        return { x, y, width: 30, height: 40, vx: 0, vy: 0, onGround: false, color };
+    }
+
+    function initLevel(idx) {
+        const lvl = levels[idx];
+        playerStartPos = { x: lvl.start.x, y: lvl.start.y };
+
+        const myColor   = myRole === 'player2' ? '#4ecdc4' : '#cc3d00';
+        const peerColor = myRole === 'player2' ? '#cc3d00' : '#4ecdc4';
+        player       = createPlayer(lvl.start.x, lvl.start.y, myColor);
+        remotePlayer = createPlayer(lvl.start.x, lvl.start.y, peerColor);
+        remoteTarget.x = remotePlayer.x;
+        remoteTarget.y = remotePlayer.y;
+
+        platforms = lvl.platforms.map(p => ({ x: p.x, y: p.y, width: p.w, height: PLAT_H }));
+        gems = lvl.gems.map(g => ({ x: g.x, y: g.y, radius: 13, collected: false, angle: Math.random() * Math.PI * 2 }));
+        finishFlag = { x: lvl.flag.x, y: lvl.flag.y, width: 20, height: 50 };
+        lavaLevel = 470;
+        collectedGems = 0;
+        gameState = 'playing';
+        gemCountEl.textContent = '0';
+        totalGemsEl.textContent = gems.length;
+        levelDisplayEl.textContent = 'Level ' + (idx + 1);
+        messageEl.textContent = '';
+        statusTextEl.textContent = (numPlayers === 2 && !peerConnected)
+            ? 'Waiting for Player 2 to join...'
+            : 'Collect all the gems and reach the flag!';
+    }
+
+    function restartLevel() {
+        initLevel(currentLevel);
+        if (numPlayers === 2) wsSend({ type: 'sync', level: currentLevel });
+    }
+    function restartOrAdvance() {
+        if (document.getElementById('lb-overlay').style.display !== 'none') return;
+        if (gameState === 'won') {
+            if (currentLevel >= levels.length - 1) { runScore = 0; }
+            currentLevel = currentLevel < levels.length - 1 ? currentLevel + 1 : 0;
+        }
+        initLevel(currentLevel);
+        if (numPlayers === 2) wsSend({ type: 'sync', level: currentLevel });
+    }
+
+    // ---- Input ----
+    const keys = {};
+    document.addEventListener('keydown', e => {
+        keys[e.code] = true;
+        if (['Space','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
+        if (e.code === 'KeyR') restartLevel();
+        if ((e.code === 'Space' || e.code === 'Enter') && gameState === 'won') restartOrAdvance();
+    });
+    document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+    const touchState = { left: false, right: false, jump: false };
+    function setupBtn(btn, key) {
+        const on  = e => { e.preventDefault(); touchState[key] = true;  btn.classList.add('active'); };
+        const off = e => { e.preventDefault(); touchState[key] = false; btn.classList.remove('active'); };
+        btn.addEventListener('touchstart',  on,  { passive: false });
+        btn.addEventListener('touchend',    off, { passive: false });
+        btn.addEventListener('touchcancel', off, { passive: false });
+        btn.addEventListener('mousedown', on);
+        btn.addEventListener('mouseup',   off);
+        btn.addEventListener('mouseleave',off);
+    }
+    setupBtn(document.getElementById('leftBtn'),  'left');
+    setupBtn(document.getElementById('rightBtn'), 'right');
+    setupBtn(document.getElementById('jumpBtn'),  'jump');
+
+    const restartBtn = document.getElementById('restartBtn');
+    restartBtn.addEventListener('touchstart', e => { e.preventDefault(); restartBtn.classList.add('active'); restartOrAdvance(); }, { passive: false });
+    restartBtn.addEventListener('touchend',   e => { e.preventDefault(); restartBtn.classList.remove('active'); }, { passive: false });
+    restartBtn.addEventListener('click', restartOrAdvance);
+
+    document.body.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+    modeBtn.addEventListener('click', () => {
+        if (numPlayers === 1) {
+            numPlayers = 2;
+            modeBtn.classList.add('active');
+            modeBtn.textContent = 'Connecting...';
+            connectCoop();
+        } else {
+            numPlayers = 1;
+            modeBtn.classList.remove('active');
+            modeBtn.textContent = '2 Player Co-op (connect another device)';
+            disconnectCoop();
+            initLevel(currentLevel);
+        }
+    });
+
+    // ---- Collision ----
+    function rectHit(a, b) {
+        return a.x < b.x + b.width && a.x + a.width > b.x &&
+               a.y < b.y + b.height && a.y + a.height > b.y;
+    }
+    function circleHitsRect(c, r) {
+        const cx = Math.max(r.x, Math.min(c.x, r.x + r.width));
+        const cy = Math.max(r.y, Math.min(c.y, r.y + r.height));
+        const dx = c.x - cx, dy = c.y - cy;
+        return dx*dx + dy*dy < c.radius * c.radius;
+    }
+
+    // ---- Update ----
+    function update() {
+        // Smoothly interpolate remote player; snap on large jumps (respawn)
+        if (numPlayers === 2 && peerConnected) {
+            const dx = remoteTarget.x - remotePlayer.x;
+            const dy = remoteTarget.y - remotePlayer.y;
+            if (Math.abs(dx) > 100 || Math.abs(dy) > 100) {
+                remotePlayer.x = remoteTarget.x;
+                remotePlayer.y = remoteTarget.y;
+            } else {
+                remotePlayer.x += dx * 0.3;
+                remotePlayer.y += dy * 0.3;
+            }
+        }
+
+        if (gameState !== 'playing') return;
+
+        if (keys['ArrowLeft'] || keys['KeyA'] || touchState.left)        player.vx = -MOVE_SPEED;
+        else if (keys['ArrowRight'] || keys['KeyD'] || touchState.right)  player.vx =  MOVE_SPEED;
+        else player.vx = 0;
+
+        if ((keys['Space'] || keys['ArrowUp'] || keys['KeyW'] || touchState.jump) && player.onGround) {
+            player.vy = JUMP_FORCE;
+            player.onGround = false;
+        }
+
+        player.vy += GRAVITY;
+        player.x  += player.vx;
+        player.y  += player.vy;
+
+        player.onGround = false;
+        for (const p of platforms) {
+            if (rectHit(player, p)) {
+                if (player.vy > 0 && player.y + player.height - player.vy <= p.y + 5) {
+                    player.y = p.y - player.height; player.vy = 0; player.onGround = true;
+                } else if (player.vy < 0 && player.y - player.vy >= p.y + p.height - 5) {
+                    player.y = p.y + p.height; player.vy = 0;
+                } else if (player.vx > 0) { player.x = p.x - player.width; }
+                else if (player.vx < 0)  { player.x = p.x + p.width; }
+            }
+        }
+
+        if (player.x < 0) player.x = 0;
+        if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+
+        for (let i = 0; i < gems.length; i++) {
+            const g = gems[i];
+            if (!g.collected) {
+                g.angle += 0.04;
+                if (circleHitsRect(g, player)) {
+                    g.collected = true;
+                    collectedGems++;
+                    gemCountEl.textContent = collectedGems;
+                    wsSend({ type: 'gem', i });
+                }
+            }
+        }
+
+        const coopActive = numPlayers === 2 && peerConnected;
+        const remoteAtFlag = !coopActive || rectHit(
+            { x: remoteTarget.x, y: remoteTarget.y, width: remotePlayer.width, height: remotePlayer.height },
+            finishFlag
+        );
+        if (rectHit(player, finishFlag) && remoteAtFlag) {
+            if (collectedGems === gems.length) {
+                runScore += collectedGems * 50 + 200;
+                gameState = 'won';
+                if (currentLevel < levels.length - 1) {
+                    statusTextEl.textContent = 'Level Complete! Tap restart for next level!';
+                } else {
+                    statusTextEl.textContent = 'Congratulations! You conquered all levels!';
+                    setTimeout(() => showLB(runScore), 1500);
+                }
+                messageEl.textContent = 'Victory!';
+                messageEl.style.color = '#ffdd00';
+                wsSend({ type: 'won' });
+            } else {
+                statusTextEl.textContent = 'Grab all gems first! (' + collectedGems + '/' + gems.length + ')';
+            }
+        }
+
+        if (player.y > lavaLevel) {
+            if (coopActive) {
+                player.x = playerStartPos.x; player.y = playerStartPos.y;
+                player.vx = 0; player.vy = 0; player.onGround = false;
+                statusTextEl.textContent = 'Melted! Back to start.';
+                messageEl.textContent = 'Melted!';
+                messageEl.style.color = '#ff4400';
+                wsSend({ type: 'pos', x: player.x, y: player.y });
+            } else {
+                gameState = 'dead';
+                statusTextEl.textContent = 'You fell in the lava! Tap restart.';
+                messageEl.textContent = 'Melted!';
+                messageEl.style.color = '#ff4400';
+            }
+        }
+
+        netTick++;
+        if (coopActive && netTick % 3 === 0) wsSend({ type: 'pos', x: player.x, y: player.y });
+    }
+
+    // ---- Draw ----
+    function drawBackground() {
+        const grad = ctx.createLinearGradient(0, 0, 0, lavaLevel);
+        grad.addColorStop(0,   '#0a0000');
+        grad.addColorStop(0.4, '#1c0300');
+        grad.addColorStop(0.8, '#360700');
+        grad.addColorStop(1,   '#560f00');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, lavaLevel);
+
+        ctx.fillStyle = 'rgba(50,15,0,0.55)';
+        ashCloud(90,  48, 44);
+        ashCloud(300, 78, 52);
+        ashCloud(540, 42, 38);
+        ashCloud(700, 88, 48);
+
+        const hg = ctx.createLinearGradient(0, lavaLevel - 70, 0, lavaLevel);
+        hg.addColorStop(0, 'rgba(255,80,0,0)');
+        hg.addColorStop(1, 'rgba(255,100,0,0.28)');
+        ctx.fillStyle = hg;
+        ctx.fillRect(0, lavaLevel - 70, canvas.width, 70);
+    }
+
+    function ashCloud(x, y, s) {
+        ctx.beginPath();
+        ctx.arc(x,           y,           s*0.5,  0, Math.PI*2);
+        ctx.arc(x+s*0.4, y-s*0.1, s*0.4,  0, Math.PI*2);
+        ctx.arc(x+s*0.8, y,       s*0.5,  0, Math.PI*2);
+        ctx.arc(x+s*0.4, y+s*0.2, s*0.35, 0, Math.PI*2);
+        ctx.fill();
+    }
+
+    function drawLava() {
+        const now = Date.now();
+        const grad = ctx.createLinearGradient(0, lavaLevel, 0, canvas.height);
+        grad.addColorStop(0,   '#ff6600');
+        grad.addColorStop(0.2, '#dd3300');
+        grad.addColorStop(0.6, '#991100');
+        grad.addColorStop(1,   '#550500');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, lavaLevel, canvas.width, canvas.height - lavaLevel);
+
+        ctx.strokeStyle = '#ff8800';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let x = 0; x <= canvas.width; x += 14) {
+            const y = lavaLevel + Math.sin((x + now/180)*0.055)*4 + Math.sin((x + now/310)*0.022)*6;
+            x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255,210,0,0.35)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let x = 0; x <= canvas.width; x += 14) {
+            const y = lavaLevel + 5 + Math.sin((x + now/230)*0.038 + 1.2)*5;
+            x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+    }
+
+    function drawPlatform(p) {
+        const segW = 36;
+        for (let bx = 0; bx < p.width; bx += segW) {
+            const sw = Math.min(segW - 2, p.width - bx - 1);
+            const px = p.x + bx, py = p.y;
+            const rg = ctx.createLinearGradient(px, py, px, py + p.height);
+            rg.addColorStop(0,   '#5c2a00');
+            rg.addColorStop(0.5, '#3a1600');
+            rg.addColorStop(1,   '#1e0a00');
+            ctx.fillStyle = rg;
+            ctx.fillRect(px, py, sw, p.height - 2);
+            ctx.fillStyle = '#6e3200';
+            ctx.fillRect(px, py, sw, 5);
+            ctx.fillStyle = 'rgba(255,110,0,0.8)';
+            ctx.fillRect(px, py + p.height - 3, sw, 2);
+            ctx.strokeStyle = 'rgba(255,90,0,0.25)';
+            ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(px + sw*0.35, py + 4);
+            ctx.lineTo(px + sw*0.55, py + p.height - 4);
+            ctx.stroke();
+            ctx.strokeStyle = '#180800';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(px, py, sw, p.height - 2);
+        }
+    }
+
+    function drawGem(g) {
+        if (g.collected) return;
+        ctx.save();
+        ctx.translate(g.x, g.y);
+        ctx.rotate(g.angle);
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = '#ff5500';
+        ctx.fillStyle = '#ff6600';
+        ctx.beginPath();
+        ctx.moveTo(0, -g.radius);
+        ctx.lineTo(g.radius*0.65, 0);
+        ctx.lineTo(0,  g.radius);
+        ctx.lineTo(-g.radius*0.65, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffdd44';
+        ctx.beginPath();
+        ctx.moveTo(0, -g.radius*0.45);
+        ctx.lineTo(g.radius*0.28, 0);
+        ctx.lineTo(0,  g.radius*0.45);
+        ctx.lineTo(-g.radius*0.28, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    }
+
+    function drawFlag() {
+        ctx.fillStyle = '#4a2000';
+        ctx.fillRect(finishFlag.x, finishFlag.y, 5, finishFlag.height);
+        const wave = Math.sin(Date.now() / 200) * 3;
+        ctx.fillStyle = '#ff3300';
+        ctx.beginPath();
+        ctx.moveTo(finishFlag.x + 5, finishFlag.y);
+        ctx.lineTo(finishFlag.x + 35 + wave, finishFlag.y + 12);
+        ctx.lineTo(finishFlag.x + 5, finishFlag.y + 25);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#ffcc00';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('!', finishFlag.x + 17 + wave * 0.4, finishFlag.y + 18);
+        ctx.textAlign = 'left';
+    }
+
+    function drawPlayerChar(p) {
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, p.width, p.height);
+        // Visor
+        ctx.fillStyle = p.color === '#cc3d00' ? '#ff9900' : '#a0fff8';
+        ctx.fillRect(p.x + 4, p.y + 7, p.width - 8, 10);
+        // Visor shine
+        ctx.fillStyle = 'rgba(255,255,200,0.5)';
+        ctx.fillRect(p.x + 5, p.y + 8, 6, 4);
+        // Suit details
+        const trim = p.color === '#cc3d00' ? '#ff5500' : '#00bfb3';
+        ctx.fillStyle = trim;
+        ctx.fillRect(p.x + 7,  p.y + 22, 4, 7);
+        ctx.fillRect(p.x + 19, p.y + 22, 4, 7);
+        // Belt
+        ctx.fillStyle = p.color === '#cc3d00' ? '#771e00' : '#007a75';
+        ctx.fillRect(p.x, p.y + 27, p.width, 3);
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawBackground();
+        drawLava();
+        for (const p of platforms) drawPlatform(p);
+        for (const g of gems)      drawGem(g);
+        drawFlag();
+        if (gameState !== 'dead') drawPlayerChar(player);
+        if (numPlayers === 2 && peerConnected) drawPlayerChar(remotePlayer);
+    }
+
+    function gameLoop() {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    currentLevel = 0;
+    let runScore = 0;
+    initLevel(currentLevel);
+    gameLoop();
+
+    // ── Leaderboard ───────────────────────────────────────────────────────────
+    const LB_GAME = 'magma-runner';
+    let _lbScore = 0;
+    function showLB(s) {
+      _lbScore = s;
+      document.getElementById('lb-score').textContent = 'SCORE: ' + s.toLocaleString();
+      document.getElementById('lb-form').style.display = 'flex';
+      document.getElementById('lb-name').value = '';
+      document.getElementById('lb-overlay').style.display = 'flex';
+      lbLoad(false);
+    }
+    function lbLoad(done) {
+      fetch('/scores/' + LB_GAME).then(r => r.json()).then(list => lbRender(list, done)).catch(() => lbRender([], done));
+    }
+    function lbRender(list, done) {
+      const el = document.getElementById('lb-rows');
+      const ac = '#ff6600';
+      if (!list.length) { el.innerHTML = '<div style="color:#642;padding:8px 0;font-size:.8rem">No scores yet — be first!</div>'; return; }
+      el.innerHTML = list.slice(0, 10).map((s, i) => {
+        const hi = done && s.score === _lbScore;
+        return `<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid #2a0a00;font-size:.82rem">
+          <span style="color:#642;width:20px">${i + 1}.</span>
+          <span style="flex:1;color:${hi ? ac : '#aaa'}">${s.name}</span>
+          <span style="color:${hi ? ac : '#ff0'}">${s.score.toLocaleString()}</span></div>`;
+      }).join('');
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('lb-btn').addEventListener('click', () => {
+        const name = (document.getElementById('lb-name').value.trim().toUpperCase() || 'ANON').slice(0, 12);
+        fetch('/scores/' + LB_GAME, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, score: _lbScore }) })
+          .then(r => r.json()).then(list => { lbRender(list, true); document.getElementById('lb-form').style.display = 'none'; })
+          .catch(() => document.getElementById('lb-form').style.display = 'none');
+      });
+      document.getElementById('lb-name').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('lb-btn').click(); });
+      document.getElementById('lb-again').addEventListener('click', () => {
+        document.getElementById('lb-overlay').style.display = 'none';
+        runScore = 0; currentLevel = 0; initLevel(0);
+      });
+    });
+</script>
+<div id="lb-overlay" style="position:fixed;inset:0;z-index:100;background:rgba(10,2,0,.93);display:none;align-items:center;justify-content:center">
+  <div style="background:#1a0600;border:1px solid #ff6600;border-radius:12px;padding:28px 30px;width:min(340px,88vw);text-align:center;font-family:'Courier New',monospace;color:#fff;box-shadow:0 0 40px rgba(255,80,0,.15)">
+    <div style="color:#ff6600;font-size:.9rem;letter-spacing:4px;text-transform:uppercase;margin-bottom:8px">High Scores</div>
+    <div id="lb-score" style="color:#ff0;font-size:1.3rem;font-weight:bold;margin-bottom:14px"></div>
+    <div id="lb-rows" style="margin-bottom:14px;text-align:left;min-height:40px"></div>
+    <div id="lb-form" style="display:flex;gap:8px;margin-bottom:14px">
+      <input id="lb-name" maxlength="12" placeholder="YOUR NAME" autocomplete="off" spellcheck="false"
+        style="flex:1;background:#0a0200;border:1px solid #ff6600;color:#fff;padding:8px;border-radius:6px;font-family:'Courier New',monospace;font-size:.9rem;text-transform:uppercase;outline:none">
+      <button id="lb-btn" style="background:rgba(255,102,0,.15);border:1px solid #ff6600;color:#ff6600;padding:8px 12px;border-radius:6px;font-family:'Courier New',monospace;font-size:.85rem;cursor:pointer;font-weight:bold">OK</button>
+    </div>
+    <div id="lb-again" style="color:#642;font-size:.8rem;cursor:pointer;padding:4px">▶ PLAY AGAIN</div>
+  </div>
+</div>
+</body>
+</html>
