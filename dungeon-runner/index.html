@@ -43,6 +43,7 @@ const dashBtn=document.getElementById('dash-btn');
 const TOUCH=('ontouchstart' in window)||navigator.maxTouchPoints>0;
 const HUD=44;
 const MAX_HEARTS=5;
+const MAX_ROOMS=10;
 const SPIKE_CYCLE=2.8;
 const DIRS=[[0,-1],[1,0],[0,1],[-1,0]];
 const SHAPES=[
@@ -276,6 +277,11 @@ function roomClear(){
   clearBonus=100+Math.ceil(room.time)*10;
   score+=clearBonus;
   boom(room.door.c+.5,room.door.r+.5,'#ffd700',20);
+  if(roomN>=MAX_ROOMS){
+    state='win';ui.style.display='none';
+    setTimeout(()=>{if(state==='win')showLB(score);},4000);
+    return;
+  }
   state='clear';clearT=2.2;
 }
 
@@ -654,7 +660,7 @@ function drawHUD(){
 
   const t=Math.max(0,Math.ceil(room.time)),low=t<=5&&state==='playing';
   ctx.textAlign='center';
-  ctx.font='11px monospace';ctx.fillStyle='#bba';ctx.fillText('ROOM '+roomN,W/2,15);
+  ctx.font='11px monospace';ctx.fillStyle='#bba';ctx.fillText('ROOM '+roomN+' / '+MAX_ROOMS,W/2,15);
   ctx.font='bold 16px monospace';
   ctx.fillStyle=low&&Math.floor(clock*4)%2?'#ff4040':low?'#ff9090':'#fff';
   ctx.fillText(Math.floor(t/60)+':'+String(t%60).padStart(2,'0'),W/2,33);
@@ -701,15 +707,16 @@ function drawMenu(){
   ctx.textAlign='center';
   const big=Math.min(44,W/10);
   ctx.font=`bold ${big}px monospace`;ctx.fillStyle='#ff9a2e';
-  ctx.fillText('DUNGEON RUNNER',W/2,H/2-110);
+  ctx.fillText('DUNGEON RUNNER',W/2,H/2-120);
   ctx.font='13px monospace';ctx.fillStyle='#c8b89a';
-  ctx.fillText('Grab the key · Reach the door · Beat the clock',W/2,H/2-68);
+  ctx.fillText('Grab the key · Reach the door · Beat the clock',W/2,H/2-80);
+  ctx.fillStyle='#ff9a2e';ctx.fillText('Escape all '+MAX_ROOMS+' rooms to get out alive',W/2,H/2-60);
   ctx.fillStyle='#aaa';
   if(TOUCH){
-    ctx.fillText('Stick: move    DASH: dodge through danger',W/2,H/2-30);
+    ctx.fillText('Stick: move    DASH: dodge through danger',W/2,H/2-26);
   }else{
-    ctx.fillText('Arrow keys / WASD: move',W/2,H/2-38);
-    ctx.fillText('Space: dash — dodge through danger',W/2,H/2-18);
+    ctx.fillText('Arrow keys / WASD: move',W/2,H/2-32);
+    ctx.fillText('Space: dash — dodge through danger',W/2,H/2-14);
   }
   ctx.fillStyle='#8a9a7a';
   ctx.fillText('Beware skeletons, bats and spike traps',W/2,H/2+14);
@@ -739,16 +746,24 @@ function loop(ts){
   drawWorld();
   drawHUD();
   if(state==='intro')banner([
-    ['ROOM '+roomN,'bold 30px monospace','#ff9a2e'],
+    [roomN===MAX_ROOMS?'FINAL ROOM':'ROOM '+roomN+' OF '+MAX_ROOMS,'bold 30px monospace','#ff9a2e'],
     ['Find the key, then the door','14px monospace','#ccc'],
   ]);
   else if(state==='clear')banner([
     ['ROOM '+roomN+' ESCAPED!','bold 26px monospace','#7f7'],
     ['Escape +100   Time +'+(clearBonus-100),'15px monospace','#ffd700'],
   ]);
+  else if(state==='win'){
+    if(Math.random()<0.25)boom(rnd(1,COLS-1),rnd(1,ROWS-1),['#ffd700','#ff9a2e','#7f7','#9cf'][ri(0,3)],10);
+    banner([
+      ['YOU ESCAPED THE DUNGEON!',`bold ${Math.min(28,Math.floor(W/16))}px monospace`,'#ffd700'],
+      ['All '+MAX_ROOMS+' rooms cleared','15px monospace','#7f7'],
+      ['Final score: '+score,'bold 18px monospace','#fff'],
+    ]);
+  }
   else if(state==='gameover')banner([
     ['LOST IN THE DUNGEON','bold 26px monospace','#f44'],
-    ['Rooms escaped: '+(roomN-1)+'    Score: '+score,'15px monospace','#ffd700'],
+    ['Rooms escaped: '+(roomN-1)+' / '+MAX_ROOMS+'    Score: '+score,'15px monospace','#ffd700'],
   ]);
   drawMsg();
 }
