@@ -19,6 +19,7 @@ server uses only the Python standard library.
 | **Prairie King** | Cowboy vs zombies — survive 10 waves on the prairie | WASD to move, arrow keys to shoot |
 | **Jungle Party** | Run through the jungle to invite 3 monkeys to a birthday party | Arrow keys / WASD to run, Space to jump |
 | **Avalanche** | Ski down the mountain — don't let the avalanche catch you | Arrow keys / A D to steer |
+| **Dungeon Runner** | Grab the key and escape each room before time runs out — dodge skeletons, bats and spike traps | Arrow keys / WASD to move, Space to dash |
 
 Every game also has on-screen touch controls for phones and tablets, and
 posts to the shared high-score board when a game ends.
@@ -107,6 +108,7 @@ game_project/
 │   └── server.py        # web server, landing page, scores, co-op relay
 ├── avalanche/index.html
 ├── brick-runner/index.html
+├── dungeon-runner/index.html
 ├── galaga/index.html
 ├── jungle-party/index.html
 ├── lava-drop/index.html

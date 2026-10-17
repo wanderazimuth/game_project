@@ -23,6 +23,7 @@ GAMES = {
     "prairie-king": ("prairie-king", "Prairie King", "Cowboy vs zombies — survive 10 waves on the prairie"),
     "jungle-party": ("jungle-party", "Jungle Party", "Run through the jungle to invite 3 monkeys to a birthday party"),
     "avalanche": ("avalanche", "Avalanche", "Ski down the mountain — don't let the avalanche catch you"),
+    "dungeon-runner": ("dungeon-runner", "Dungeon Runner", "Grab the key and escape each room before time runs out"),
 }
 
 # ── Score management ──────────────────────────────────────────────────────────
