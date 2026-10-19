@@ -28,6 +28,10 @@ GAMES = {
     "fish-off": ("fish-off", "Fish Off", "2 players, 2 phones — catch the most fish in 90 seconds"),
 }
 
+# Games played by two people on separate devices; the All Scores page lists
+# them in their own section.
+TWO_PLAYER_GAMES = {"brick-runner", "magma-runner", "fish-off"}
+
 # ── Score management ──────────────────────────────────────────────────────────
 SCORES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scores.json")
 SCORES_LOCK = threading.Lock()
@@ -170,9 +174,10 @@ def build_landing_page():
     )
     return page
 
-def build_all_scores_page():
+def build_score_sections(keys):
     sections = ""
-    for key, info in GAMES.items():
+    for key in keys:
+        info = GAMES[key]
         scores = get_scores(key)
         if scores:
             rows = "".join(
@@ -186,6 +191,11 @@ def build_all_scores_page():
         else:
             rows = '<div class="empty">No scores yet</div>'
         sections += f'<div class="section"><h2>{info[1]}</h2>{rows}</div>\n'
+    return sections
+
+def build_all_scores_page():
+    sections = build_score_sections(k for k in GAMES if k not in TWO_PLAYER_GAMES)
+    two_player_sections = build_score_sections(k for k in GAMES if k in TWO_PLAYER_GAMES)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -251,6 +261,16 @@ h1 {{
 .name {{ flex: 1; color: #aaa; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }}
 .pts  {{ color: #0ef; flex-shrink: 0; }}
 .empty {{ color: #333; font-size: 0.75rem; padding: 6px 0; }}
+.group-title {{
+  width: 100%;
+  max-width: 900px;
+  margin: 40px 0 16px;
+  font-size: 1.2rem;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  color: #f0f;
+  text-shadow: 0 0 12px #f0f;
+}}
 </style>
 </head>
 <body>
@@ -258,6 +278,9 @@ h1 {{
 <a class="back" href="/">&#8592; Back to Arcade</a>
 <div class="grid">
 {sections}</div>
+<h2 class="group-title">2-Player Games</h2>
+<div class="grid">
+{two_player_sections}</div>
 </body>
 </html>"""
 
