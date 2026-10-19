@@ -25,6 +25,7 @@ GAMES = {
     "avalanche": ("avalanche", "Avalanche", "Ski down the mountain — don't let the avalanche catch you"),
     "dungeon-runner": ("dungeon-runner", "Dungeon Runner", "Grab the key and escape each room before time runs out"),
     "td": ("td", "TD", "Tower defense — build towers to stop 20 waves of monsters"),
+    "fish-off": ("fish-off", "Fish Off", "2 players, 2 phones — catch the most fish in 90 seconds"),
 }
 
 # ── Score management ──────────────────────────────────────────────────────────
@@ -318,6 +319,11 @@ BR_LOCK = threading.Lock()
 MR_CLIENTS = {}
 MR_LOCK = threading.Lock()
 
+# Two-player rooms that use the generic relay (handle_relay_ws).
+RELAY_ROOMS = {
+    "/ws/fish-off": ({}, threading.Lock()),
+}
+
 
 class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -337,6 +343,10 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
 
         if self.path == "/ws/magma-runner":
             self.handle_magma_runner_ws()
+            return
+
+        if self.path in RELAY_ROOMS:
+            self.handle_relay_ws(*RELAY_ROOMS[self.path])
             return
 
         # All-scores page
@@ -399,6 +409,9 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
             self.send_error(400, "Missing Sec-WebSocket-Key")
             return
 
+        # Browsers (Firefox in particular) reject a WebSocket handshake that
+        # answers with HTTP/1.0, which is this server's default.
+        self.protocol_version = "HTTP/1.1"
         self.send_response(101, "Switching Protocols")
         self.send_header("Upgrade", "websocket")
         self.send_header("Connection", "Upgrade")
@@ -494,6 +507,9 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
             self.send_error(400, "Missing Sec-WebSocket-Key")
             return
 
+        # Browsers (Firefox in particular) reject a WebSocket handshake that
+        # answers with HTTP/1.0, which is this server's default.
+        self.protocol_version = "HTTP/1.1"
         self.send_response(101, "Switching Protocols")
         self.send_header("Upgrade", "websocket")
         self.send_header("Connection", "Upgrade")
@@ -564,6 +580,89 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
         roles_present = {c["role"] for _, c in items}
         both = "player1" in roles_present and "player2" in roles_present
         for _, c in items:
+            c["conn"].ws_send(c["lock"], {"type": "peer_status", "connected": both})
+
+
+    # --- Generic two-player relay ---
+    # Same protocol as the brick-runner room: the first client is player1, the
+    # second player2, a third gets room_full, and every JSON message is passed
+    # to the other player.
+    def handle_relay_ws(self, clients, lock):
+        key = self.headers.get("Sec-WebSocket-Key")
+        if not key:
+            self.send_error(400, "Missing Sec-WebSocket-Key")
+            return
+
+        # Browsers (Firefox in particular) reject a WebSocket handshake that
+        # answers with HTTP/1.0, which is this server's default.
+        self.protocol_version = "HTTP/1.1"
+        self.send_response(101, "Switching Protocols")
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", ws_accept_key(key))
+        self.end_headers()
+
+        client_id = id(self)
+        write_lock = threading.Lock()
+        role = None
+
+        with lock:
+            taken = {c["role"] for c in clients.values()}
+            if "player1" not in taken:
+                role = "player1"
+            elif "player2" not in taken:
+                role = "player2"
+            if role:
+                clients[client_id] = {"conn": self, "lock": write_lock, "role": role}
+
+        if role is None:
+            self.ws_send(write_lock, {"type": "room_full"})
+            try:
+                self.connection.sendall(ws_build_frame(0x8, b""))
+            except OSError:
+                pass
+            return
+
+        self.ws_send(write_lock, {"type": "role", "role": role})
+        self.relay_peer_status(clients, lock)
+
+        try:
+            while True:
+                frame = ws_decode_frame(self.ws_recv_exact)
+                if frame is None:
+                    break
+                opcode, payload = frame
+                if opcode == 0x8:
+                    break
+                if opcode == 0x9:
+                    try:
+                        self.connection.sendall(ws_build_frame(0xA, payload))
+                    except OSError:
+                        break
+                    continue
+                if opcode != 0x1:
+                    continue
+                try:
+                    msg = json.loads(payload.decode("utf-8"))
+                except (ValueError, UnicodeDecodeError):
+                    continue
+                with lock:
+                    targets = [(c["conn"], c["lock"]) for cid, c in clients.items() if cid != client_id]
+                for conn, peer_lock in targets:
+                    conn.ws_send(peer_lock, msg)
+        except (ConnectionError, OSError):
+            pass
+        finally:
+            with lock:
+                clients.pop(client_id, None)
+            self.relay_peer_status(clients, lock)
+
+    def relay_peer_status(self, clients, lock):
+        with lock:
+            items = list(clients.values())
+        roles_present = {c["role"] for c in items}
+        both = "player1" in roles_present and "player2" in roles_present
+        for c in items:
             c["conn"].ws_send(c["lock"], {"type": "peer_status", "connected": both})
 
 
