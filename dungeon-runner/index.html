@@ -116,7 +116,8 @@ function bfs(g,sc,sr){
 function genRoom(n){
   const portrait=H>W*1.1;
   COLS=portrait?11:17;ROWS=portrait?15:11;
-  const baseBlocks=Math.round(COLS*ROWS/22)+Math.min(n,8);
+  const bossRoom=n===MAX_ROOMS;
+  const baseBlocks=bossRoom?Math.round(COLS*ROWS/30):Math.round(COLS*ROWS/22)+Math.min(n,8);
   for(let attempt=0;;attempt++){
     const g=new Array(COLS*ROWS);
     for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)g[r*COLS+c]=inside(c,r)?0:1;
@@ -126,7 +127,7 @@ function genRoom(n){
     // Fewer obstacles on each retry so generation always finishes.
     const nBlocks=Math.round(baseBlocks*Math.max(0,1-attempt/150));
     for(let b=0;b<nBlocks;b++){
-      const sh=SHAPES[ri(0,SHAPES.length-1)];
+      const sh=bossRoom?SHAPES[0]:SHAPES[ri(0,SHAPES.length-1)];
       const bc=ri(1,COLS-2),br=ri(1,ROWS-2);
       if(sh.some(([dc,dr])=>!inside(bc+dc,br+dr)||protect(bc+dc,br+dr)))continue;
       for(const [dc,dr] of sh)g[(br+dr)*COLS+bc+dc]=1;
@@ -155,6 +156,15 @@ function buildRoom(n,g,ent,door,dS,maxD){
   const pick=f=>{const c=cells.filter(i=>!used.has(i)&&f(i));if(!c.length)return null;const i=c[ri(0,c.length-1)];used.add(i);return i;};
   const cr=i=>({c:i%COLS,r:Math.floor(i/COLS)});
 
+  // The final room's boss starts deep in the arena and carries the key.
+  const bossRoom=n===MAX_ROOMS;
+  let boss=null;
+  if(bossRoom){
+    const i=pick(i=>dS[i]>=maxD*0.6)??pick(i=>dS[i]>=4);
+    const p=cr(i);
+    boss={x:p.c+.5,y:p.r+.5,hp:5,maxHp:5,st:'walk',t:2.5,dx:0,dy:0,inv:0,anim:0,spd:1.7,dead:false};
+  }
+
   // The key goes deep in the room, away from both the entrance and the exit.
   const keyI=pick(i=>dS[i]>=maxD*0.55&&dD[i]>=3)??pick(i=>dS[i]>=maxD*0.4)??pick(i=>dS[i]>=2);
 
@@ -169,7 +179,7 @@ function buildRoom(n,g,ent,door,dS,maxD){
 
   // Spikes rise in three staggered groups so there is always a way through.
   const spikes=[],spikeMap=new Map();
-  const nSpikes=n<2?0:Math.min(2+n*2,26);
+  const nSpikes=bossRoom?10:n<2?0:Math.min(2+n*2,26);
   for(let k=0;k<nSpikes;k++){
     const i=pick(i=>dS[i]>2);if(i==null)break;
     const p=cr(i),s={c:p.c,r:p.r,off:[0,0.93,1.87][ri(0,2)]};
@@ -180,7 +190,7 @@ function buildRoom(n,g,ent,door,dS,maxD){
   for(const i of spikeMap.keys())used.delete(i);
 
   const skels=[];
-  const nSkel=n===1?1:Math.min(1+Math.floor(n*0.6),7);
+  const nSkel=bossRoom?2:n===1?1:Math.min(1+Math.floor(n*0.6),7);
   const skelSpd=Math.min(1.4+n*0.1,3.2);
   for(let k=0;k<nSkel;k++){
     const i=pick(i=>dS[i]>=5);if(i==null)break;
@@ -189,7 +199,7 @@ function buildRoom(n,g,ent,door,dS,maxD){
   }
 
   const bats=[];
-  const nBats=n<4?0:Math.min(Math.floor((n-2)/2),4);
+  const nBats=bossRoom?0:n<4?0:Math.min(Math.floor((n-2)/2),4);
   const batSpd=Math.min(2+n*0.06,3.4);
   for(let k=0;k<nBats;k++){
     const i=pick(i=>dS[i]>=5);if(i==null)break;
@@ -211,13 +221,13 @@ function buildRoom(n,g,ent,door,dS,maxD){
     torches.push({...t,ph:Math.random()*6});
   }
 
-  const time=Math.max(16,32-n);
+  const time=bossRoom?75:Math.max(16,32-n);
   const k=cr(keyI);
   pl={x:ent.ic+.5,y:ent.ir+.5,fx:ent.ic-ent.c,fy:ent.ir-ent.r,inv:0,dashT:0,dashCD:0,walk:0,trail:[]};
   return{
     n,g,ent,door,locked:true,
-    key:{x:k.c+.5,y:k.r+.5,taken:false},
-    gold,potion,spikes,spikeMap,skels,bats,torches,
+    key:boss?{x:boss.x,y:boss.y,taken:false,held:true}:{x:k.c+.5,y:k.r+.5,taken:false,held:false},
+    gold,potion,spikes,spikeMap,skels,bats,torches,boss,
     time,maxTime:time,light:Math.max(3.2,5.2-n*0.12),
     vary:Array.from(g,()=>Math.random()),
   };
@@ -392,7 +402,7 @@ function update(dt){
 
   if(!room.locked&&Math.floor(pl.x)===room.door.c&&Math.floor(pl.y)===room.door.r){roomClear();return;}
 
-  if(!room.key.taken&&near(pl,room.key.x,room.key.y,0.6)){
+  if(!room.key.taken&&!room.key.held&&near(pl,room.key.x,room.key.y,0.6)){
     room.key.taken=true;room.locked=false;
     flash('KEY FOUND!  THE DOOR IS OPEN','#ffd700');
     boom(room.key.x,room.key.y,'#ffd700',16);
@@ -422,12 +432,82 @@ function update(dt){
     if((b.bx&&!s.dy)||(b.by&&!s.dx)||(b.bx&&b.by))s.think=0;
     if(near(pl,s.x,s.y,0.58))hurt(false);
   }
+  updateBoss(dt);
   for(const b of room.bats){
     const r=moveEnt(b,b.vx*dt,b.vy*dt,0.25,false);
     if(r.bx)b.vx=-b.vx;
     if(r.by)b.vy=-b.vy;
     if(near(pl,b.x,b.y,0.52))hurt(false);
   }
+}
+
+// ── Boss: the Bone King ───────────────────────────────────────────────────────
+// Walks toward the player, then winds up and charges in a straight line.
+// Hitting a wall leaves him dazed. Dashing into him is the only way to hurt him.
+
+// Next step toward the player along open floor, so he walks around pillars
+// instead of getting stuck on them.
+function bossPath(b){
+  const bc=Math.floor(b.x),br=Math.floor(b.y),pc=Math.floor(pl.x),pr=Math.floor(pl.y);
+  if(Math.abs(bc-pc)+Math.abs(br-pr)<=1)return[pl.x-b.x,pl.y-b.y];
+  const d=bfs(room.g,pc,pr);
+  let best=null,bd=d[br*COLS+bc];
+  for(const [dc,dr] of DIRS){
+    const j=(br+dr)*COLS+bc+dc;
+    if(d[j]>=0&&(bd<0||d[j]<bd)){bd=d[j];best=[bc+dc+.5-b.x,br+dr+.5-b.y];}
+  }
+  return best||[pl.x-b.x,pl.y-b.y];
+}
+
+function updateBoss(dt){
+  const b=room.boss;
+  if(!b||b.dead)return;
+  b.inv-=dt;b.t-=dt;
+  const ddx=pl.x-b.x,ddy=pl.y-b.y,d=Math.hypot(ddx,ddy)||1;
+  if(b.st==='walk'){
+    b.anim+=dt*6;
+    b.pathT=(b.pathT||0)-dt;
+    if(b.pathT<=0){b.pathT=0.25;b.path=bossPath(b);}
+    const pd=Math.hypot(b.path[0],b.path[1])||1;
+    moveEnt(b,b.path[0]/pd*b.spd*dt,b.path[1]/pd*b.spd*dt,0.42,false);
+    if(b.t<=0){
+      if(d<9&&los(b.x,b.y,pl.x,pl.y)){b.st='windup';b.t=0.75;b.dx=ddx/d;b.dy=ddy/d;}
+      else b.t=0.5;
+    }
+  }else if(b.st==='windup'){
+    if(b.t<=0){b.st='charge';b.t=1.6;}
+  }else if(b.st==='charge'){
+    b.anim+=dt*14;
+    const r=moveEnt(b,b.dx*9*dt,b.dy*9*dt,0.42,false);
+    if(r.bx||r.by){
+      b.st='stunned';b.t=1.8;shake=0.3;
+      boom(b.x+b.dx*.4,b.y+b.dy*.4,'#bbb',14);
+    }else if(b.t<=0){b.st='walk';b.t=rnd(1.8,2.8);}
+  }else if(b.st==='stunned'){
+    if(b.t<=0){b.st='walk';b.t=rnd(1.5,2.5);}
+  }
+  if(near(pl,b.x,b.y,0.75)){
+    if(pl.dashT>0){if(b.inv<=0)hitBoss();}
+    else if(b.st!=='stunned')hurt(false);
+  }
+}
+
+function hitBoss(){
+  const b=room.boss;
+  b.hp--;b.inv=0.6;shake=0.25;
+  pl.inv=Math.max(pl.inv,0.6);
+  boom(b.x,b.y,'#fff',16);
+  // Knock him back so the player isn't left standing inside him.
+  const ddx=b.x-pl.x,ddy=b.y-pl.y,d=Math.hypot(ddx,ddy)||1;
+  moveEnt(b,ddx/d*1.2,ddy/d*1.2,0.42,false);
+  if(b.hp<=0){
+    b.dead=true;score+=500;
+    room.key.x=b.x;room.key.y=b.y;room.key.held=false;
+    boom(b.x,b.y,'#ffd700',30);boom(b.x,b.y,'#d8d2c0',24);shake=0.5;
+    flash('BONE KING DEFEATED!  GRAB THE KEY','#ffd700');
+    return;
+  }
+  b.st='walk';b.t=rnd(1.2,2);
 }
 
 // ── Particles ─────────────────────────────────────────────────────────────────
@@ -531,8 +611,9 @@ function drawPotion(p){
   ctx.fillStyle='rgba(255,255,255,0.45)';ctx.beginPath();ctx.arc(x-T*.05,y-T*.03,T*.04,0,Math.PI*2);ctx.fill();
 }
 
-function drawSkel(s){
-  const x=px(s.x),y=py(s.y),k=T,step=Math.sin(s.anim)*k*.07;
+function drawSkel(s){drawSkelAt(px(s.x),py(s.y),T,s.anim,s.chase);}
+function drawSkelAt(x,y,k,anim,redEyes){
+  const step=Math.sin(anim)*k*.07;
   shadow(x,y+k*.33,k*.2);
   ctx.strokeStyle='#d8d2c0';ctx.lineWidth=Math.max(1.5,k*.06);ctx.lineCap='round';
   ctx.beginPath();
@@ -548,9 +629,42 @@ function drawSkel(s){
   ctx.fillRect(x-k*.08,y-k*.12,k*.16,k*.07);
   ctx.fillStyle='#120e0c';
   ctx.beginPath();ctx.arc(x-k*.055,y-k*.22,k*.04,0,Math.PI*2);ctx.arc(x+k*.055,y-k*.22,k*.04,0,Math.PI*2);ctx.fill();
-  if(s.chase){
+  if(redEyes){
     ctx.fillStyle='#ff3030';
     ctx.fillRect(x-k*.065,y-k*.23,k*.025,k*.025);ctx.fillRect(x+k*.045,y-k*.23,k*.025,k*.025);
+  }
+}
+
+function drawBoss(){
+  const b=room.boss;
+  if(!b||b.dead)return;
+  let x=px(b.x),y=py(b.y);
+  const k=T*1.7;
+  if(b.st==='windup'){
+    // Telegraph the charge so the player can sidestep it.
+    ctx.strokeStyle=`rgba(255,40,40,${0.2+0.2*Math.sin(clock*30)})`;ctx.lineWidth=T*.6;
+    ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+b.dx*T*6,y+b.dy*T*6);ctx.stroke();
+    x+=rnd(-2,2);y+=rnd(-2,2);
+  }
+  ctx.fillStyle='#6b1020';
+  ctx.beginPath();ctx.moveTo(x-k*.17,y-k*.08);ctx.lineTo(x+k*.17,y-k*.08);
+  ctx.lineTo(x+k*.27,y+k*.3);ctx.lineTo(x-k*.27,y+k*.3);ctx.closePath();ctx.fill();
+  if(b.inv>0&&Math.floor(clock*20)%2)ctx.globalAlpha=0.4;
+  drawSkelAt(x,y,k,b.anim,b.st!=='stunned');
+  ctx.globalAlpha=1;
+  const cy=y-k*.36;
+  ctx.fillStyle='#ffd23f';
+  ctx.beginPath();
+  ctx.moveTo(x-k*.13,cy+k*.06);ctx.lineTo(x-k*.13,cy-k*.04);ctx.lineTo(x-k*.065,cy+k*.01);
+  ctx.lineTo(x,cy-k*.07);ctx.lineTo(x+k*.065,cy+k*.01);ctx.lineTo(x+k*.13,cy-k*.04);
+  ctx.lineTo(x+k*.13,cy+k*.06);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#e0303a';ctx.fillRect(x-k*.015,cy,k*.03,k*.03);
+  if(b.st==='stunned'){
+    ctx.fillStyle='#fff6a0';
+    for(let i=0;i<3;i++){
+      const a=clock*5+i*2.1,sx=x+Math.cos(a)*k*.2,sy=cy-k*.1+Math.sin(a)*k*.05,r=k*.035;
+      ctx.fillRect(sx-r,sy-1,r*2,2);ctx.fillRect(sx-1,sy-r,2,r*2);
+    }
   }
 }
 
@@ -612,7 +726,9 @@ function drawLighting(){
   for(const t of room.torches){
     hole(px(t.c+.5+t.dx*.7),py(t.r+.5+t.dy*.7),T*2.4*(1+Math.sin(clock*11+t.ph)*0.05),0.85);
   }
-  if(!room.key.taken)hole(px(room.key.x),py(room.key.y),T*1.1,0.7);
+  if(!room.key.taken&&!room.key.held)hole(px(room.key.x),py(room.key.y),T*1.1,0.7);
+  const boss=room.boss&&!room.boss.dead?room.boss:null;
+  if(boss)hole(px(boss.x),py(boss.y),T*1.8,0.6);
   if(!room.locked)hole(px(room.door.c+.5),py(room.door.r+.5),T*2.2,0.9);
   ctx.drawImage(lc,0,0,W,H);
 
@@ -624,6 +740,11 @@ function drawLighting(){
   };
   glow(px(pl.x),py(pl.y),room.light*T*0.8,0.08);
   for(const t of room.torches)glow(px(t.c+.5+t.dx*.5),py(t.r+.5+t.dy*.5),T*1.8,0.12);
+  if(boss&&boss.st==='windup'){
+    const gr=ctx.createRadialGradient(px(boss.x),py(boss.y),0,px(boss.x),py(boss.y),T*1.6);
+    gr.addColorStop(0,'rgba(255,30,30,0.35)');gr.addColorStop(1,'rgba(255,30,30,0)');
+    ctx.fillStyle=gr;ctx.beginPath();ctx.arc(px(boss.x),py(boss.y),T*1.6,0,Math.PI*2);ctx.fill();
+  }
   ctx.globalCompositeOperation='source-over';
 }
 
@@ -636,8 +757,9 @@ function drawWorld(){
   for(const t of room.torches)drawTorch(t);
   for(const g of room.gold)if(!g.taken)drawCoin(g);
   if(room.potion&&!room.potion.taken)drawPotion(room.potion);
-  if(!room.key.taken)drawKey();
+  if(!room.key.taken&&!room.key.held)drawKey();
   for(const s of room.skels)drawSkel(s);
+  drawBoss();
   if(hearts>0)drawPlayer();
   for(const b of room.bats)drawBat(b);
   drawPtcls();
@@ -680,6 +802,16 @@ function drawHUD(){
   ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(0,40,W,4);
   ctx.fillStyle=frac>0.5?'#4caf50':frac>0.25?'#e0a020':'#e03030';
   ctx.fillRect(0,40,W*frac,4);
+
+  const b=room.boss;
+  if(b&&!b.dead&&state!=='menu'){
+    const bw=Math.min(320,W-40),bx=(W-bw)/2,by=49;
+    ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(bx-2,by-2,bw+4,18);
+    ctx.fillStyle='#4a0a10';ctx.fillRect(bx,by,bw,14);
+    ctx.fillStyle='#d42a3a';ctx.fillRect(bx,by,bw*b.hp/b.maxHp,14);
+    ctx.fillStyle='#fff';ctx.font='bold 10px monospace';ctx.textAlign='center';
+    ctx.fillText('BONE KING',W/2,by+11);
+  }
 }
 
 function banner(lines){
@@ -695,8 +827,9 @@ function drawMsg(){
   ctx.textAlign='center';ctx.font='bold 16px monospace';
   ctx.fillStyle='rgba(0,0,0,0.6)';
   const w=ctx.measureText(msg.text).width+24;
-  ctx.fillRect(W/2-w/2,HUD+12,w,28);
-  ctx.fillStyle=msg.col;ctx.fillText(msg.text,W/2,HUD+31);
+  const my=HUD+12+(room.boss&&!room.boss.dead?22:0);
+  ctx.fillRect(W/2-w/2,my,w,28);
+  ctx.fillStyle=msg.col;ctx.fillText(msg.text,W/2,my+19);
   ctx.globalAlpha=1;
 }
 
@@ -747,7 +880,7 @@ function loop(ts){
   drawHUD();
   if(state==='intro')banner([
     [roomN===MAX_ROOMS?'FINAL ROOM':'ROOM '+roomN+' OF '+MAX_ROOMS,'bold 30px monospace','#ff9a2e'],
-    ['Find the key, then the door','14px monospace','#ccc'],
+    [roomN===MAX_ROOMS?'The Bone King has the key. DASH into him!':'Find the key, then the door','14px monospace','#ccc'],
   ]);
   else if(state==='clear')banner([
     ['ROOM '+roomN+' ESCAPED!','bold 26px monospace','#7f7'],
