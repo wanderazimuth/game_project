@@ -20,7 +20,7 @@ server uses only the Python standard library.
 | **Jungle Party** | Run through the jungle to invite 3 monkeys to a birthday party | Arrow keys / WASD to run, Space to jump |
 | **Avalanche** | Ski down the mountain — don't let the avalanche catch you | Arrow keys / A D to steer |
 | **Dungeon Runner** | Grab the key and escape all 10 rooms before time runs out — dodge skeletons, bats and spike traps, then defeat the Bone King in the final room | Arrow keys / WASD to move, Space to dash |
-| **TD** | Tower defense — build and upgrade arrow, cannon, frost and storm towers to stop 20 waves of monsters. After wave 9 the land freezes and the monsters take a new path. **2-player co-op** | Pick a tower, then tap/click grass to build; tap a tower to upgrade or sell. Keys 1–4, Space for next wave, U/S |
+| **TD** | Tower defense — build and upgrade arrow, cannon, frost, storm, ballista, venom and gold mine towers to stop 20 waves of monsters. After wave 9 the land freezes and the monsters take a new path. **2-player co-op** | Pick a tower, then tap/click grass to build; tap a tower to upgrade or sell. Keys 1–7, Space for next wave, U/S |
 | **Fish Off** | 2 players, 2 phones — catch the most fish in 90 seconds. Keep the line tension in the green or it snaps | Drag in the water (or arrow keys / WASD) to move the hook; hold (or Space) to reel |
 
 Every game also has on-screen touch controls for phones and tablets, and
@@ -108,8 +108,10 @@ is full.
 
 In TD co-op, player 1's device runs the game and streams it to player 2,
 whose taps (build, upgrade, sell, next wave, speed) are sent back as actions.
-The players share gold and lives, each tower is outlined in its builder's
-color, and player 1 saves the team score.
+The players share lives but each has their own gold: kill gold goes to the
+owner of the tower that got the kill, both get the wave-clear bonus, and a
+gold mine pays its builder. Each tower is outlined in its builder's color and
+only its builder can upgrade or sell it. Player 1 saves the team score.
 
 ## Project layout
 

@@ -9,24 +9,25 @@
 html,body{width:100%;height:100%;overflow:hidden;background:#13200f;touch-action:none}
 canvas{display:block}
 #bar{
-  position:fixed;left:0;right:0;bottom:0;height:76px;display:none;gap:6px;
+  position:fixed;left:0;right:0;bottom:0;min-height:76px;display:none;gap:5px;flex-wrap:wrap;
   justify-content:center;align-items:center;padding:6px 8px;
   background:linear-gradient(#2a1d10,#1a1209);border-top:2px solid #6b4a22
 }
 .tb{
-  width:54px;height:62px;border-radius:8px;border:2px solid #6b4a22;background:#3a2814;
+  width:44px;height:58px;border-radius:8px;border:2px solid #6b4a22;background:#3a2814;
   color:#ffd700;font:bold 12px 'Courier New',monospace;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:2px;cursor:pointer;touch-action:manipulation;padding:0
 }
-.tb canvas{width:34px;height:34px}
+.tb canvas{width:32px;height:32px}
 .tb.sel{border-color:#ffd700;background:#5a3e1c;box-shadow:0 0 8px rgba(255,215,0,.55)}
 .tb:disabled{opacity:.4;cursor:default}
 #wave-btn{width:auto;min-width:80px;padding:0 8px;color:#9f9;border-color:#3f7a2a;background:#1f3a14}
 #speed-btn{width:44px;color:#9cf;border-color:#2a5a7a;background:#12283a}
 #panel{
   position:fixed;left:50%;transform:translateX(-50%);bottom:84px;display:none;gap:8px;
-  align-items:center;padding:8px 10px;background:rgba(20,14,8,.94);border:2px solid #ffd700;
-  border-radius:10px;color:#ffd700;font:bold 13px 'Courier New',monospace;white-space:nowrap
+  align-items:center;justify-content:center;flex-wrap:wrap;padding:8px 10px;background:rgba(20,14,8,.94);
+  border:2px solid #ffd700;border-radius:10px;color:#ffd700;font:bold 13px 'Courier New',monospace;
+  white-space:nowrap;max-width:calc(100vw - 16px)
 }
 #panel button{font:bold 12px 'Courier New',monospace;padding:7px 9px;border-radius:6px;cursor:pointer;touch-action:manipulation}
 #p-up{background:#1f3a14;border:1px solid #6c6;color:#9f9}
@@ -52,6 +53,9 @@ canvas{display:block}
   <button class="tb" data-t="cannon"><canvas width="68" height="68"></canvas><span></span></button>
   <button class="tb" data-t="frost"><canvas width="68" height="68"></canvas><span></span></button>
   <button class="tb" data-t="storm"><canvas width="68" height="68"></canvas><span></span></button>
+  <button class="tb" data-t="ballista"><canvas width="68" height="68"></canvas><span></span></button>
+  <button class="tb" data-t="venom"><canvas width="68" height="68"></canvas><span></span></button>
+  <button class="tb" data-t="mine"><canvas width="68" height="68"></canvas><span></span></button>
   <button class="tb" id="wave-btn"></button>
   <button class="tb" id="speed-btn">1x</button>
 </div>
@@ -73,8 +77,17 @@ const TOWERS={
           lv:[{dmg:3,rate:0.8,range:2.0,slow:0.4,slowT:1.5},{dmg:5,rate:0.75,range:2.3,slow:0.5,slowT:1.7},{dmg:8,rate:0.7,range:2.6,slow:0.6,slowT:2.0}]},
   storm: {name:'Storm', cost:150,up:[120,220],
           lv:[{dmg:40,rate:1.6,range:3.4,chain:2},{dmg:70,rate:1.5,range:3.7,chain:3},{dmg:120,rate:1.4,range:4.0,chain:4}]},
+  // Long range, heavy bolts at the toughest monster in reach.
+  ballista:{name:'Ballista',cost:125,up:[100,180],
+          lv:[{dmg:60,rate:2.2,range:5.0},{dmg:110,rate:2.0,range:5.5},{dmg:190,rate:1.8,range:6.0}]},
+  // Poisons monsters (damage per second for poisonT seconds), preferring ones not yet poisoned.
+  venom: {name:'Venom', cost:90, up:[70,130],
+          lv:[{dmg:2,rate:1.0,range:2.6,poison:6,poisonT:4},{dmg:3,rate:0.9,range:2.8,poison:10,poisonT:4.5},{dmg:5,rate:0.8,range:3.0,poison:16,poisonT:5}]},
+  // No attack: pays its builder gold for every wave cleared.
+  mine:  {name:'Gold Mine',cost:120,up:[100,160],
+          lv:[{income:25,range:0},{income:45,range:0},{income:70,range:0}]},
 };
-const ORDER=['arrow','cannon','frost','storm'];
+const ORDER=['arrow','cannon','frost','storm','ballista','venom','mine'];
 const ENEMIES={
   goblin:{hp:30,  spd:1.25,gold:3,  pts:10, lives:1, r:0.28},
   wolf:  {hp:20,  spd:2.3, gold:3,  pts:10, lives:1, r:0.26},
@@ -95,6 +108,9 @@ const ICE_AFTER_WAVE=9;
 let W,H,DPR,T=40,ox=0,oy=0,mapCv=null;
 let COLS,ROWS,segs,pathLen,pathCells,vary,isPortrait,entry,exitCell;
 let theme='grass',freezeT=0,flakes=[],fullRefund=false;
+// In co-op each player has their own gold: `gold` is this device's player's,
+// and on Player 1's device `gold2` is Player 2's.
+let gold2=0,partnerGold=0;
 let state='menu',gold,lives,score,waveN,cleared,queue,spawnT,enemies,towers,shots,rings,bolts,ptcls;
 let buildType=null,sel=null,hover=null,speed=1,shake=0,clock=0,lastTime=0;
 let msg={text:'',col:'#fff',t:0};
@@ -113,6 +129,11 @@ let gameId=0,nextEnemyId=1,netFx=[],sendT=0,hostPortrait=false,guestGame=-1;
 function isGuest(){return coop&&myRole==='player2';}
 function hosting(){return coop&&myRole==='player1'&&peerConnected;}
 function localOwner(){return coop?(myRole==='player2'?'p2':'p1'):undefined;}
+// Only a tower's builder may upgrade or sell it.
+function ownsTower(t,by){return (t.owner||'p1')===(by||'p1');}
+function goldOf(o){return o==='p2'?gold2:gold;}
+function addGold(o,v){if(o==='p2')gold2+=v;else gold+=v;}
+function playerName(o){return o==='p2'?'BLUE':'RED';}
 function wsSend(m){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(m));}
 function sendAct(a,extra){wsSend(Object.assign({type:'act',a},extra));}
 function toHost(c,r){return isPortrait===hostPortrait?[c,r]:[r,c];}
@@ -173,10 +194,10 @@ function hostAct(m){
   if(m.a==='start'){if(state!=='play')startGame();return;}
   if(m.a==='speed'){toggleSpeed();return;}
   if(state!=='play')return;
-  if(m.a==='wave')callWave();
+  if(m.a==='wave')callWave('p2');
   else if(m.a==='place'&&TOWERS[m.t])placeTower(m.c,m.r,m.t,'p2');
-  else if(m.a==='up')upgrade(towerAt(m.c,m.r));
-  else if(m.a==='sell')sell(towerAt(m.c,m.r));
+  else if(m.a==='up')upgrade(towerAt(m.c,m.r),'p2');
+  else if(m.a==='sell')sell(towerAt(m.c,m.r),'p2');
   if(sel&&!towers.includes(sel))sel=null;
   refreshUI();
 }
@@ -185,12 +206,13 @@ function snapshot(){
   const m={type:'snap',g:gameId,st:state,pt:isPortrait};
   if(state==='menu')return m;
   return Object.assign(m,{
-    th:theme,gold,lives,score,wn:waveN,cl:cleared,q:queue.length,fr:fullRefund,sp:speed,sh:r2(shake),
+    th:theme,g1:gold,g2:gold2,lives,score,wn:waveN,cl:cleared,q:queue.length,fr:fullRefund,sp:speed,sh:r2(shake),
     tw:towers.map(t=>[ORDER.indexOf(t.type),t.c,t.r,t.lv,r2(t.ang),t.spent,t.owner==='p2'?2:t.owner==='p1'?1:0]),
     en:enemies.map(e=>[e.id,ETYPES.indexOf(e.type),Math.round(e.s*1000)/1000,Math.ceil(e.hp),e.maxHp,
-                       e.slowT>0?1:0,Math.round(enemySpeed(e)*1000)/1000]),
-    sh2:shots.map(s=>s.kind==='arrow'?[0,r2(s.x),r2(s.y),r2(s.ang||0)]
-                                     :[1,r2(s.x0),r2(s.y0),r2(s.x1),r2(s.y1),r2(s.t),r2(s.dur)]),
+                       (e.slowT>0?1:0)|(e.poisonT>0?2:0),Math.round(enemySpeed(e)*1000)/1000]),
+    sh2:shots.map(s=>s.kind==='arrow'?[0,r2(s.x),r2(s.y),r2(s.ang||0),s.big?1:0]
+                    :s.kind==='glob'?[2,r2(s.x),r2(s.y)]
+                    :[1,r2(s.x0),r2(s.y0),r2(s.x1),r2(s.y1),r2(s.t),r2(s.dur)]),
     fx:netFx.splice(0),
   });
 }
@@ -203,7 +225,7 @@ function applySnap(m){
   else if(m.th!==theme){setTheme(m.th);makeFlakes();freezeT=3.5;}
   const fl=isPortrait!==hostPortrait;
   const P=(x,y)=>fl?[y,x]:[x,y],A=a=>fl?Math.PI/2-a:a;
-  gold=m.gold;lives=m.lives;score=m.score;waveN=m.wn;cleared=m.cl;fullRefund=m.fr;
+  gold=m.g2;partnerGold=m.g1;lives=m.lives;score=m.score;waveN=m.wn;cleared=m.cl;fullRefund=m.fr;
   queue=new Array(m.q);  // only its length is used here
   if(speed!==m.sp){speed=m.sp;speedBtn.textContent=speed+'x';}
   shake=Math.max(shake,m.sh);
@@ -213,14 +235,15 @@ function applySnap(m){
   });
   if(sel)sel=towerAt(sel.c,sel.r)||null;
   const old=new Map(enemies.map(e=>[e.id,e]));
-  enemies=m.en.map(([id,ti,s,hp,maxHp,slow,v])=>{
+  enemies=m.en.map(([id,ti,s,hp,maxHp,fx,v])=>{
     const e=old.get(id)||{id,anim:Math.random()*6,slowF:0};
-    Object.assign(e,{type:ETYPES[ti],s,hp,maxHp,slowT:slow,v});
+    Object.assign(e,{type:ETYPES[ti],s,hp,maxHp,slowT:fx&1,poisonT:fx&2,v});
     const p=posAt(s);e.x=p.x;e.y=p.y;e.dx=p.dx;e.dy=p.dy;
     return e;
   });
   shots=m.sh2.map(s=>{
-    if(s[0]===0){const [x,y]=P(s[1],s[2]);return{kind:'arrow',x,y,ang:A(s[3])};}
+    if(s[0]===0){const [x,y]=P(s[1],s[2]);return{kind:'arrow',x,y,ang:A(s[3]),big:!!s[4]};}
+    if(s[0]===2){const [x,y]=P(s[1],s[2]);return{kind:'glob',x,y};}
     const [x0,y0]=P(s[1],s[2]),[x1,y1]=P(s[3],s[4]);
     return{kind:'ball',x0,y0,x1,y1,t:s[5],dur:s[6]};
   });
@@ -239,6 +262,7 @@ function applySnap(m){
 }
 function guestStart(m){
   guestGame=m.g;
+  bar.style.display='flex';
   buildMap(H>W*1.1,m.th);layout();renderMap();
   enemies=[];shots=[];rings=[];bolts=[];ptcls=[];flakes=[];freezeT=0;
   if(m.th==='ice')makeFlakes();
@@ -297,9 +321,12 @@ function towerAt(c,r){return towers.find(t=>t.c===c&&t.r===r);}
 function canBuild(c,r){return c>=0&&r>=0&&c<COLS&&r<ROWS&&!isPath(c,r)&&!towerAt(c,r);}
 
 function layout(){
-  T=Math.max(12,Math.floor(Math.min((W-12)/COLS,(H-HUD-BAR-10)/ROWS)));
+  // The tool bar wraps to two rows on narrow screens.
+  const bh=bar.offsetHeight||BAR;
+  T=Math.max(12,Math.floor(Math.min((W-12)/COLS,(H-HUD-bh-10)/ROWS)));
   ox=Math.floor((W-COLS*T)/2);
-  oy=HUD+Math.floor((H-HUD-BAR-ROWS*T)/2);
+  oy=HUD+Math.floor((H-HUD-bh-ROWS*T)/2);
+  panel.style.bottom=(bh+8)+'px';
 }
 
 function resize(){
@@ -399,11 +426,10 @@ function freeze(){
   let refund=0,moved=0;
   towers=towers.filter(t=>{
     if(!isPath(t.c,t.r))return true;
-    refund+=t.spent;moved++;
+    refund+=t.spent;moved++;addGold(t.owner,t.spent);
     boom(t.x,t.y,'#bfe8ff',10);
     return false;
   });
-  gold+=refund;
   if(sel&&!towers.includes(sel))sel=null;
   shots=[];rings=[];bolts=[];
   freezeT=3.5;fullRefund=true;
@@ -417,10 +443,11 @@ function startGame(){
   if(coop&&!myRole)return;
   if(isGuest()){if(peerConnected)sendAct('start');return;}
   gameId++;netFx=[];
+  bar.style.display='flex';
   buildMap(H>W*1.1,'grass');
   freezeT=0;flakes=[];fullRefund=false;
   layout();renderMap();
-  gold=120;lives=20;score=0;waveN=0;cleared=0;
+  gold=120;gold2=120;lives=20;score=0;waveN=0;cleared=0;
   queue=[];spawnT=0;enemies=[];towers=[];shots=[];rings=[];bolts=[];ptcls=[];
   buildType=null;sel=null;msg.t=0;
   state='play';
@@ -440,12 +467,15 @@ function waveList(w){
   return L.map(type=>({type,hpMul}));
 }
 
-function callWave(){
+function callWave(by=localOwner()){
   if(state!=='play'||queue.length||waveN>=WAVES)return;
   if(waveN===ICE_AFTER_WAVE&&cleared<ICE_AFTER_WAVE){flash('FINISH WAVE '+ICE_AFTER_WAVE+' FIRST — SOMETHING IS COMING','#bfe8ff');return;}
   if(isGuest()){sendAct('wave');return;}
   fullRefund=false;
-  if(waveN>0&&enemies.length){const b=10+waveN;gold+=b;flash('EARLY CALL  +'+b+' GOLD','#ffd700');}
+  if(waveN>0&&enemies.length){
+    const b=10+waveN;addGold(by,b);
+    flash((coop?playerName(by)+' CALLED EARLY':'EARLY CALL')+'  +'+b+' GOLD','#ffd700');
+  }
   waveN++;
   queue=waveList(waveN);spawnT=0;
   if(waveN===3)flash('WOLVES!  They are fast','#cfd8e0');
@@ -469,35 +499,37 @@ function flash(text,col){
 // ── Towers ────────────────────────────────────────────────────────────────────
 function placeTower(c,r,type=buildType,owner=localOwner()){
   const def=TOWERS[type];
-  if(!canBuild(c,r)||gold<def.cost)return false;
+  if(!canBuild(c,r))return false;
   if(isGuest()){
+    if(gold<def.cost)return false;
     const [hc,hr]=toHost(c,r);
     sendAct('place',{t:type,c:hc,r:hr});
     if(gold-def.cost<def.cost)buildType=null;
     refreshUI();
     return true;
   }
-  gold-=def.cost;
+  if(goldOf(owner)<def.cost)return false;
+  addGold(owner,-def.cost);
   towers.push({type,c,r,x:c+.5,y:r+.5,lv:0,cd:0,ang:-Math.PI/2,spent:def.cost,owner});
   boom(c+.5,r+.5,'#d8c8a0',8);
   if(buildType&&gold<TOWERS[buildType].cost)buildType=null;
   refreshUI();
   return true;
 }
-function upgrade(t){
-  if(!t||t.lv>=2)return;
+function upgrade(t,by=localOwner()){
+  if(!t||t.lv>=2||!ownsTower(t,by))return;
   const cost=TOWERS[t.type].up[t.lv];
-  if(gold<cost)return;
-  if(isGuest()){const [hc,hr]=toHost(t.c,t.r);sendAct('up',{c:hc,r:hr});return;}
-  gold-=cost;t.spent+=cost;t.lv++;
+  if(isGuest()){if(gold>=cost){const [hc,hr]=toHost(t.c,t.r);sendAct('up',{c:hc,r:hr});}return;}
+  if(goldOf(t.owner)<cost)return;
+  addGold(t.owner,-cost);t.spent+=cost;t.lv++;
   boom(t.x,t.y,'#ffd700',12);
   refreshUI();
 }
 function sellValue(t){return Math.floor(t.spent*(fullRefund?1:0.7));}
-function sell(t){
-  if(!t)return;
+function sell(t,by=localOwner()){
+  if(!t||!ownsTower(t,by))return;
   if(isGuest()){const [hc,hr]=toHost(t.c,t.r);sendAct('sell',{c:hc,r:hr});sel=null;refreshUI();return;}
-  gold+=sellValue(t);
+  addGold(t.owner,sellValue(t));
   towers=towers.filter(o=>o!==t);
   boom(t.x,t.y,'#aaa',10);
   if(sel===t)sel=null;
@@ -505,6 +537,7 @@ function sell(t){
 }
 
 function updTower(t,dt){
+  if(t.type==='mine')return;
   const st=TOWERS[t.type].lv[t.lv];
   t.cd-=dt;
   if(t.type==='frost'){
@@ -513,26 +546,33 @@ function updTower(t,dt){
     if(!hit.length)return;
     t.cd=st.rate;
     for(const e of hit){
-      damage(e,st.dmg);
+      damage(e,st.dmg,t.owner);
       e.slowF=e.slowT>0?Math.max(e.slowF,st.slow):st.slow;
       e.slowT=st.slowT;
     }
     addRing(t.x,t.y,st.range,0.4,'150,210,255');
     return;
   }
+  // Most towers shoot the monster furthest along; the ballista picks the
+  // toughest and venom prefers monsters that aren't poisoned yet.
+  const rank=t.type==='ballista'?e=>e.hp:t.type==='venom'?e=>(e.poisonT>0?0:1000)+e.s:e=>e.s;
   let best=null;
-  for(const e of enemies)if(dist(e,t.x,t.y)<=st.range&&(!best||e.s>best.s))best=e;
+  for(const e of enemies)if(dist(e,t.x,t.y)<=st.range&&(!best||rank(e)>rank(best)))best=e;
   if(!best)return;
   t.ang=Math.atan2(best.y-t.y,best.x-t.x);
   if(t.cd>0)return;
   t.cd=st.rate;
   if(t.type==='arrow'){
-    shots.push({kind:'arrow',x:t.x,y:t.y,target:best,dmg:st.dmg});
+    shots.push({kind:'arrow',x:t.x,y:t.y,target:best,dmg:st.dmg,owner:t.owner});
+  }else if(t.type==='ballista'){
+    shots.push({kind:'arrow',big:true,spd:20,x:t.x,y:t.y,target:best,dmg:st.dmg,owner:t.owner});
+  }else if(t.type==='venom'){
+    shots.push({kind:'glob',spd:7,x:t.x,y:t.y-0.2,target:best,dmg:st.dmg,poison:st.poison,poisonT:st.poisonT,owner:t.owner});
   }else if(t.type==='cannon'){
     // Aim where the target will be when the ball lands.
     const dur=dist(best,t.x,t.y)/7;
     const ahead=posAt(Math.min(pathLen-1,best.s+enemySpeed(best)*dur));
-    shots.push({kind:'ball',x0:t.x,y0:t.y,x1:ahead.x,y1:ahead.y,t:0,dur,dmg:st.dmg,splash:st.splash});
+    shots.push({kind:'ball',x0:t.x,y0:t.y,x1:ahead.x,y1:ahead.y,t:0,dur,dmg:st.dmg,splash:st.splash,owner:t.owner});
   }else{
     const chain=[best];
     let cur=best;
@@ -543,7 +583,7 @@ function updTower(t,dt){
       chain.push(next);cur=next;
     }
     const pts=[[t.x,t.y-0.3]];
-    chain.forEach((e,i)=>{pts.push([e.x,e.y]);damage(e,st.dmg*Math.pow(0.8,i));});
+    chain.forEach((e,i)=>{pts.push([e.x,e.y]);damage(e,st.dmg*Math.pow(0.8,i),t.owner);});
     addBolt(pts);
   }
 }
@@ -554,13 +594,13 @@ function spawn(item){
   enemies.push({id:nextEnemyId++,type:item.type,hp,maxHp:hp,s:0.5,x:p.x,y:p.y,dx:p.dx,dy:p.dy,slowT:0,slowF:0,anim:Math.random()*6,spdMul:rnd(0.95,1.05)});
 }
 function enemySpeed(e){return ENEMIES[e.type].spd*e.spdMul*(e.slowT>0?1-e.slowF:1);}
-function damage(e,d){
+function damage(e,d,by){
   if(e.dead)return;
   e.hp-=d;
   if(e.hp<=0){
     e.dead=true;
     const def=ENEMIES[e.type];
-    gold+=def.gold;score+=def.pts;
+    addGold(by,def.gold);score+=def.pts;
     boom(e.x,e.y,e.type==='troll'?'#b090e0':e.type==='wolf'?'#9aa':'#7c5',e.type==='troll'?30:10);
     if(e.type==='troll'){shake=0.5;flash('TROLL KING DEFEATED!  +'+def.gold+' GOLD','#ffd700');}
   }
@@ -580,6 +620,7 @@ function update(dt){
   for(const e of enemies){
     e.s+=enemySpeed(e)*dt;
     e.slowT-=dt;
+    if(e.poisonT>0){e.poisonT-=dt;damage(e,e.poisonD*dt,e.poisonBy);}
     e.anim+=dt*enemySpeed(e)*6;
     const p=posAt(e.s);e.x=p.x;e.y=p.y;e.dx=p.dx;e.dy=p.dy;
     if(e.s>=pathLen-1&&!e.dead){
@@ -595,18 +636,26 @@ function update(dt){
   for(const t of towers)updTower(t,dt);
 
   for(const s of shots){
-    if(s.kind==='arrow'){
+    if(s.kind!=='ball'){
       const tg=s.target;
       if(tg.dead){s.done=true;continue;}
-      const d=dist(s,tg.x,tg.y),step=12*dt;
-      if(d<=step+0.15){damage(tg,s.dmg);s.done=true;continue;}
+      const d=dist(s,tg.x,tg.y),step=(s.spd||12)*dt;
+      if(d<=step+0.15){
+        damage(tg,s.dmg,s.owner);s.done=true;
+        if(s.kind==='glob'){
+          tg.poisonD=Math.max(tg.poisonT>0?tg.poisonD:0,s.poison);
+          tg.poisonT=s.poisonT;tg.poisonBy=s.owner;
+          boom(tg.x,tg.y,'#7d4',5);
+        }
+        continue;
+      }
       s.x+=(tg.x-s.x)/d*step;s.y+=(tg.y-s.y)/d*step;
       s.ang=Math.atan2(tg.y-s.y,tg.x-s.x);
     }else{
       s.t+=dt;
       if(s.t>=s.dur){
         s.done=true;
-        for(const e of enemies)if(dist(e,s.x1,s.y1)<=s.splash)damage(e,s.dmg);
+        for(const e of enemies)if(dist(e,s.x1,s.y1)<=s.splash)damage(e,s.dmg,s.owner);
         addRing(s.x1,s.y1,s.splash,0.3,'255,170,60');
         boom(s.x1,s.y1,'#fa3',10);
       }
@@ -618,7 +667,13 @@ function update(dt){
   if(!queue.length&&!enemies.length&&cleared<waveN){
     let bonus=0;
     for(let w=cleared+1;w<=waveN;w++){bonus+=15+2*w;score+=50*w;}
-    gold+=bonus;cleared=waveN;
+    // Both players get the wave bonus; gold mines pay their builder per wave.
+    gold+=bonus;if(coop)gold2+=bonus;
+    for(const t of towers)if(t.type==='mine'){
+      addGold(t.owner,TOWERS.mine.lv[t.lv].income*(waveN-cleared));
+      boom(t.x,t.y,'#ffd700',14);
+    }
+    cleared=waveN;
     if(cleared>=WAVES){endGame(true);return;}
     flash('WAVE '+cleared+' CLEARED  +'+bonus+' GOLD','#9f9');
     if(cleared===ICE_AFTER_WAVE&&theme==='grass')freeze();
@@ -694,6 +749,32 @@ function drawTower(g,type,lv,x,y,k,ang){
     g.moveTo(x,cy-k*.32*p);g.lineTo(x+k*.14,cy);g.lineTo(x,cy+k*.16);g.lineTo(x-k*.14,cy);g.closePath();g.fill();
     g.fillStyle='#6ec6ff';g.beginPath();
     g.moveTo(x,cy-k*.32*p);g.lineTo(x+k*.14,cy);g.lineTo(x,cy);g.closePath();g.fill();
+  }else if(type==='ballista'){
+    g.fillStyle='#6b4a28';g.beginPath();g.arc(x,cy,k*.2,0,7);g.fill();
+    g.save();g.translate(x,cy);g.rotate(ang);
+    g.fillStyle='#4a3018';g.fillRect(-k*.12,-k*.05,k*.42,k*.1);
+    g.strokeStyle='#2a1a0a';g.lineWidth=Math.max(2,k*.06);
+    g.beginPath();g.arc(k*.06,0,k*.28,-1.15,1.15);g.stroke();
+    g.strokeStyle='#e8e0d0';g.lineWidth=1;g.beginPath();
+    g.moveTo(k*.06+Math.cos(1.15)*k*.28,-Math.sin(1.15)*k*.28);g.lineTo(-k*.08,0);
+    g.lineTo(k*.06+Math.cos(1.15)*k*.28,Math.sin(1.15)*k*.28);g.stroke();
+    g.fillStyle='#c8c8d0';g.beginPath();g.moveTo(k*.4,0);g.lineTo(k*.3,-k*.05);g.lineTo(k*.3,k*.05);g.fill();
+    g.restore();
+  }else if(type==='venom'){
+    g.fillStyle='#2b2b2b';g.beginPath();g.ellipse(x,cy+k*.04,k*.22,k*.16,0,0,7);g.fill();
+    g.fillStyle='#5ccc44';g.beginPath();g.ellipse(x,cy-k*.07,k*.18,k*.06,0,0,7);g.fill();
+    for(let i=0;i<2;i++){
+      const b=(clock*1.5+i*0.5)%1;
+      g.fillStyle=`rgba(150,240,100,${1-b})`;
+      g.beginPath();g.arc(x+(i?-k*.07:k*.06),cy-k*.09-b*k*.22,k*.04,0,7);g.fill();
+    }
+  }else if(type==='mine'){
+    g.fillStyle='#4a3a2a';
+    g.beginPath();g.arc(x,cy+k*.06,k*.22,Math.PI,0);g.lineTo(x+k*.22,cy+k*.14);g.lineTo(x-k*.22,cy+k*.14);g.fill();
+    g.fillStyle='#111';g.beginPath();g.arc(x,cy+k*.1,k*.13,Math.PI,0);g.fill();
+    g.fillStyle='#ffd23f';
+    for(const [dx,dy] of [[-.14,.12],[.13,.13],[0,.15]]){g.beginPath();g.arc(x+dx*k,cy+dy*k,k*.05,0,7);g.fill();}
+    g.fillStyle='#fff6c0';g.fillRect(x-k*.15,cy+k*.1,k*.02,k*.02);
   }else{
     g.strokeStyle='#c09a48';g.lineWidth=Math.max(1,k*.035);
     for(let i=0;i<3;i++){g.beginPath();g.ellipse(x,cy+k*.1-i*k*.07,k*.13,k*.04,0,0,7);g.stroke();}
@@ -752,6 +833,11 @@ function drawEnemy(e){
   if(e.slowT>0){
     ctx.fillStyle='rgba(140,210,255,0.35)';ctx.beginPath();ctx.arc(x,y,k*.38,0,7);ctx.fill();
   }
+  if(e.poisonT>0){
+    ctx.fillStyle='rgba(110,220,70,0.3)';ctx.beginPath();ctx.arc(x,y,k*.36,0,7);ctx.fill();
+    const b=(clock*1.2+e.anim*0.1)%1;
+    ctx.fillStyle=`rgba(150,240,100,${1-b})`;ctx.beginPath();ctx.arc(x+k*.12,y-k*.3-b*k*.25,k*.05,0,7);ctx.fill();
+  }
   if(e.hp<e.maxHp){
     const bw=Math.max(T*.6,k*.7),bx=x-bw/2,by=y-k*.55;
     ctx.fillStyle='rgba(0,0,0,0.6)';ctx.fillRect(bx-1,by-1,bw+2,6);
@@ -800,18 +886,23 @@ function drawWorld(){
       rr(ctx,px(t.x)-T*.42,py(t.y)-T*.42,T*.84,T*.84,T*.12);ctx.stroke();
     }
   }
-  if(sel)drawRange(sel.x,sel.y,TOWERS[sel.type].lv[sel.lv].range,true);
+  if(sel&&TOWERS[sel.type].lv[sel.lv].range)drawRange(sel.x,sel.y,TOWERS[sel.type].lv[sel.lv].range,true);
   if(buildType&&hover&&state==='play'){
     const ok=canBuild(hover.c,hover.r)&&gold>=TOWERS[buildType].cost;
-    drawRange(hover.c+.5,hover.r+.5,TOWERS[buildType].lv[0].range,ok);
+    drawRange(hover.c+.5,hover.r+.5,TOWERS[buildType].lv[0].range||0.5,ok);
     ctx.globalAlpha=0.6;drawTower(ctx,buildType,0,px(hover.c+.5),py(hover.r+.5),T,-Math.PI/2);ctx.globalAlpha=1;
   }
 
   for(const s of shots){
     if(s.kind==='arrow'){
       ctx.save();ctx.translate(px(s.x),py(s.y));ctx.rotate(s.ang||0);
-      ctx.strokeStyle='#f4e6c8';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-T*.15,0);ctx.lineTo(T*.12,0);ctx.stroke();
+      const L=s.big?1.9:1;
+      ctx.strokeStyle=s.big?'#d8d0c0':'#f4e6c8';ctx.lineWidth=s.big?3:2;
+      ctx.beginPath();ctx.moveTo(-T*.15*L,0);ctx.lineTo(T*.12*L,0);ctx.stroke();
       ctx.restore();
+    }else if(s.kind==='glob'){
+      ctx.fillStyle='#6d4';ctx.beginPath();ctx.arc(px(s.x),py(s.y),T*.08,0,7);ctx.fill();
+      ctx.fillStyle='#bf9';ctx.beginPath();ctx.arc(px(s.x)-T*.02,py(s.y)-T*.02,T*.03,0,7);ctx.fill();
     }else{
       const f=s.t/s.dur,x=s.x0+(s.x1-s.x0)*f,y=s.y0+(s.y1-s.y0)*f-Math.sin(Math.PI*f)*0.8;
       ctx.fillStyle='#111';ctx.beginPath();ctx.arc(px(x),py(y),T*.09,0,7);ctx.fill();
@@ -867,8 +958,17 @@ function drawHUD(){
   ctx.fillStyle='#d99a1c';ctx.beginPath();ctx.arc(gx,20,7,0,7);ctx.fill();
   ctx.fillStyle='#ffd84a';ctx.beginPath();ctx.arc(gx,20,4.5,0,7);ctx.fill();
   ctx.fillStyle='#ffd700';ctx.fillText(gold,gx+12,26);
+  // In co-op, the partner's gold sits beside yours in their color.
+  const showPartner=hosting()||isGuest();
+  if(showPartner){
+    const pcol=OWNER_COL[isGuest()?'p1':'p2'];
+    const qx=gx+12+ctx.measureText(String(gold)).width+14;
+    ctx.fillStyle=pcol;ctx.beginPath();ctx.arc(qx,20,5,0,7);ctx.fill();
+    ctx.font='bold 13px monospace';ctx.fillText(isGuest()?partnerGold:gold2,qx+9,25);
+    ctx.font='bold 15px monospace';
+  }
   ctx.textAlign='center';ctx.fillStyle='#fff';
-  ctx.fillText('WAVE '+waveN+'/'+WAVES,W/2,26);
+  ctx.fillText((showPartner&&W<430?'':'WAVE ')+waveN+'/'+WAVES,W/2,26);
   ctx.textAlign='right';ctx.fillStyle='#ffd700';
   ctx.fillText(W<430?score:'SCORE '+score,W-12,26);
 }
@@ -903,7 +1003,8 @@ function drawMenu(){
   ctx.fillText('Stop the monsters before they reach your castle.',W/2,H/2-4);
   ctx.fillStyle='#9f9';ctx.fillText('Survive all '+WAVES+' waves to win!',W/2,H/2+18);
   ctx.font='12px monospace';ctx.fillStyle='#aaa';
-  ctx.fillText('Arrow · Cannon (splash) · Frost (slows) · Storm (chains)',W/2,H/2+46);
+  ctx.fillText('Arrow · Cannon · Frost · Storm',W/2,H/2+40);
+  ctx.fillText('Ballista · Venom · Gold Mine',W/2,H/2+56);
   const waitingForHost=isGuest()&&!peerConnected;
   if(Math.floor(clock*2)%2===0&&!waitingForHost){
     ctx.font='bold 18px monospace';ctx.fillStyle='#fff';
@@ -943,7 +1044,7 @@ pSell.addEventListener('click',()=>sell(sel));
 
 let _uiKey='';
 function refreshUI(){
-  const key=[gold,buildType,sel&&sel.lv,sel&&towers.indexOf(sel),waveN,cleared,queue.length>0,state,fullRefund].join('|');
+  const key=[gold,buildType,sel&&sel.lv,sel&&towers.indexOf(sel),waveN,cleared,queue.length>0,state,fullRefund,localOwner()].join('|');
   if(key===_uiKey)return;
   _uiKey=key;
   for(const b of toolBtns){
@@ -954,8 +1055,12 @@ function refreshUI(){
   waveBtn.disabled=queue.length>0||waveN>=WAVES||(waveN===ICE_AFTER_WAVE&&cleared<ICE_AFTER_WAVE);
   waveBtn.textContent=waveN===0?'▶ START':waveN>=WAVES?'LAST WAVE':'▶ WAVE '+(waveN+1);
   if(sel&&state==='play'){
-    const def=TOWERS[sel.type];
-    pName.textContent=def.name+' Lv'+(sel.lv+1);
+    const def=TOWERS[sel.type],own=ownsTower(sel,localOwner());
+    pName.textContent=def.name+' Lv'+(sel.lv+1)+
+      (sel.type==='mine'?' +'+def.lv[sel.lv].income+'/WAVE':'')+
+      (own?'':' · '+playerName(sel.owner)+"'S");
+    // A partner's tower can be looked at but not changed.
+    pUp.style.display=pSell.style.display=own?'':'none';
     if(sel.lv<2){pUp.textContent='UPGRADE $'+def.up[sel.lv];pUp.disabled=gold<def.up[sel.lv];}
     else{pUp.textContent='MAX LEVEL';pUp.disabled=true;}
     pSell.textContent='SELL +$'+sellValue(sel)+(fullRefund?' (FULL)':'');
@@ -992,7 +1097,7 @@ addEventListener('keydown',e=>{
     return;
   }
   if(state!=='play')return;
-  const i=['1','2','3','4'].indexOf(k);
+  const i=['1','2','3','4','5','6','7'].indexOf(k);
   if(i>=0){const type=ORDER[i];buildType=buildType===type?null:type;sel=null;}
   else if(k==='escape'){buildType=null;sel=null;}
   else if(k==='u')upgrade(sel);
