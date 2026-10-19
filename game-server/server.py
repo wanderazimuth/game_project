@@ -10,7 +10,7 @@ import socketserver
 import struct
 import threading
 
-PORT = 8080
+PORT = int(os.environ.get("ARCADE_PORT", 8080))
 GAMES_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Game registry: url_path -> (directory, display_name, description)

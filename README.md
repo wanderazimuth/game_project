@@ -42,6 +42,9 @@ Game Arcade running on http://192.168.0.125:8080
 
 Open that address from any device on the same network.
 
+The server listens on port 8080. To use another port, set `ARCADE_PORT`,
+e.g. `ARCADE_PORT=8082 python3 game-server/server.py`.
+
 ### Run it automatically (Linux, systemd)
 
 To start the arcade at login and restart it if it crashes, create
