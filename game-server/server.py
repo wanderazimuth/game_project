@@ -24,6 +24,7 @@ GAMES = {
     "jungle-party": ("jungle-party", "Jungle Party", "Run through the jungle to invite 3 monkeys to a birthday party"),
     "avalanche": ("avalanche", "Avalanche", "Ski down the mountain — don't let the avalanche catch you"),
     "dungeon-runner": ("dungeon-runner", "Dungeon Runner", "Grab the key and escape each room before time runs out"),
+    "td": ("td", "TD", "Tower defense — build towers to stop 20 waves of monsters"),
 }
 
 # ── Score management ──────────────────────────────────────────────────────────
