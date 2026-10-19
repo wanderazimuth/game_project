@@ -32,6 +32,12 @@ canvas{display:block}
 #p-up{background:#1f3a14;border:1px solid #6c6;color:#9f9}
 #p-up:disabled{opacity:.45;cursor:default}
 #p-sell{background:#3a1414;border:1px solid #c66;color:#f99}
+#coop-btn{
+  position:fixed;left:50%;transform:translateX(-50%);bottom:28px;display:block;padding:10px 16px;
+  border-radius:8px;border:2px solid #6b4a22;background:#3a2814;color:#ffd700;white-space:nowrap;
+  font:bold 14px 'Courier New',monospace;cursor:pointer;touch-action:manipulation;z-index:101
+}
+#coop-btn.on{border-color:#4aa8ff;background:#12283a;color:#9cf}
 </style>
 </head>
 <body>
@@ -49,10 +55,12 @@ canvas{display:block}
   <button class="tb" id="wave-btn"></button>
   <button class="tb" id="speed-btn">1x</button>
 </div>
+<button id="coop-btn"></button>
 <script>
 const cv=document.getElementById('c'),ctx=cv.getContext('2d');
 const bar=document.getElementById('bar'),panel=document.getElementById('panel');
 const waveBtn=document.getElementById('wave-btn'),speedBtn=document.getElementById('speed-btn');
+const coopBtn=document.getElementById('coop-btn');
 const pName=document.getElementById('p-name'),pUp=document.getElementById('p-up'),pSell=document.getElementById('p-sell');
 const HUD=44,BAR=76,WAVES=20;
 
@@ -90,6 +98,166 @@ let theme='grass',freezeT=0,flakes=[],fullRefund=false;
 let state='menu',gold,lives,score,waveN,cleared,queue,spawnT,enemies,towers,shots,rings,bolts,ptcls;
 let buildType=null,sel=null,hover=null,speed=1,shake=0,clock=0,lastTime=0;
 let msg={text:'',col:'#fff',t:0};
+
+// ── Co-op ─────────────────────────────────────────────────────────────────────
+// Player 1's device runs the game and streams snapshots to Player 2 over the
+// server's relay (/ws/td). Player 2 only draws what it receives and sends its
+// taps back as actions, so both screens always show the same battle. Cells and
+// positions travel in Player 1's map orientation; a phone held the other way
+// transposes them on the way in and out.
+const OWNER_COL={p1:'#ff5a4a',p2:'#4aa8ff'};
+const ETYPES=Object.keys(ENEMIES);
+let coop=false,ws=null,myRole=null,peerConnected=false,netNote='';
+let gameId=0,nextEnemyId=1,netFx=[],sendT=0,hostPortrait=false,guestGame=-1;
+
+function isGuest(){return coop&&myRole==='player2';}
+function hosting(){return coop&&myRole==='player1'&&peerConnected;}
+function localOwner(){return coop?(myRole==='player2'?'p2':'p1'):undefined;}
+function wsSend(m){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(m));}
+function sendAct(a,extra){wsSend(Object.assign({type:'act',a},extra));}
+function toHost(c,r){return isPortrait===hostPortrait?[c,r]:[r,c];}
+function r2(v){return Math.round(v*100)/100;}
+
+function connectCoop(){
+  const proto=location.protocol==='https:'?'wss:':'ws:';
+  const sock=new WebSocket(`${proto}//${location.host}/ws/td`);
+  ws=sock;netNote='';
+  sock.addEventListener('message',ev=>{
+    if(ws!==sock)return;
+    let m;try{m=JSON.parse(ev.data);}catch(e){return;}
+    onNet(m);
+  });
+  sock.addEventListener('close',()=>{
+    if(ws!==sock)return;
+    ws=null;peerConnected=false;
+    if(isGuest()&&state!=='menu')guestToMenu('CO-OP CONNECTION LOST');
+    else netNote='CO-OP CONNECTION LOST';
+  });
+  sock.addEventListener('error',()=>{if(ws===sock)netNote='COULD NOT CONNECT FOR CO-OP';});
+}
+function setCoop(on){
+  const wasGuest=isGuest();
+  coop=on;
+  if(on)connectCoop();
+  else{const s=ws;ws=null;if(s)s.close();peerConnected=false;myRole=null;}
+  // Player 2's copy of a running game can't be played solo.
+  if(wasGuest&&state!=='menu')guestToMenu('');
+  updateCoopBtn();
+}
+function updateCoopBtn(){
+  coopBtn.classList.toggle('on',coop);
+  coopBtn.textContent=!coop?'2 PLAYER CO-OP: OFF':!myRole?'CO-OP: CONNECTING...':
+    'CO-OP ON · YOU ARE '+(myRole==='player2'?'BLUE':'RED');
+}
+coopBtn.addEventListener('click',()=>setCoop(!coop));
+
+function onNet(m){
+  if(m.type==='role'){myRole=m.role;netNote='';updateCoopBtn();}
+  else if(m.type==='room_full'){setCoop(false);netNote='CO-OP ROOM IS FULL';}
+  else if(m.type==='peer_status'){
+    const was=peerConnected;peerConnected=m.connected;
+    if(peerConnected)netNote='';
+    if(myRole==='player1'){
+      sendT=0;
+      if(state==='play'&&peerConnected&&!was)flash('PLAYER 2 JOINED!',OWNER_COL.p2);
+      if(state==='play'&&!peerConnected&&was)flash('PLAYER 2 LEFT  KEEP DEFENDING','#f99');
+    }else if(!peerConnected&&was&&state!=='menu')guestToMenu('PLAYER 1 LEFT THE GAME');
+  }
+  else if(m.type==='snap'){if(isGuest())applySnap(m);}
+  else if(m.type==='act'){if(coop&&myRole==='player1')hostAct(m);}
+  else if(m.type==='lb'){if(isGuest()&&lbOpen())lbLoad(true);}
+}
+
+// Player 1: apply an action sent by Player 2.
+function hostAct(m){
+  if(m.a==='start'){if(state!=='play')startGame();return;}
+  if(m.a==='speed'){toggleSpeed();return;}
+  if(state!=='play')return;
+  if(m.a==='wave')callWave();
+  else if(m.a==='place'&&TOWERS[m.t])placeTower(m.c,m.r,m.t,'p2');
+  else if(m.a==='up')upgrade(towerAt(m.c,m.r));
+  else if(m.a==='sell')sell(towerAt(m.c,m.r));
+  if(sel&&!towers.includes(sel))sel=null;
+  refreshUI();
+}
+
+function snapshot(){
+  const m={type:'snap',g:gameId,st:state,pt:isPortrait};
+  if(state==='menu')return m;
+  return Object.assign(m,{
+    th:theme,gold,lives,score,wn:waveN,cl:cleared,q:queue.length,fr:fullRefund,sp:speed,sh:r2(shake),
+    tw:towers.map(t=>[ORDER.indexOf(t.type),t.c,t.r,t.lv,r2(t.ang),t.spent,t.owner==='p2'?2:t.owner==='p1'?1:0]),
+    en:enemies.map(e=>[e.id,ETYPES.indexOf(e.type),Math.round(e.s*1000)/1000,Math.ceil(e.hp),e.maxHp,
+                       e.slowT>0?1:0,Math.round(enemySpeed(e)*1000)/1000]),
+    sh2:shots.map(s=>s.kind==='arrow'?[0,r2(s.x),r2(s.y),r2(s.ang||0)]
+                                     :[1,r2(s.x0),r2(s.y0),r2(s.x1),r2(s.y1),r2(s.t),r2(s.dur)]),
+    fx:netFx.splice(0),
+  });
+}
+
+// Player 2: take over everything Player 1 sent.
+function applySnap(m){
+  hostPortrait=m.pt;
+  if(m.g!==guestGame&&m.st!=='play'){if(state!=='menu')guestToMenu('');return;}
+  if(m.g!==guestGame)guestStart(m);
+  else if(m.th!==theme){setTheme(m.th);makeFlakes();freezeT=3.5;}
+  const fl=isPortrait!==hostPortrait;
+  const P=(x,y)=>fl?[y,x]:[x,y],A=a=>fl?Math.PI/2-a:a;
+  gold=m.gold;lives=m.lives;score=m.score;waveN=m.wn;cleared=m.cl;fullRefund=m.fr;
+  queue=new Array(m.q);  // only its length is used here
+  if(speed!==m.sp){speed=m.sp;speedBtn.textContent=speed+'x';}
+  shake=Math.max(shake,m.sh);
+  towers=m.tw.map(([ti,c,r,lv,ang,spent,ow])=>{
+    [c,r]=P(c,r);
+    return{type:ORDER[ti],c,r,x:c+.5,y:r+.5,lv,ang:A(ang),spent,owner:ow===2?'p2':ow===1?'p1':undefined};
+  });
+  if(sel)sel=towerAt(sel.c,sel.r)||null;
+  const old=new Map(enemies.map(e=>[e.id,e]));
+  enemies=m.en.map(([id,ti,s,hp,maxHp,slow,v])=>{
+    const e=old.get(id)||{id,anim:Math.random()*6,slowF:0};
+    Object.assign(e,{type:ETYPES[ti],s,hp,maxHp,slowT:slow,v});
+    const p=posAt(s);e.x=p.x;e.y=p.y;e.dx=p.dx;e.dy=p.dy;
+    return e;
+  });
+  shots=m.sh2.map(s=>{
+    if(s[0]===0){const [x,y]=P(s[1],s[2]);return{kind:'arrow',x,y,ang:A(s[3])};}
+    const [x0,y0]=P(s[1],s[2]),[x1,y1]=P(s[3],s[4]);
+    return{kind:'ball',x0,y0,x1,y1,t:s[5],dur:s[6]};
+  });
+  for(const f of m.fx){
+    if(f[0]==='b'){const [x,y]=P(f[1],f[2]);boom(x,y,f[3],f[4]);}
+    else if(f[0]==='r'){const [x,y]=P(f[1],f[2]);rings.push({x,y,r:f[3],life:f[4],max:f[4],col:f[5]});}
+    else if(f[0]==='l')bolts.push({pts:f[1].map(([x,y])=>P(x,y)),life:0.18});
+    else if(f[0]==='m')flash(f[1],f[2]);
+  }
+  if(state==='play'&&m.st!=='play'){
+    state=m.st;
+    bar.style.display='none';panel.style.display='none';
+    setTimeout(()=>{if(state===m.st&&guestGame===m.g)showLB(score);},2200);
+  }
+  refreshUI();
+}
+function guestStart(m){
+  guestGame=m.g;
+  buildMap(H>W*1.1,m.th);layout();renderMap();
+  enemies=[];shots=[];rings=[];bolts=[];ptcls=[];flakes=[];freezeT=0;
+  if(m.th==='ice')makeFlakes();
+  buildType=null;sel=null;msg.t=0;netNote='';
+  state='play';
+  bar.style.display='flex';
+}
+function guestToMenu(note){
+  state='menu';netNote=note;buildType=null;sel=null;
+  bar.style.display='none';panel.style.display='none';
+}
+// Between snapshots, keep monsters and cannonballs moving smoothly.
+function guestTick(dt){
+  for(const e of enemies){
+    e.s=Math.min(pathLen-1,e.s+e.v*speed*dt);e.anim+=dt*speed*e.v*6;
+    const p=posAt(e.s);e.x=p.x;e.y=p.y;e.dx=p.dx;e.dy=p.dy;
+  }
+  for(const s of shots)if(s.kind==='ball')s.t=Math.min(s.dur,s.t+speed*dt);
+}
 
 function rnd(a,b){return a+Math.random()*(b-a);}
 function px(x){return ox+x*T;}
@@ -220,9 +388,14 @@ function renderMap(){
 
 // ── The freeze ────────────────────────────────────────────────────────────────
 // Runs once wave 9 is cleared, while the board is empty.
+function setTheme(th){buildMap(isPortrait,th);layout();renderMap();}
+function makeFlakes(){
+  flakes=Array.from({length:Math.round(COLS*ROWS/2.2)},()=>({
+    x:Math.random()*COLS,y:Math.random()*ROWS,spd:rnd(0.4,1.1),ph:Math.random()*6,s:rnd(1.2,2.6),
+  }));
+}
 function freeze(){
-  buildMap(isPortrait,'ice');
-  layout();renderMap();
+  setTheme('ice');
   let refund=0,moved=0;
   towers=towers.filter(t=>{
     if(!isPath(t.c,t.r))return true;
@@ -234,15 +407,16 @@ function freeze(){
   if(sel&&!towers.includes(sel))sel=null;
   shots=[];rings=[];bolts=[];
   freezeT=3.5;fullRefund=true;
-  flakes=Array.from({length:Math.round(COLS*ROWS/2.2)},()=>({
-    x:Math.random()*COLS,y:Math.random()*ROWS,spd:rnd(0.4,1.1),ph:Math.random()*6,s:rnd(1.2,2.6),
-  }));
+  makeFlakes();
   flash(moved?moved+' TOWER'+(moved>1?'S':'')+' ON THE NEW PATH  REFUNDED +'+refund:'THE MONSTERS FOUND A NEW PATH','#bfe8ff');
   refreshUI();
 }
 
 // ── Game flow ─────────────────────────────────────────────────────────────────
 function startGame(){
+  if(coop&&!myRole)return;
+  if(isGuest()){if(peerConnected)sendAct('start');return;}
+  gameId++;netFx=[];
   buildMap(H>W*1.1,'grass');
   freezeT=0;flakes=[];fullRefund=false;
   layout();renderMap();
@@ -269,6 +443,7 @@ function waveList(w){
 function callWave(){
   if(state!=='play'||queue.length||waveN>=WAVES)return;
   if(waveN===ICE_AFTER_WAVE&&cleared<ICE_AFTER_WAVE){flash('FINISH WAVE '+ICE_AFTER_WAVE+' FIRST — SOMETHING IS COMING','#bfe8ff');return;}
+  if(isGuest()){sendAct('wave');return;}
   fullRefund=false;
   if(waveN>0&&enemies.length){const b=10+waveN;gold+=b;flash('EARLY CALL  +'+b+' GOLD','#ffd700');}
   waveN++;
@@ -286,16 +461,26 @@ function endGame(won){
   setTimeout(()=>{if(state===(won?'win':'gameover'))showLB(score);},2200);
 }
 
-function flash(text,col){msg={text,col,t:2.6};}
+function flash(text,col){
+  msg={text,col,t:2.6};
+  if(hosting())netFx.push(['m',text,col]);
+}
 
 // ── Towers ────────────────────────────────────────────────────────────────────
-function placeTower(c,r){
-  const def=TOWERS[buildType];
+function placeTower(c,r,type=buildType,owner=localOwner()){
+  const def=TOWERS[type];
   if(!canBuild(c,r)||gold<def.cost)return false;
+  if(isGuest()){
+    const [hc,hr]=toHost(c,r);
+    sendAct('place',{t:type,c:hc,r:hr});
+    if(gold-def.cost<def.cost)buildType=null;
+    refreshUI();
+    return true;
+  }
   gold-=def.cost;
-  towers.push({type:buildType,c,r,x:c+.5,y:r+.5,lv:0,cd:0,ang:-Math.PI/2,spent:def.cost});
+  towers.push({type,c,r,x:c+.5,y:r+.5,lv:0,cd:0,ang:-Math.PI/2,spent:def.cost,owner});
   boom(c+.5,r+.5,'#d8c8a0',8);
-  if(gold<def.cost)buildType=null;
+  if(buildType&&gold<TOWERS[buildType].cost)buildType=null;
   refreshUI();
   return true;
 }
@@ -303,6 +488,7 @@ function upgrade(t){
   if(!t||t.lv>=2)return;
   const cost=TOWERS[t.type].up[t.lv];
   if(gold<cost)return;
+  if(isGuest()){const [hc,hr]=toHost(t.c,t.r);sendAct('up',{c:hc,r:hr});return;}
   gold-=cost;t.spent+=cost;t.lv++;
   boom(t.x,t.y,'#ffd700',12);
   refreshUI();
@@ -310,10 +496,12 @@ function upgrade(t){
 function sellValue(t){return Math.floor(t.spent*(fullRefund?1:0.7));}
 function sell(t){
   if(!t)return;
+  if(isGuest()){const [hc,hr]=toHost(t.c,t.r);sendAct('sell',{c:hc,r:hr});sel=null;refreshUI();return;}
   gold+=sellValue(t);
   towers=towers.filter(o=>o!==t);
   boom(t.x,t.y,'#aaa',10);
-  sel=null;refreshUI();
+  if(sel===t)sel=null;
+  refreshUI();
 }
 
 function updTower(t,dt){
@@ -329,7 +517,7 @@ function updTower(t,dt){
       e.slowF=e.slowT>0?Math.max(e.slowF,st.slow):st.slow;
       e.slowT=st.slowT;
     }
-    rings.push({x:t.x,y:t.y,r:st.range,life:0.4,max:0.4,col:'150,210,255'});
+    addRing(t.x,t.y,st.range,0.4,'150,210,255');
     return;
   }
   let best=null;
@@ -356,14 +544,14 @@ function updTower(t,dt){
     }
     const pts=[[t.x,t.y-0.3]];
     chain.forEach((e,i)=>{pts.push([e.x,e.y]);damage(e,st.dmg*Math.pow(0.8,i));});
-    bolts.push({pts,life:0.18});
+    addBolt(pts);
   }
 }
 
 // ── Enemies ───────────────────────────────────────────────────────────────────
 function spawn(item){
   const d=ENEMIES[item.type],hp=Math.round(d.hp*item.hpMul),p=posAt(0.5);
-  enemies.push({type:item.type,hp,maxHp:hp,s:0.5,x:p.x,y:p.y,dx:p.dx,dy:p.dy,slowT:0,slowF:0,anim:Math.random()*6,spdMul:rnd(0.95,1.05)});
+  enemies.push({id:nextEnemyId++,type:item.type,hp,maxHp:hp,s:0.5,x:p.x,y:p.y,dx:p.dx,dy:p.dy,slowT:0,slowF:0,anim:Math.random()*6,spdMul:rnd(0.95,1.05)});
 }
 function enemySpeed(e){return ENEMIES[e.type].spd*e.spdMul*(e.slowT>0?1-e.slowF:1);}
 function damage(e,d){
@@ -419,7 +607,7 @@ function update(dt){
       if(s.t>=s.dur){
         s.done=true;
         for(const e of enemies)if(dist(e,s.x1,s.y1)<=s.splash)damage(e,s.dmg);
-        rings.push({x:s.x1,y:s.y1,r:s.splash,life:0.3,max:0.3,col:'255,170,60'});
+        addRing(s.x1,s.y1,s.splash,0.3,'255,170,60');
         boom(s.x1,s.y1,'#fa3',10);
       }
     }
@@ -439,10 +627,19 @@ function update(dt){
 
 // ── Particles & effects ───────────────────────────────────────────────────────
 function boom(x,y,col,n=10){
+  if(hosting()&&state==='play')netFx.push(['b',r2(x),r2(y),col,n]);
   for(let i=0;i<n;i++){
     const a=Math.random()*Math.PI*2,s=rnd(1,3.5);
     ptcls.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rnd(0.3,0.7),maxLife:0.7,col});
   }
+}
+function addRing(x,y,r,life,col){
+  rings.push({x,y,r,life,max:life,col});
+  if(hosting())netFx.push(['r',r2(x),r2(y),r,life,col]);
+}
+function addBolt(pts){
+  bolts.push({pts,life:0.18});
+  if(hosting())netFx.push(['l',pts.map(([x,y])=>[r2(x),r2(y)])]);
 }
 function updFx(dt){
   for(const p of ptcls){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=0.9;p.vy*=0.9;p.life-=dt;}
@@ -596,7 +793,13 @@ function drawWorld(){
   for(const e of enemies)drawEnemy(e);
   ctx.restore();
 
-  for(const t of towers)drawTower(ctx,t.type,t.lv,px(t.x),py(t.y),T,t.ang);
+  for(const t of towers){
+    drawTower(ctx,t.type,t.lv,px(t.x),py(t.y),T,t.ang);
+    if(t.owner){
+      ctx.strokeStyle=OWNER_COL[t.owner];ctx.lineWidth=2;
+      rr(ctx,px(t.x)-T*.42,py(t.y)-T*.42,T*.84,T*.84,T*.12);ctx.stroke();
+    }
+  }
   if(sel)drawRange(sel.x,sel.y,TOWERS[sel.type].lv[sel.lv].range,true);
   if(buildType&&hover&&state==='play'){
     const ok=canBuild(hover.c,hover.r)&&gold>=TOWERS[buildType].cost;
@@ -701,10 +904,23 @@ function drawMenu(){
   ctx.fillStyle='#9f9';ctx.fillText('Survive all '+WAVES+' waves to win!',W/2,H/2+18);
   ctx.font='12px monospace';ctx.fillStyle='#aaa';
   ctx.fillText('Arrow · Cannon (splash) · Frost (slows) · Storm (chains)',W/2,H/2+46);
-  if(Math.floor(clock*2)%2===0){
+  const waitingForHost=isGuest()&&!peerConnected;
+  if(Math.floor(clock*2)%2===0&&!waitingForHost){
     ctx.font='bold 18px monospace';ctx.fillStyle='#fff';
     ctx.fillText('TAP OR CLICK TO START',W/2,H/2+90);
   }
+  const line=coopLine();
+  if(line){
+    ctx.font='bold 12px monospace';
+    ctx.fillStyle=myRole==='player2'?OWNER_COL.p2:myRole==='player1'?OWNER_COL.p1:'#ccc';
+    ctx.fillText(line,W/2,H/2+120);
+  }
+}
+function coopLine(){
+  if(!coop||netNote)return netNote;
+  if(!myRole)return 'CONNECTING...';
+  if(myRole==='player1')return peerConnected?'PLAYER 2 IS HERE!':'WAITING FOR PLAYER 2 (THEY CAN JOIN LATER)';
+  return peerConnected?'PLAYER 1 IS HERE':'WAITING FOR PLAYER 1...';
 }
 
 // ── UI ────────────────────────────────────────────────────────────────────────
@@ -717,7 +933,11 @@ for(const b of toolBtns){
   b._draw=()=>{g.clearRect(0,0,68,68);drawTower(g,type,0,34,40,62,-Math.PI/4);};
 }
 waveBtn.addEventListener('click',callWave);
-speedBtn.addEventListener('click',()=>{speed=speed===1?2:1;speedBtn.textContent=speed+'x';});
+function toggleSpeed(){
+  if(isGuest()){sendAct('speed');return;}
+  speed=speed===1?2:1;speedBtn.textContent=speed+'x';
+}
+speedBtn.addEventListener('click',toggleSpeed);
 pUp.addEventListener('click',()=>upgrade(sel));
 pSell.addEventListener('click',()=>sell(sel));
 
@@ -787,7 +1007,11 @@ function loop(ts){
   lastTime=ts;clock+=dt;
   ctx.fillStyle=theme==='ice'?'#0e1a24':'#13200f';ctx.fillRect(0,0,W,H);
   if(state==='menu'){drawMenu();return;}
-  if(state==='play')for(let i=0;i<speed;i++){update(dt);if(state!=='play')break;}
+  if(state==='play'&&!isGuest())for(let i=0;i<speed;i++){update(dt);if(state!=='play')break;}
+  if(state==='play'&&isGuest())guestTick(dt);
+  if(hosting()){sendT-=dt;if(sendT<=0){sendT=0.05;wsSend(snapshot());}}
+  const showCoop=state==='menu'||lbOpen();
+  if(coopBtn._shown!==showCoop){coopBtn._shown=showCoop;coopBtn.style.display=showCoop?'block':'none';}
   updFx(dt);
   shake=Math.max(0,shake-dt);msg.t-=dt;
   drawWorld();
@@ -825,8 +1049,10 @@ function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;',
 function showLB(s){
   _lbScore=s;
   document.getElementById('lb-score').textContent='SCORE: '+s.toLocaleString();
-  document.getElementById('lb-form').style.display='flex';
+  // In co-op Player 1 saves the team score; Player 2's list refreshes when it lands.
+  document.getElementById('lb-form').style.display=isGuest()?'none':'flex';
   document.getElementById('lb-name').value='';
+  document.getElementById('lb-name').placeholder=coop?'TEAM NAME':'YOUR NAME';
   document.getElementById('lb-overlay').style.display='flex';
   lbLoad(false);
 }
@@ -848,11 +1074,18 @@ document.addEventListener('DOMContentLoaded',()=>{
   document.getElementById('lb-btn').addEventListener('click',()=>{
     const name=(document.getElementById('lb-name').value.trim().toUpperCase()||'ANON').slice(0,12);
     fetch('/scores/'+LB_GAME,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,score:_lbScore})})
-      .then(r=>r.json()).then(list=>{lbRender(list,true);document.getElementById('lb-form').style.display='none';})
+      .then(r=>r.json()).then(list=>{
+        lbRender(list,true);document.getElementById('lb-form').style.display='none';
+        if(hosting())wsSend({type:'lb'});
+      })
       .catch(()=>document.getElementById('lb-form').style.display='none');
   });
   document.getElementById('lb-name').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('lb-btn').click();});
-  document.getElementById('lb-again').addEventListener('click',()=>{document.getElementById('lb-overlay').style.display='none';startGame();});
+  // In co-op the partner may already have started the next game.
+  document.getElementById('lb-again').addEventListener('click',()=>{
+    document.getElementById('lb-overlay').style.display='none';
+    if(state!=='play')startGame();
+  });
 });
 
 // Start on the menu, drawn over the map.
@@ -860,6 +1093,7 @@ buildMap(innerHeight>innerWidth*1.1,'grass');
 resize();
 addEventListener('resize',resize);
 for(const b of toolBtns)b._draw();
+updateCoopBtn();
 requestAnimationFrame(loop);
 </script>
 

@@ -20,7 +20,7 @@ server uses only the Python standard library.
 | **Jungle Party** | Run through the jungle to invite 3 monkeys to a birthday party | Arrow keys / WASD to run, Space to jump |
 | **Avalanche** | Ski down the mountain — don't let the avalanche catch you | Arrow keys / A D to steer |
 | **Dungeon Runner** | Grab the key and escape all 10 rooms before time runs out — dodge skeletons, bats and spike traps, then defeat the Bone King in the final room | Arrow keys / WASD to move, Space to dash |
-| **TD** | Tower defense — build and upgrade arrow, cannon, frost and storm towers to stop 20 waves of monsters. After wave 9 the land freezes and the monsters take a new path | Pick a tower, then tap/click grass to build; tap a tower to upgrade or sell. Keys 1–4, Space for next wave, U/S |
+| **TD** | Tower defense — build and upgrade arrow, cannon, frost and storm towers to stop 20 waves of monsters. After wave 9 the land freezes and the monsters take a new path. **2-player co-op** | Pick a tower, then tap/click grass to build; tap a tower to upgrade or sell. Keys 1–4, Space for next wave, U/S |
 | **Fish Off** | 2 players, 2 phones — catch the most fish in 90 seconds. Keep the line tension in the green or it snaps | Drag in the water (or arrow keys / WASD) to move the hook; hold (or Space) to reel |
 
 Every game also has on-screen touch controls for phones and tablets, and
@@ -99,11 +99,17 @@ The games talk to the server through a small JSON API:
 
 ## Two-player co-op
 
-Brick Runner, Magma Runner and Fish Off support two players on different
+Brick Runner, Magma Runner, Fish Off and TD support two players on different
 devices. Both players open the same game, and the server relays game state
 between them over a WebSocket (`/ws/brick-runner`, `/ws/magma-runner`,
-`/ws/fish-off`). Each game has a single room: the first player to connect is
-player 1, the second is player 2, and anyone else is told the room is full.
+`/ws/fish-off`, `/ws/td`). Each game has a single room: the first player to
+connect is player 1, the second is player 2, and anyone else is told the room
+is full.
+
+In TD co-op, player 1's device runs the game and streams it to player 2,
+whose taps (build, upgrade, sell, next wave, speed) are sent back as actions.
+The players share gold and lives, each tower is outlined in its builder's
+color, and player 1 saves the team score.
 
 ## Project layout
 

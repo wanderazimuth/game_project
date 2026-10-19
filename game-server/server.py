@@ -30,7 +30,7 @@ GAMES = {
 
 # Games played by two people on separate devices; the All Scores page lists
 # them in their own section.
-TWO_PLAYER_GAMES = {"brick-runner", "magma-runner", "fish-off"}
+TWO_PLAYER_GAMES = {"brick-runner", "magma-runner", "fish-off", "td"}
 
 # ── Score management ──────────────────────────────────────────────────────────
 SCORES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scores.json")
@@ -345,6 +345,7 @@ MR_LOCK = threading.Lock()
 # Two-player rooms that use the generic relay (handle_relay_ws).
 RELAY_ROOMS = {
     "/ws/fish-off": ({}, threading.Lock()),
+    "/ws/td": ({}, threading.Lock()),
 }
 
 
