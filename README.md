@@ -20,7 +20,7 @@ server uses only the Python standard library.
 | **Jungle Party** | Run through the jungle to invite 3 monkeys to a birthday party | Arrow keys / WASD to run, Space to jump |
 | **Avalanche** | Ski down the mountain — don't let the avalanche catch you | Arrow keys / A D to steer |
 | **Dungeon Runner** | Grab the key and escape all 10 rooms before time runs out — dodge skeletons, bats and spike traps, then defeat the Bone King in the final room | Arrow keys / WASD to move, Space to dash |
-| **TD** | Tower defense — build and upgrade arrow, cannon, frost and storm towers to stop 20 waves of monsters | Pick a tower, then tap/click grass to build; tap a tower to upgrade or sell. Keys 1–4, Space for next wave, U/S |
+| **TD** | Tower defense — build and upgrade arrow, cannon, frost and storm towers to stop 20 waves of monsters. After wave 9 the land freezes and the monsters take a new path | Pick a tower, then tap/click grass to build; tap a tower to upgrade or sell. Keys 1–4, Space for next wave, U/S |
 
 Every game also has on-screen touch controls for phones and tablets, and
 posts to the shared high-score board when a game ends.
