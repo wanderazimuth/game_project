@@ -127,6 +127,8 @@ const PATHS={
 const ICE_AFTER_WAVE=9;
 // Ogres throw their club at the nearest tower in reach, stunning it.
 const CLUB={every:10,range:3.5,stun:2.5,spd:6};
+// Wolves howl, speeding up themselves and every monster near them.
+const HOWL={every:8,radius:1.6,boost:0.4,time:1.5};
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let W,H,DPR,T=40,ox=0,oy=0,mapCv=null;
@@ -235,7 +237,7 @@ function snapshot(){
     th:theme,g1:gold,g2:gold2,lives,score,wn:waveN,cl:cleared,q:queue.length,fr:fullRefund,sp:speed,sh:r2(shake),
     tw:towers.map(t=>[ORDER.indexOf(t.type),t.c,t.r,t.lv,r2(t.ang),t.spent,t.owner==='p2'?2:t.owner==='p1'?1:0,t.stunT>0?1:0]),
     en:enemies.map(e=>[e.id,ETYPES.indexOf(e.type),Math.round(e.s*1000)/1000,Math.ceil(e.hp),e.maxHp,
-                       (e.slowT>0?1:0)|(e.poisonT>0?2:0)|(e.noClub?4:0),Math.round(enemySpeed(e)*1000)/1000]),
+                       (e.slowT>0?1:0)|(e.poisonT>0?2:0)|(e.noClub?4:0)|(e.hasteT>0?8:0),Math.round(enemySpeed(e)*1000)/1000]),
     sh2:shots.map(s=>s.kind==='arrow'?[0,r2(s.x),r2(s.y),r2(s.ang||0),s.big?1:0]
                     :s.kind==='glob'?[2,r2(s.x),r2(s.y)]
                     :s.kind==='club'?[3,r2(s.x),r2(s.y)]
@@ -264,7 +266,7 @@ function applySnap(m){
   const old=new Map(enemies.map(e=>[e.id,e]));
   enemies=m.en.map(([id,ti,s,hp,maxHp,fx,v])=>{
     const e=old.get(id)||{id,anim:Math.random()*6,slowF:0};
-    Object.assign(e,{type:ETYPES[ti],s,hp,maxHp,slowT:fx&1,poisonT:fx&2,noClub:fx&4,v});
+    Object.assign(e,{type:ETYPES[ti],s,hp,maxHp,slowT:fx&1,poisonT:fx&2,noClub:fx&4,hasteT:fx&8,v});
     const p=posAt(s);e.x=p.x;e.y=p.y;e.dx=p.dx;e.dy=p.dy;
     return e;
   });
@@ -506,7 +508,7 @@ function callWave(by=localOwner()){
   }
   waveN++;
   queue=waveList(waveN);spawnT=0;
-  if(waveN===3)flash('WOLVES!  They are fast','#cfd8e0');
+  if(waveN===3)flash('WOLVES!  Their howl speeds up monsters','#cfd8e0');
   else if(waveN===5)flash('OGRES!  Their clubs stun towers','#c8e070');
   else if(waveN===10||waveN===20)flash('THE TROLL KING APPROACHES!','#d0a0ff');
   refreshUI();
@@ -645,9 +647,9 @@ function updTower(t,dt){
 function spawn(item){
   const d=ENEMIES[item.type],hp=Math.round(d.hp*item.hpMul),p=posAt(0.5);
   enemies.push({id:nextEnemyId++,type:item.type,hp,maxHp:hp,s:0.5,x:p.x,y:p.y,dx:p.dx,dy:p.dy,slowT:0,slowF:0,anim:Math.random()*6,spdMul:rnd(0.95,1.05),
-    throwT:rnd(3,CLUB.every-2)});
+    throwT:rnd(3,CLUB.every-2),howlT:rnd(2,HOWL.every),hasteT:0});
 }
-function enemySpeed(e){return ENEMIES[e.type].spd*e.spdMul*(e.slowT>0?1-e.slowF:1);}
+function enemySpeed(e){return ENEMIES[e.type].spd*e.spdMul*(e.slowT>0?1-e.slowF:1)*(e.hasteT>0?1+HOWL.boost:1);}
 function damage(e,d,by){
   if(e.dead)return;
   e.hp-=d;
@@ -673,11 +675,12 @@ function update(dt){
 
   for(const e of enemies){
     e.s+=enemySpeed(e)*dt;
-    e.slowT-=dt;
+    e.slowT-=dt;e.hasteT-=dt;
     if(e.poisonT>0){e.poisonT-=dt;damage(e,e.poisonD*dt,e.poisonBy);}
     e.anim+=dt*enemySpeed(e)*6;
     const p=posAt(e.s);e.x=p.x;e.y=p.y;e.dx=p.dx;e.dy=p.dy;
     if(e.type==='ogre')ogreThrow(e,dt);
+    else if(e.type==='wolf')wolfHowl(e,dt);
     if(e.s>=pathLen-1&&!e.dead){
       e.dead=true;e.escaped=true;
       lives=Math.max(0,lives-ENEMIES[e.type].lives);
@@ -756,6 +759,14 @@ function ogreThrow(e,dt){
   if(!best){e.throwT=0;return;}
   e.throwT=CLUB.every;e.noClub=true;
   shots.push({kind:'club',x:e.x,y:e.y,target:best});
+}
+
+function wolfHowl(e,dt){
+  e.howlT-=dt;
+  if(e.howlT>0)return;
+  e.howlT=HOWL.every;
+  for(const o of enemies)if(!o.dead&&dist(o,e.x,e.y)<=HOWL.radius)o.hasteT=HOWL.time;
+  addRing(e.x,e.y,HOWL.radius,0.6,'255,190,90');
 }
 
 // ── Particles & effects ───────────────────────────────────────────────────────
@@ -874,6 +885,15 @@ function drawEnemy(e){
   const y=py(e.y)-Math.abs(Math.sin(e.anim))*k*.06;
   shadow(x,py(e.y)+k*.3,k*.3);
   const fx=e.dx*k*.08,fy=e.dy*k*.06;
+  if(e.hasteT>0){
+    // Speed streaks trail a hasted monster.
+    ctx.strokeStyle='rgba(255,190,90,0.7)';ctx.lineWidth=2;ctx.beginPath();
+    for(const o of [-.18,0,.18]){
+      const sx=x-e.dx*k*.4-e.dy*k*o,sy=y-e.dy*k*.4+e.dx*k*o;
+      ctx.moveTo(sx,sy);ctx.lineTo(sx-e.dx*k*.35,sy-e.dy*k*.35);
+    }
+    ctx.stroke();
+  }
   if(e.type==='goblin'){
     ctx.fillStyle='#4f8a32';
     ctx.beginPath();ctx.moveTo(x-k*.28,y-k*.08);ctx.lineTo(x-k*.46,y-k*.2);ctx.lineTo(x-k*.24,y+k*.04);
