@@ -33,6 +33,15 @@ canvas{display:block}
 #p-up{background:#1f3a14;border:1px solid #6c6;color:#9f9}
 #p-up:disabled{opacity:.45;cursor:default}
 #p-sell{background:#3a1414;border:1px solid #c66;color:#f99}
+#p-build{background:#1f3a14;border:1px solid #6c6;color:#9f9}
+#p-build:disabled{opacity:.45;cursor:default}
+#p-cancel{background:#2a2a2a;border:1px solid #888;color:#ccc}
+#p-info{flex-basis:100%;white-space:normal;text-align:center;line-height:1.35;max-width:340px}
+#p-info .d{color:#ddd;font-weight:normal;font-size:12px}
+#p-info .s{color:#9cf;font-size:12px}
+#p-info .m{color:#c8a165;font-size:11px}
+#p-info .h{color:#aaa;font-weight:normal;font-size:11px}
+.tb.poor{opacity:.55}
 #coop-btn{
   position:fixed;left:50%;transform:translateX(-50%);bottom:28px;display:block;padding:10px 16px;
   border-radius:8px;border:2px solid #6b4a22;background:#3a2814;color:#ffd700;white-space:nowrap;
@@ -44,9 +53,12 @@ canvas{display:block}
 <body>
 <canvas id="c"></canvas>
 <div id="panel">
+  <div id="p-info"></div>
   <span id="p-name"></span>
   <button id="p-up"></button>
   <button id="p-sell"></button>
+  <button id="p-build"></button>
+  <button id="p-cancel">CANCEL</button>
 </div>
 <div id="bar">
   <button class="tb" data-t="arrow"><canvas width="68" height="68"></canvas><span></span></button>
@@ -66,6 +78,7 @@ const bar=document.getElementById('bar'),panel=document.getElementById('panel');
 const waveBtn=document.getElementById('wave-btn'),speedBtn=document.getElementById('speed-btn');
 const coopBtn=document.getElementById('coop-btn');
 const pName=document.getElementById('p-name'),pUp=document.getElementById('p-up'),pSell=document.getElementById('p-sell');
+const pInfo=document.getElementById('p-info'),pBuild=document.getElementById('p-build'),pCancel=document.getElementById('p-cancel');
 const HUD=44,BAR=76,WAVES=20;
 
 const TOWERS={
@@ -87,6 +100,15 @@ const TOWERS={
   mine:  {name:'Gold Mine',cost:120,up:[100,160],
           lv:[{income:25,range:0},{income:45,range:0},{income:70,range:0}]},
 };
+const ABOUT={
+  arrow:'Quick shots at the monster in front.',
+  cannon:'Exploding cannonballs hurt a whole group.',
+  frost:'Chills everything in range, slowing it down.',
+  storm:'Lightning that jumps between monsters.',
+  ballista:'Huge range. Shoots the toughest monster.',
+  venom:'Poisons monsters so they keep taking damage.',
+  mine:'No attack. Earns gold for every wave cleared.',
+};
 const ORDER=['arrow','cannon','frost','storm','ballista','venom','mine'];
 const ENEMIES={
   goblin:{hp:30,  spd:1.25,gold:3,  pts:10, lives:1, r:0.28},
@@ -103,6 +125,8 @@ const PATHS={
   ice:  [[-1,7],[3,7],[3,2],[7,2],[7,6],[11,6],[11,2],[14,2],[14,5],[16,5]],
 };
 const ICE_AFTER_WAVE=9;
+// Ogres throw their club at the nearest tower in reach, stunning it.
+const CLUB={every:10,range:3.5,stun:2.5,spd:6};
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let W,H,DPR,T=40,ox=0,oy=0,mapCv=null;
@@ -112,7 +136,9 @@ let theme='grass',freezeT=0,flakes=[],fullRefund=false;
 // and on Player 1's device `gold2` is Player 2's.
 let gold2=0,partnerGold=0;
 let state='menu',gold,lives,score,waveN,cleared,queue,spawnT,enemies,towers,shots,rings,bolts,ptcls;
-let buildType=null,sel=null,hover=null,speed=1,shake=0,clock=0,lastTime=0;
+// `pending` is the spot picked for a new tower: it shows as a ghost with its
+// range until the player confirms the build, and can be dragged or moved.
+let buildType=null,sel=null,hover=null,pending=null,dragging=false,tapPending=false,panelBottom=BAR+8,speed=1,shake=0,clock=0,lastTime=0;
 let msg={text:'',col:'#fff',t:0};
 
 // ── Co-op ─────────────────────────────────────────────────────────────────────
@@ -207,11 +233,12 @@ function snapshot(){
   if(state==='menu')return m;
   return Object.assign(m,{
     th:theme,g1:gold,g2:gold2,lives,score,wn:waveN,cl:cleared,q:queue.length,fr:fullRefund,sp:speed,sh:r2(shake),
-    tw:towers.map(t=>[ORDER.indexOf(t.type),t.c,t.r,t.lv,r2(t.ang),t.spent,t.owner==='p2'?2:t.owner==='p1'?1:0]),
+    tw:towers.map(t=>[ORDER.indexOf(t.type),t.c,t.r,t.lv,r2(t.ang),t.spent,t.owner==='p2'?2:t.owner==='p1'?1:0,t.stunT>0?1:0]),
     en:enemies.map(e=>[e.id,ETYPES.indexOf(e.type),Math.round(e.s*1000)/1000,Math.ceil(e.hp),e.maxHp,
-                       (e.slowT>0?1:0)|(e.poisonT>0?2:0),Math.round(enemySpeed(e)*1000)/1000]),
+                       (e.slowT>0?1:0)|(e.poisonT>0?2:0)|(e.noClub?4:0),Math.round(enemySpeed(e)*1000)/1000]),
     sh2:shots.map(s=>s.kind==='arrow'?[0,r2(s.x),r2(s.y),r2(s.ang||0),s.big?1:0]
                     :s.kind==='glob'?[2,r2(s.x),r2(s.y)]
+                    :s.kind==='club'?[3,r2(s.x),r2(s.y)]
                     :[1,r2(s.x0),r2(s.y0),r2(s.x1),r2(s.y1),r2(s.t),r2(s.dur)]),
     fx:netFx.splice(0),
   });
@@ -229,21 +256,22 @@ function applySnap(m){
   queue=new Array(m.q);  // only its length is used here
   if(speed!==m.sp){speed=m.sp;speedBtn.textContent=speed+'x';}
   shake=Math.max(shake,m.sh);
-  towers=m.tw.map(([ti,c,r,lv,ang,spent,ow])=>{
+  towers=m.tw.map(([ti,c,r,lv,ang,spent,ow,st])=>{
     [c,r]=P(c,r);
-    return{type:ORDER[ti],c,r,x:c+.5,y:r+.5,lv,ang:A(ang),spent,owner:ow===2?'p2':ow===1?'p1':undefined};
+    return{type:ORDER[ti],c,r,x:c+.5,y:r+.5,lv,ang:A(ang),spent,owner:ow===2?'p2':ow===1?'p1':undefined,stunT:st};
   });
   if(sel)sel=towerAt(sel.c,sel.r)||null;
   const old=new Map(enemies.map(e=>[e.id,e]));
   enemies=m.en.map(([id,ti,s,hp,maxHp,fx,v])=>{
     const e=old.get(id)||{id,anim:Math.random()*6,slowF:0};
-    Object.assign(e,{type:ETYPES[ti],s,hp,maxHp,slowT:fx&1,poisonT:fx&2,v});
+    Object.assign(e,{type:ETYPES[ti],s,hp,maxHp,slowT:fx&1,poisonT:fx&2,noClub:fx&4,v});
     const p=posAt(s);e.x=p.x;e.y=p.y;e.dx=p.dx;e.dy=p.dy;
     return e;
   });
   shots=m.sh2.map(s=>{
     if(s[0]===0){const [x,y]=P(s[1],s[2]);return{kind:'arrow',x,y,ang:A(s[3]),big:!!s[4]};}
     if(s[0]===2){const [x,y]=P(s[1],s[2]);return{kind:'glob',x,y};}
+    if(s[0]===3){const [x,y]=P(s[1],s[2]);return{kind:'club',x,y};}
     const [x0,y0]=P(s[1],s[2]),[x1,y1]=P(s[3],s[4]);
     return{kind:'ball',x0,y0,x1,y1,t:s[5],dur:s[6]};
   });
@@ -266,12 +294,12 @@ function guestStart(m){
   buildMap(H>W*1.1,m.th);layout();renderMap();
   enemies=[];shots=[];rings=[];bolts=[];ptcls=[];flakes=[];freezeT=0;
   if(m.th==='ice')makeFlakes();
-  buildType=null;sel=null;msg.t=0;netNote='';
+  buildType=null;sel=null;pending=null;msg.t=0;netNote='';
   state='play';
   bar.style.display='flex';
 }
 function guestToMenu(note){
-  state='menu';netNote=note;buildType=null;sel=null;
+  state='menu';netNote=note;buildType=null;sel=null;pending=null;
   bar.style.display='none';panel.style.display='none';
 }
 // Between snapshots, keep monsters and cannonballs moving smoothly.
@@ -326,7 +354,7 @@ function layout(){
   T=Math.max(12,Math.floor(Math.min((W-12)/COLS,(H-HUD-bh-10)/ROWS)));
   ox=Math.floor((W-COLS*T)/2);
   oy=HUD+Math.floor((H-HUD-bh-ROWS*T)/2);
-  panel.style.bottom=(bh+8)+'px';
+  panelBottom=bh+8;_uiKey='';
 }
 
 function resize(){
@@ -449,7 +477,7 @@ function startGame(){
   layout();renderMap();
   gold=120;gold2=120;lives=20;score=0;waveN=0;cleared=0;
   queue=[];spawnT=0;enemies=[];towers=[];shots=[];rings=[];bolts=[];ptcls=[];
-  buildType=null;sel=null;msg.t=0;
+  buildType=null;sel=null;pending=null;msg.t=0;
   state='play';
   bar.style.display='flex';
   refreshUI();
@@ -479,7 +507,7 @@ function callWave(by=localOwner()){
   waveN++;
   queue=waveList(waveN);spawnT=0;
   if(waveN===3)flash('WOLVES!  They are fast','#cfd8e0');
-  else if(waveN===5)flash('OGRES!  Tough and slow','#c8e070');
+  else if(waveN===5)flash('OGRES!  Their clubs stun towers','#c8e070');
   else if(waveN===10||waveN===20)flash('THE TROLL KING APPROACHES!','#d0a0ff');
   refreshUI();
 }
@@ -525,6 +553,30 @@ function upgrade(t,by=localOwner()){
   boom(t.x,t.y,'#ffd700',12);
   refreshUI();
 }
+// Build the tower previewed at the pending spot.
+function confirmBuild(){
+  if(!buildType||!pending)return;
+  const def=TOWERS[buildType];
+  if(!canBuild(pending.c,pending.r))msg={text:"CAN'T BUILD THERE",col:'#f99',t:1.6};
+  else if(gold<def.cost)msg={text:'NOT ENOUGH GOLD  NEED $'+def.cost,col:'#f99',t:1.6};
+  else if(placeTower(pending.c,pending.r))pending=null;
+  refreshUI();
+}
+function pathCovered(c,r,range){
+  let n=0;
+  for(const k of pathCells)if(Math.hypot(k%COLS-c,Math.floor(k/COLS)-r)<=range)n++;
+  return n;
+}
+function statText(type,lv){
+  const s=TOWERS[type].lv[lv];
+  if(type==='mine')return '+'+s.income+' GOLD PER WAVE';
+  const p=['DMG '+s.dmg,(1/s.rate).toFixed(1)+' SHOTS/S','RANGE '+s.range];
+  if(s.splash)p.push('SPLASH '+s.splash);
+  if(s.slow)p.push('SLOW '+Math.round(s.slow*100)+'% '+s.slowT+'s');
+  if(s.chain)p.push('HITS '+s.chain);
+  if(s.poison)p.push('POISON '+s.poison+'/s '+s.poisonT+'s');
+  return p.join(' · ');
+}
 function sellValue(t){return Math.floor(t.spent*(fullRefund?1:0.7));}
 function sell(t,by=localOwner()){
   if(!t||!ownsTower(t,by))return;
@@ -537,6 +589,7 @@ function sell(t,by=localOwner()){
 }
 
 function updTower(t,dt){
+  if(t.stunT>0){t.stunT-=dt;return;}
   if(t.type==='mine')return;
   const st=TOWERS[t.type].lv[t.lv];
   t.cd-=dt;
@@ -591,7 +644,8 @@ function updTower(t,dt){
 // ── Enemies ───────────────────────────────────────────────────────────────────
 function spawn(item){
   const d=ENEMIES[item.type],hp=Math.round(d.hp*item.hpMul),p=posAt(0.5);
-  enemies.push({id:nextEnemyId++,type:item.type,hp,maxHp:hp,s:0.5,x:p.x,y:p.y,dx:p.dx,dy:p.dy,slowT:0,slowF:0,anim:Math.random()*6,spdMul:rnd(0.95,1.05)});
+  enemies.push({id:nextEnemyId++,type:item.type,hp,maxHp:hp,s:0.5,x:p.x,y:p.y,dx:p.dx,dy:p.dy,slowT:0,slowF:0,anim:Math.random()*6,spdMul:rnd(0.95,1.05),
+    throwT:rnd(3,CLUB.every-2)});
 }
 function enemySpeed(e){return ENEMIES[e.type].spd*e.spdMul*(e.slowT>0?1-e.slowF:1);}
 function damage(e,d,by){
@@ -623,6 +677,7 @@ function update(dt){
     if(e.poisonT>0){e.poisonT-=dt;damage(e,e.poisonD*dt,e.poisonBy);}
     e.anim+=dt*enemySpeed(e)*6;
     const p=posAt(e.s);e.x=p.x;e.y=p.y;e.dx=p.dx;e.dy=p.dy;
+    if(e.type==='ogre')ogreThrow(e,dt);
     if(e.s>=pathLen-1&&!e.dead){
       e.dead=true;e.escaped=true;
       lives=Math.max(0,lives-ENEMIES[e.type].lives);
@@ -636,7 +691,17 @@ function update(dt){
   for(const t of towers)updTower(t,dt);
 
   for(const s of shots){
-    if(s.kind!=='ball'){
+    if(s.kind==='club'){
+      const tg=s.target;
+      if(!towers.includes(tg)){s.done=true;continue;}
+      const d=dist(s,tg.x,tg.y),step=CLUB.spd*dt;
+      if(d<=step+0.15){
+        tg.stunT=Math.max(tg.stunT||0,CLUB.stun);s.done=true;
+        boom(tg.x,tg.y,'#8a5a2a',8);
+        continue;
+      }
+      s.x+=(tg.x-s.x)/d*step;s.y+=(tg.y-s.y)/d*step;
+    }else if(s.kind!=='ball'){
       const tg=s.target;
       if(tg.dead){s.done=true;continue;}
       const d=dist(s,tg.x,tg.y),step=(s.spd||12)*dt;
@@ -678,6 +743,19 @@ function update(dt){
     flash('WAVE '+cleared+' CLEARED  +'+bonus+' GOLD','#9f9');
     if(cleared===ICE_AFTER_WAVE&&theme==='grass')freeze();
   }
+}
+
+// Every CLUB.every seconds an ogre throws its club at the nearest tower in
+// reach; with none in reach it waits for one. It grows a new club soon after.
+function ogreThrow(e,dt){
+  e.throwT-=dt;
+  e.noClub=e.throwT>CLUB.every-1.5;
+  if(e.throwT>0)return;
+  let best=null,bd=CLUB.range;
+  for(const t of towers){const d=dist(t,e.x,e.y);if(d<=bd){bd=d;best=t;}}
+  if(!best){e.throwT=0;return;}
+  e.throwT=CLUB.every;e.noClub=true;
+  shots.push({kind:'club',x:e.x,y:e.y,target:best});
 }
 
 // ── Particles & effects ───────────────────────────────────────────────────────
@@ -817,8 +895,10 @@ function drawEnemy(e){
   }else if(e.type==='ogre'){
     ctx.fillStyle='#6b7a3a';ctx.beginPath();ctx.arc(x,y,k*.34,0,7);ctx.fill();
     ctx.fillStyle='#8a9a50';ctx.beginPath();ctx.arc(x,y+k*.08,k*.2,0,7);ctx.fill();
-    ctx.strokeStyle='#5a3a1a';ctx.lineWidth=k*.1;ctx.lineCap='round';
-    ctx.beginPath();ctx.moveTo(x+k*.3,y);ctx.lineTo(x+k*.48,y-k*.3);ctx.stroke();ctx.lineCap='butt';
+    if(!e.noClub){
+      ctx.strokeStyle='#5a3a1a';ctx.lineWidth=k*.1;ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(x+k*.3,y);ctx.lineTo(x+k*.48,y-k*.3);ctx.stroke();ctx.lineCap='butt';
+    }
     eyes(x+fx,y-k*.12+fy,k*.1,k*.055,'#fff');
     ctx.fillStyle='#fff';ctx.fillRect(x-k*.1+fx,y+k*.0+fy,k*.04,k*.07);ctx.fillRect(x+k*.06+fx,y+fy,k*.04,k*.07);
   }else{
@@ -885,12 +965,33 @@ function drawWorld(){
       ctx.strokeStyle=OWNER_COL[t.owner];ctx.lineWidth=2;
       rr(ctx,px(t.x)-T*.42,py(t.y)-T*.42,T*.84,T*.84,T*.12);ctx.stroke();
     }
+    if(t.stunT>0){
+      // Dazed: stars circle over the tower.
+      ctx.fillStyle='#ffe35a';
+      for(let i=0;i<3;i++){
+        const a=clock*5+i*2.1;
+        ctx.beginPath();ctx.arc(px(t.x)+Math.cos(a)*T*.25,py(t.y)-T*.42+Math.sin(a)*T*.07,Math.max(2,T*.055),0,7);ctx.fill();
+      }
+    }
   }
   if(sel&&TOWERS[sel.type].lv[sel.lv].range)drawRange(sel.x,sel.y,TOWERS[sel.type].lv[sel.lv].range,true);
-  if(buildType&&hover&&state==='play'){
-    const ok=canBuild(hover.c,hover.r)&&gold>=TOWERS[buildType].cost;
-    drawRange(hover.c+.5,hover.r+.5,TOWERS[buildType].lv[0].range||0.5,ok);
-    ctx.globalAlpha=0.6;drawTower(ctx,buildType,0,px(hover.c+.5),py(hover.r+.5),T,-Math.PI/2);ctx.globalAlpha=1;
+  const spot=buildType&&state==='play'?pending||hover:null;
+  if(spot){
+    const ok=canBuild(spot.c,spot.r)&&gold>=TOWERS[buildType].cost,range=TOWERS[buildType].lv[0].range;
+    // Light up the path tiles this spot would cover.
+    if(range){
+      ctx.fillStyle=ok?'rgba(255,230,90,0.28)':'rgba(255,90,90,0.2)';
+      for(const k of pathCells){
+        const c=k%COLS,r=Math.floor(k/COLS);
+        if(Math.hypot(c-spot.c,r-spot.r)<=range)ctx.fillRect(ox+c*T,oy+r*T,T,T);
+      }
+    }
+    drawRange(spot.c+.5,spot.r+.5,range||0.5,ok);
+    ctx.globalAlpha=pending?0.8:0.6;drawTower(ctx,buildType,0,px(spot.c+.5),py(spot.r+.5),T,-Math.PI/2);ctx.globalAlpha=1;
+    if(pending){
+      ctx.strokeStyle=ok?'#ffd700':'#f66';ctx.lineWidth=2;ctx.setLineDash([5,4]);ctx.lineDashOffset=-clock*12;
+      ctx.strokeRect(ox+spot.c*T+1,oy+spot.r*T+1,T-2,T-2);ctx.setLineDash([]);
+    }
   }
 
   for(const s of shots){
@@ -899,6 +1000,12 @@ function drawWorld(){
       const L=s.big?1.9:1;
       ctx.strokeStyle=s.big?'#d8d0c0':'#f4e6c8';ctx.lineWidth=s.big?3:2;
       ctx.beginPath();ctx.moveTo(-T*.15*L,0);ctx.lineTo(T*.12*L,0);ctx.stroke();
+      ctx.restore();
+    }else if(s.kind==='club'){
+      ctx.save();ctx.translate(px(s.x),py(s.y));ctx.rotate(clock*15);
+      ctx.strokeStyle='#5a3a1a';ctx.lineWidth=Math.max(3,T*.09);ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(-T*.16,0);ctx.lineTo(T*.12,0);ctx.stroke();ctx.lineCap='butt';
+      ctx.fillStyle='#6b4520';ctx.beginPath();ctx.arc(T*.14,0,T*.07,0,7);ctx.fill();
       ctx.restore();
     }else if(s.kind==='glob'){
       ctx.fillStyle='#6d4';ctx.beginPath();ctx.arc(px(s.x),py(s.y),T*.08,0,7);ctx.fill();
@@ -1030,10 +1137,19 @@ for(const b of toolBtns){
   const type=b.dataset.t,g=b.querySelector('canvas').getContext('2d');
   b.querySelector('span').textContent='$'+TOWERS[type].cost;
   b.title=TOWERS[type].name;
-  b.addEventListener('click',()=>{buildType=buildType===type?null:type;sel=null;refreshUI();});
+  b.addEventListener('click',()=>pickType(type));
   b._draw=()=>{g.clearRect(0,0,68,68);drawTower(g,type,0,34,40,62,-Math.PI/4);};
 }
-waveBtn.addEventListener('click',callWave);
+// Picking a tower shows what it does; the pending spot stays put so towers
+// can be compared at the same place.
+function pickType(type){
+  buildType=buildType===type?null:type;sel=null;
+  if(!buildType)pending=null;
+  refreshUI();
+}
+pBuild.addEventListener('click',confirmBuild);
+pCancel.addEventListener('click',()=>{buildType=null;pending=null;refreshUI();});
+waveBtn.addEventListener('click',()=>callWave());
 function toggleSpeed(){
   if(isGuest()){sendAct('speed');return;}
   speed=speed===1?2:1;speedBtn.textContent=speed+'x';
@@ -1044,17 +1160,38 @@ pSell.addEventListener('click',()=>sell(sel));
 
 let _uiKey='';
 function refreshUI(){
-  const key=[gold,buildType,sel&&sel.lv,sel&&towers.indexOf(sel),waveN,cleared,queue.length>0,state,fullRefund,localOwner()].join('|');
+  const pendOk=pending&&canBuild(pending.c,pending.r);
+  const key=[gold,buildType,sel&&sel.lv,sel&&towers.indexOf(sel),waveN,cleared,queue.length>0,state,fullRefund,localOwner(),
+             pending&&pending.c+','+pending.r,pendOk].join('|');
   if(key===_uiKey)return;
   _uiKey=key;
   for(const b of toolBtns){
     const type=b.dataset.t;
-    b.disabled=gold<TOWERS[type].cost&&buildType!==type;
+    b.classList.toggle('poor',gold<TOWERS[type].cost);
     b.classList.toggle('sel',buildType===type);
   }
   waveBtn.disabled=queue.length>0||waveN>=WAVES||(waveN===ICE_AFTER_WAVE&&cleared<ICE_AFTER_WAVE);
   waveBtn.textContent=waveN===0?'▶ START':waveN>=WAVES?'LAST WAVE':'▶ WAVE '+(waveN+1);
-  if(sel&&state==='play'){
+  const building=buildType&&state==='play';
+  pInfo.style.display=pBuild.style.display=pCancel.style.display=building?'':'none';
+  pName.style.display=building?'none':'';
+  if(building){
+    const def=TOWERS[buildType],afford=gold>=def.cost;
+    let html=`<div>${def.name.toUpperCase()} <span style="color:${afford?'#9f9':'#f99'}">$${def.cost}</span></div>`+
+      `<div class="d">${ABOUT[buildType]}</div><div class="s">${statText(buildType,0)}</div>`+
+      `<div class="m">MAX LV3: ${statText(buildType,2)}</div>`;
+    if(!pending)html+='<div class="h">TAP THE MAP TO PREVIEW A SPOT</div>';
+    else if(!pendOk)html+=`<div class="h" style="color:#f99">CAN'T BUILD HERE · PICK ANOTHER SPOT</div>`;
+    else html+='<div class="h">'+(def.lv[0].range?'COVERS '+pathCovered(pending.c,pending.r,def.lv[0].range)+' PATH TILES · ':'')+
+      'DRAG OR TAP ELSEWHERE TO MOVE</div>';
+    pInfo.innerHTML=html;
+    pUp.style.display=pSell.style.display='none';
+    pBuild.style.display=pending?'':'none';
+    pBuild.disabled=!pendOk||!afford;
+    pBuild.textContent=!afford?'NEED $'+def.cost:'BUILD $'+def.cost;
+    placePanel(pending);
+    panel.style.display='flex';
+  }else if(sel&&state==='play'){
     const def=TOWERS[sel.type],own=ownsTower(sel,localOwner());
     pName.textContent=def.name+' Lv'+(sel.lv+1)+
       (sel.type==='mine'?' +'+def.lv[sel.lv].income+'/WAVE':'')+
@@ -1064,8 +1201,15 @@ function refreshUI(){
     if(sel.lv<2){pUp.textContent='UPGRADE $'+def.up[sel.lv];pUp.disabled=gold<def.up[sel.lv];}
     else{pUp.textContent='MAX LEVEL';pUp.disabled=true;}
     pSell.textContent='SELL +$'+sellValue(sel)+(fullRefund?' (FULL)':'');
+    placePanel(sel);
     panel.style.display='flex';
   }else panel.style.display='none';
+}
+// Keep the panel out of the way: above the map when the spot is low down.
+function placePanel(cell){
+  const top=cell&&cell.r>=ROWS/2;
+  panel.style.top=top?(HUD+40)+'px':'auto';
+  panel.style.bottom=top?'auto':panelBottom+'px';
 }
 
 function cellAt(x,y){
@@ -1078,14 +1222,32 @@ cv.addEventListener('pointerdown',ev=>{
   if(state!=='play')return;
   const cell=cellAt(ev.clientX,ev.clientY);
   hover=ev.pointerType==='mouse'?cell:null;
-  if(!cell){sel=null;buildType=null;refreshUI();return;}
+  if(!cell){sel=null;buildType=null;pending=null;refreshUI();return;}
   const t=towerAt(cell.c,cell.r);
-  if(t){sel=t;buildType=null;}
-  else if(buildType){if(!placeTower(cell.c,cell.r)&&!canBuild(cell.c,cell.r))buildType=null;}
+  if(t){sel=t;buildType=null;pending=null;}
+  else if(buildType){
+    // Tapping the ghost again builds it; otherwise the ghost moves here and
+    // follows the finger until it lifts.
+    tapPending=!!pending&&pending.c===cell.c&&pending.r===cell.r;
+    pending=cell;dragging=true;
+    try{cv.setPointerCapture(ev.pointerId);}catch(e){}
+  }
   else sel=null;
   refreshUI();
 });
-cv.addEventListener('pointermove',ev=>{if(ev.pointerType==='mouse')hover=cellAt(ev.clientX,ev.clientY);});
+cv.addEventListener('pointermove',ev=>{
+  const cell=cellAt(ev.clientX,ev.clientY);
+  if(ev.pointerType==='mouse')hover=cell;
+  if(dragging&&cell&&pending&&(cell.c!==pending.c||cell.r!==pending.r)){pending=cell;tapPending=false;refreshUI();}
+});
+function endDrag(ev){
+  if(!dragging)return;
+  dragging=false;
+  if(tapPending&&ev.type==='pointerup')confirmBuild();
+  tapPending=false;
+}
+cv.addEventListener('pointerup',endDrag);
+cv.addEventListener('pointercancel',endDrag);
 cv.addEventListener('pointerleave',()=>{hover=null;});
 
 addEventListener('keydown',e=>{
@@ -1093,13 +1255,13 @@ addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if(k===' '||k==='enter'){
     e.preventDefault();
-    if(state==='menu')startGame();else callWave();
+    if(state==='menu')startGame();else if(buildType&&pending)confirmBuild();else callWave();
     return;
   }
   if(state!=='play')return;
   const i=['1','2','3','4','5','6','7'].indexOf(k);
-  if(i>=0){const type=ORDER[i];buildType=buildType===type?null:type;sel=null;}
-  else if(k==='escape'){buildType=null;sel=null;}
+  if(i>=0)pickType(ORDER[i]);
+  else if(k==='escape'){buildType=null;sel=null;pending=null;}
   else if(k==='u')upgrade(sel);
   else if(k==='s'||k==='delete'||k==='backspace')sell(sel);
   refreshUI();
