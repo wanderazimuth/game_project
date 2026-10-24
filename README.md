@@ -85,6 +85,17 @@ up on the next page load — no restart needed.
 | `/<game>/` | A game, e.g. `/galaga/` |
 | `/scores` | High scores for all games |
 
+## On the phone
+
+Away from home the arcade is reached over Tailscale, which the
+[piServer](https://github.com/wanderazimuth/piServer) repo sets up, at
+`https://raspberrypi.<tailnet>.ts.net:10000` (your signed-in devices only). Open that in
+Chrome and choose **Add to Home screen > Install** to get the arcade as an app.
+
+The app saves every game, so the one-player games work with no connection at all; high scores
+and two-player games need the server. Each visit to the arcade page while connected refreshes the
+saved games. Installing needs HTTPS, so use the tailnet address, not http://arcade.lan.
+
 ## High scores
 
 Scores are saved to `game-server/scores.json`, keeping the top 10 per game.
@@ -119,6 +130,7 @@ only its builder can upgrade or sell it. Player 1 saves the team score.
 game_project/
 ├── game-server/
 │   └── server.py        # web server, landing page, scores, co-op relay
+├── app/                 # the installable app: manifest, icons, offline service worker
 ├── avalanche/index.html
 ├── brick-runner/index.html
 ├── dungeon-runner/index.html
@@ -141,7 +153,8 @@ game_project/
    "my-game": ("my-game", "My Game", "One-line description"),
    ```
 
-3. Restart the server. The game appears on the landing page.
+3. Restart the server. The game appears on the landing page, and the app saves it for offline
+   play (it needs to be a single `index.html` for that).
 
 To use the high-score board, have the game `POST` to `/scores/my-game` when
 a round ends.

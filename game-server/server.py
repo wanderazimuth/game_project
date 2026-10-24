@@ -28,6 +28,25 @@ GAMES = {
     "fish-off": ("fish-off", "Fish Off", "2 players, 2 phones — catch the most fish in 90 seconds"),
 }
 
+# What makes the arcade an installable app: url_path -> (file in app/, content type).
+APP_DIR = os.path.join(GAMES_DIR, "app")
+APP_FILES = {
+    "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
+    "/sw.js": ("sw.js", "text/javascript; charset=utf-8"),
+    "/icon-192.png": ("icon-192.png", "image/png"),
+    "/icon-512.png": ("icon-512.png", "image/png"),
+}
+
+
+def app_file(path):
+    name, content_type = APP_FILES[path]
+    with open(os.path.join(APP_DIR, name), "rb") as f:
+        data = f.read()
+    if name == "sw.js":
+        # The service worker saves every game for offline play; it gets the list from GAMES.
+        data = data.replace(b"/*GAMES*/[]", json.dumps(list(GAMES)).encode())
+    return data, content_type
+
 # Games played by two people on separate devices; the All Scores page lists
 # them in their own section.
 TWO_PLAYER_GAMES = {"brick-runner", "magma-runner", "fish-off", "td"}
@@ -73,6 +92,9 @@ LANDING_PAGE_TEMPLATE = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Game Arcade</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0a0a1a">
+<link rel="icon" href="/icon-192.png">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -142,6 +164,10 @@ h1 {
 <p class="subtitle">Choose a game</p>
 <div class="games">
 {cards}</div>
+<script>
+// Installable app that plays offline. Browsers only allow it over HTTPS (the tailnet name), not http://arcade.lan.
+if ("serviceWorker" in navigator && isSecureContext) navigator.serviceWorker.register("/sw.js").catch(() => {});
+</script>
 </body>
 </html>
 """
@@ -387,6 +413,15 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
             data = json.dumps(get_scores(game)).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+
+        if self.path.split("?")[0] in APP_FILES:
+            data, content_type = app_file(self.path.split("?")[0])
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
             return
