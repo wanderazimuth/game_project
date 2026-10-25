@@ -51,6 +51,7 @@ button{font:inherit;cursor:pointer;border:none}
 .nbBtns2{display:flex;flex-direction:column;gap:6px}
 .nbBtns2 .big{height:40px;padding:0 14px}
 .big.alt{background:#cbbff0;color:#2a1a50}
+.big.ring{background:#ff8fb8;color:#4a0020}
 .nbNote{color:#7a6a9a;font-size:13px;margin:4px 2px 10px}
 #goals{position:fixed;left:8px;top:58px;z-index:4;background:rgba(40,30,70,.85);color:#fff;border-radius:12px;padding:8px 11px;
   font-size:13px;width:min(290px,calc(100vw - 16px));display:none;cursor:pointer}
@@ -180,6 +181,21 @@ function star(x,y,r,c){
 // ── Furniture ────────────────────────────────────────────────────────────────
 // Each draw function paints the item with its bottom-left corner at (x,y).
 const ITEMS={
+  crib:{n:'Crib',w:72,h:64,c:'#fd79a8',act:'crib',draw(x,y,w,h,c,it,T){
+    const cx=x+w/2;
+    L(cx,y-h,cx,y-h+10,'#999',1.5);L(cx-14,y-h+10,cx+14,y-h+10,'#999',1.5);
+    for(const [k,col] of [[-14,'#f1c40f'],[0,'#3498db'],[14,'#e74c3c']])star(cx+k,y-h+16+Math.sin(T*2+k)*1.5,4,col);
+    R(x+2,y-46,5,46,shade(c,-20));R(x+w-7,y-46,5,46,shade(c,-20));
+    R(x+7,y-20,w-14,6,'#fff');
+    if(!visiting)S.kids.filter(k=>S.day-k.born<2).slice(0,2).forEach((k,i)=>{   // babies asleep in the crib
+      const bx=x+18+i*28;
+      E(bx,y-26,7,7,SKINS[k.look.skin]);E(bx-2,y-31,5,3,HAIRC[k.look.hairC]);
+      L(bx-3,y-26,bx-1,y-26,'#333',1);L(bx+2,y-26,bx+4,y-26,'#333',1);
+      RR(bx+4,y-30,20,10,4,'#9ec9ff');
+    });
+    for(let i=0;i<8;i++)R(x+9+i*7.5,y-44,2.5,24,c);
+    R(x+2,y-46,w-4,5,c);R(x+2,y-16,w-4,5,c);
+  }},
   bed:{n:'Bed',w:120,h:62,c:'#3498db',act:'sleep',draw(x,y,w,h,c){
     const wood='#8d5a3b';
     RR(x,y-h,13,h,4,wood);R(x+w-10,y-40,10,40,wood);
@@ -522,7 +538,7 @@ const ITEMS={
   }},
 };
 const CATALOG=['swing','slide','sandbox','pool','grill','picnic','flowers','tree','campfire','doghouse','birdbath','treehouse','rocket',
-  'arcade','trampoline','disco','goldtoilet','bed','sofa','armchair','chair','table','desk','tv','lamp','plant','bookshelf','fridge','stove','sink',
+  'arcade','trampoline','disco','goldtoilet','bed','crib','sofa','armchair','chair','table','desk','tv','lamp','plant','bookshelf','fridge','stove','sink',
   'tub','toilet','piano','fireplace','rug','dresser','toybox','dog','cat','tank','window','picture','clock','shelf','mirror','chandelier'];
 
 // ── The player ───────────────────────────────────────────────────────────────
@@ -559,6 +575,7 @@ const TASKS={
   yard:{txt:'Play in the backyard',acts:['yard'],has:['swing','slide','sandbox','pool','treehouse','rocket'],need:'a swing, slide or pool in the backyard',eve:true},
   visit:{txt:'Visit a neighbor 🏘️',acts:['visit'],has:[],eve:true},
   host:{txt:'Have a friend over 🔔',acts:['host'],has:[],eve:true},
+  family:{txt:'Spend time with your family 💕',acts:['family'],has:[],eve:true},
   sleep:{txt:'Go to bed',acts:['sleep'],has:['bed'],need:'a bed',eve:true},
 };
 const CARS=[{n:'Car',price:0},{n:'Truck',price:60},{n:'Sports car',price:90}];
@@ -684,7 +701,7 @@ function load(){
 }
 let saveTimer=0;
 let visiting=null;   // {id,name,home,pos,npc} while you're at someone else's house
-const PERSONAL=['look','name','tasks','coins','day','owned','night','car'];   // yours, wherever you are
+const PERSONAL=['look','name','tasks','coins','day','owned','night','car','hearts','heartDay','spouse','kids'];   // yours, wherever you are
 const myHouse=()=>visiting?{...visiting.home,...Object.fromEntries(PERSONAL.map(k=>[k,S[k]]))}:S;
 const clean=items=>items.map(({id,vx,happy,...k})=>k);
 function saveNow(){
@@ -713,7 +730,7 @@ const loaded=load();
 let S=loaded||newHome();
 S.items.forEach(fill);
 // older saves are from before the daily routine
-S.look.job=S.look.job||0;S.coins=S.coins||0;S.day=S.day||1;S.owned=S.owned||[];S.car=S.car||{m:0,c:CARC[0]};
+S.look.job=S.look.job||0;S.kids=S.kids||[];S.hearts=S.hearts||{};S.heartDay=S.heartDay||{};S.coins=S.coins||0;S.day=S.day||1;S.owned=S.owned||[];S.car=S.car||{m:0,c:CARC[0]};
 
 const player={f:S.pf||0,x:S.px||500,y:0,dir:1,walk:0,moving:false,path:[],act:null,say:null,climb:null};
 if(player.f>=S.floors)player.f=0;
@@ -764,7 +781,8 @@ function setMode(m){
   }
   if(m==='build')buildTray();
 }
-const go=m=>()=>{if(drive||work)return toast('Finish your work day first!');
+const busy=()=>drive||work||fade||rocketing()||wedding;
+const go=m=>()=>{if(drive||work)return toast('Finish your work day first!');if(wedding)return;
   if(m==='build'&&visiting)return toast('You can only build at your own house — tap 🏠 Go home first',3000);if(rocketing())return toast('Wait for the rocket to land!');setMode(m)};
 $('mBuild').onclick=go('build');
 $('mMe').onclick=go('me');
@@ -982,7 +1000,7 @@ addEventListener('keydown',e=>{
   if(mode==='build'&&e.code==='Escape'){selected=null;tool=null;buildTray()}
   if(mode!=='play')return;
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();
-  if(player.climb||drive||fade||rocketing())return;
+  if(player.climb||busy())return;
   if(e.code==='ArrowUp'||e.code==='KeyW'){
     if(player.f<S.floors-1&&player.x>0&&player.x<MINX+40){standUp();player.path=[{walk:WALL+16},{climb:1}]}
   }
@@ -1015,11 +1033,11 @@ function routeTo(f,x,item){
 const maxX=f=>f===0?OUT_X:HW-WALL-16;   // only the ground floor has doors: front door to the car
 const minX=f=>f===0?YARD_L+20:WALL+16;  // and back door to the backyard
 function playTap(wx,wy){
-  if(player.climb||drive||fade||rocketing())return;
+  if(player.climb||busy())return;
   if(wy>40||wy<-S.floors*FLOOR_H)return;
   if(wx>=CAR_X-6&&wx<=CAR_X+CAR_W+6&&wy>=CAR_Y-80&&wy<=10)return routeTo(0,CAR_X+60,'car');
   for(const n of people())
-    if(Math.abs(wx-n.x)<24&&wy>npcY(n)-100&&wy<npcY(n)+10){talkTo(n);return routeTo(0,n.x+(player.x<n.x?-44:44))}
+    if(Math.abs(wx-n.x)<24&&wy>npcY(n)-100*(n.scale||1)&&wy<npcY(n)+10){talkTo(n);return routeTo(0,n.x+(player.x<n.x?-44:44))}
   const it=hit(wx,wy,6);
   if(it&&ITEMS[it.t].act){
     const d=ITEMS[it.t];
@@ -1043,6 +1061,15 @@ function use(it){
   const nm=S.name||'you';
   player.dir=1;
   switch(d.act){
+    case 'crib':{
+      const babies=S.kids.filter(k=>S.day-k.born<2);
+      if(visiting)say('What a cute crib!');
+      else if(babies.length){say(`Shh… ${babies[0].name} is sleeping 😴`);emit('💤',cx,top);taskEvent('family')}
+      else if(!S.spouse)say('A crib for a baby someday 👶');
+      else if(S.kids.length>=4)say('Four kids is plenty! 😄');
+      else haveBaby();
+      break;
+    }
     case 'sleep':{
       player.act={kind:'sleep',it};
       const rest=S.tasks.filter(t=>!t.done&&t.id!=='sleep');
@@ -1113,7 +1140,7 @@ const hasFor=id=>{const h=myHouse();return !TASKS[id].has.length||h.items.some(i
 function newTasks(){
   // prefer tasks the house has furniture for; the rest tell you what to build
   const pick=(ids,n)=>{const sh=ids.sort(()=>Math.random()-.5);return [...sh.filter(hasFor),...sh.filter(id=>!hasFor(id))].slice(0,n)};
-  return ['breakfast',...pick(['wash','dress'],1),'work',...pick(['pet','plant','relax','dinner','bath','lights','yard','visit','host'],2),'sleep'].map(id=>({id,done:false}));
+  return ['breakfast',...pick(['wash','dress'],1),'work',...pick(['pet','plant','relax','dinner','bath','lights','yard','visit','host',...(S.spouse?['family']:[])],2),'sleep'].map(id=>({id,done:false}));
 }
 if(!S.tasks)S.tasks=newTasks();
 const workDone=()=>S.tasks.some(t=>t.id==='work'&&t.done);
@@ -1244,7 +1271,7 @@ const MADE_UP=[
      ['bookshelf',1,96],['armchair',1,176],['lamp',1,248],['window',1,190,80],['bed',1,340,,'#e84393'],['dresser',1,470],['mirror',1,560,82],['plant',1,566],
      ['toilet',1,660],['sink',1,712],['tub',1,822],['shelf',1,820,120],
      ['tree',0,-560],['flowers',0,-440],['flowers',0,-345,,'#9b59b6'],['picnic',0,-250],['birdbath',0,-110]]},
-  {id:'max',name:'Captain Max',emoji:'🚀',blurb:'Space fan with a rocket, a pool and an arcade',
+  {id:'max',name:'Captain Max',marry:true,emoji:'🚀',blurb:'Space fan with a rocket, a pool and an arcade',
    hi:['Welcome aboard! 🚀','Have you tried my rocket? It goes to the moon!','Last one in the pool is a space potato!'],
    guest:['Your house needs a rocket! 🚀','Cool house! Is that an arcade?'],
    look:{skin:3,hair:4,hairC:9,eyeC:2,top:1,topC:5,bottom:0,bottomC:11,shoeC:10,hat:1,hatC:0,glasses:2,job:5},
@@ -1255,7 +1282,7 @@ const MADE_UP=[
      ['bookshelf',1,96,,'#2d3436'],['trampoline',1,176],['bed',1,340,,'#2c3e8f'],['dresser',1,470,,'#2d3436'],['lamp',1,560],['window',1,380,80],
      ['toilet',1,660],['sink',1,712],['mirror',1,730,82],['tub',1,822],
      ['rocket',0,-560],['pool',0,-460],['trampoline',0,-280],['campfire',0,-150]]},
-  {id:'lily',name:'Auntie Lily',emoji:'🐾',blurb:'The vet next door — her house is full of pets',
+  {id:'lily',name:'Dr. Lily',marry:true,emoji:'🐾',blurb:'The vet next door — her house is full of pets',
    hi:['Hi! Meet my pets — I have six! 🐶🐱','Pet the dogs, they love it!','Can you find all three of my cats? 🐱','Biscuit, no jumping on the sofa!'],
    guest:['Where are your pets? 🐾','I left my dogs at home — they say hi!'],
    look:{skin:2,hair:2,hairC:1,eyeC:2,top:0,topC:4,bottom:0,bottomC:6,shoeC:11,hat:0,hatC:0,glasses:0,job:3},
@@ -1268,7 +1295,7 @@ const MADE_UP=[
      ['bed',1,340,,'#27ae60'],['dog',1,470,,'#2d3436'],['dresser',1,540],['window',1,380,80],
      ['toilet',1,660],['sink',1,712],['mirror',1,730,82],['tub',1,822],
      ['treehouse',0,-570,,'#27ae60'],['doghouse',0,-410,,'#3498db'],['dog',0,-320,,'#ecf0f1'],['sandbox',0,-250],['birdbath',0,-146]]},
-  {id:'kai',name:'Coach Kai',emoji:'⚽',blurb:'Sporty neighbor with trampolines, a slide and a pool',
+  {id:'kai',name:'Coach Kai',marry:true,emoji:'⚽',blurb:'Sporty neighbor with trampolines, a slide and a pool',
    hi:['Hey champ! Ready to play? 💪','Race you to the trampoline!','Try my slide — it is super fast!','Drink some water and keep moving! 🥤'],
    guest:['Race you around the house! 🏃','Nice place! Got a trampoline?'],
    look:{skin:2,hair:0,hairC:0,eyeC:0,top:0,topC:0,bottom:1,bottomC:11,shoeC:10,hat:1,hatC:5,glasses:0,job:4},
@@ -1290,23 +1317,28 @@ function showVisitUI(){
   const tag=$('visitTag');tag.style.display=visiting&&mode==='play'?'block':'none';tag.textContent=visiting?'Visiting '+visiting.name:'';
 }
 $('nbClose').onclick=()=>{nbEl.style.display='none'};
-$('nbHome').onclick=()=>{if(!(drive||fade||rocketing()))travel(null)};
+$('nbHome').onclick=()=>{if(!busy())travel(null)};
 $('nbOpen').onclick=async()=>{
-  if(drive||fade||rocketing())return;
+  if(busy())return;
   nbEl.style.display='flex';
-  const row=(emoji,name,sub,go,ask)=>{
+  const row=(emoji,name,sub,go,ask,extra)=>{
     const d=document.createElement('div');d.className='nbRow';
     d.innerHTML=`<span style="font-size:30px">${emoji}</span><span class="who"></span>`;
     d.querySelector('.who').append(name,Object.assign(document.createElement('small'),{textContent:sub}));
     const btns=document.createElement('div');btns.className='nbBtns2';
-    for(const [label,fn] of [['Visit',go],['Invite',ask]]){
-      if(label==='Invite'&&visiting)continue;   // guests come to your own house
-      const b=document.createElement('button');b.className='big'+(label==='Invite'?' alt':'');b.textContent=label;b.onclick=fn;btns.appendChild(b);
+    for(const [label,fn,cls] of [['Visit',go,''],['Invite',ask,' alt'],...(extra||[])]){
+      if(!fn||(label==='Invite'&&visiting))continue;   // guests come to your own house
+      const b=document.createElement('button');b.className='big'+cls;b.textContent=label;b.onclick=fn;btns.appendChild(b);
     }
     d.appendChild(btns);nbList.appendChild(d);
   };
   nbList.innerHTML='';
-  for(const n of MADE_UP)row(n.emoji,n.name,n.blurb,()=>travel(n),()=>invite(n));
+  for(const n of MADE_UP){
+    if(S.spouse&&S.spouse.id===n.id){row(n.emoji,n.name,'💍 Married to you — lives at your house');continue}
+    const h=S.hearts[n.id]||0, hearts='❤️'.repeat(h)+'🤍'.repeat(5-h);
+    const canPropose=n.marry&&h>=5&&!S.spouse&&!visiting;
+    row(n.emoji,n.name,hearts+'  '+n.blurb,()=>travel(n),()=>invite(n),canPropose?[['💍 Propose',()=>propose(n),' ring']]:null);
+  }
   const note=Object.assign(document.createElement('div'),{className:'nbNote',textContent:'Looking for family houses…'});
   nbList.appendChild(note);
   try{
@@ -1336,7 +1368,7 @@ function travel(n){
         rooms:Array.from({length:MAX_FLOORS*ROOMS},(_,i)=>({...newRoomFallback(),...rooms[i]})),
         items:items.map(i=>fill({...i,c:i.c||undefined,on:false}))};
       for(const k of PERSONAL)S[k]=home[k];
-      visiting={id:n.id,name:n.name,home,pos,npc:{name:n.name,look:{...randomLook(),...n.look},x:HW-130,dir:-1,walk:0,vx:0,
+      visiting={id:n.id,name:n.name,home,pos,npc:{id:n.id,name:n.name,look:{...randomLook(),...n.look},x:HW-130,dir:-1,walk:0,vx:0,
         hi:n.hi||[`Hi ${home.name||'there'}! Welcome to my house!`,'Make yourself at home!','Want to see my backyard?'],greeted:false,say:null}};
     }else{
       const home=visiting.home;for(const k of PERSONAL)home[k]=S[k];
@@ -1346,20 +1378,21 @@ function travel(n){
     cam.init=false;showVisitUI();renderGoals();
     if(!visiting)save();
   },done(){
-    if(visiting){say('Knock knock! 🚪',2);taskEvent('visit')}else say('Home sweet home! 🏠',2);
+    if(visiting){say('Knock knock! 🚪',2);taskEvent('visit');addHeart(visiting.id,'meet')}else say('Home sweet home! 🏠',2);
   }};
 }
 function newRoomFallback(){return {w:WALLC[0],p:0,fl:0}}
 // Guests at your house: invited, dropping by, or family who visited your house on their phone.
 const guests=[];
-const people=()=>visiting?[visiting.npc]:guests;
+const people=()=>visiting?[visiting.npc]:[...homePeople(),...guests];
 const npcY=n=>n.x>HW-WALL?CAR_Y:stand(0);
 let homeTime=0;
 function invite(g,msg){
   if(visiting)return toast('Go home first to have guests over');
-  if(drive||work||fade||rocketing())return;
+  if(busy())return;
   if(guests.length>=3)return toast('Your house is full of guests!');
   if(guests.some(x=>x.id===g.id))return toast(g.name+' is already here!');
+  if(S.spouse&&S.spouse.id===g.id)return toast(g.name+' already lives here! 💕');
   nbEl.style.display='none';
   tone(784,.25,'sine',.12);tone(622,.45,'sine',.12,.25);
   const lines=[...(g.guest||[]),`Your house is so cool, ${S.name||'friend'}!`,'I love what you did with this room!','Can we play in your backyard?'];
@@ -1370,7 +1403,7 @@ function invite(g,msg){
     S.gifts={...S.gifts,[g.id]:S.day};S.coins+=5;note+='  They brought you 🪙5!';renderGoals();save();
   }
   toast(note,3500);
-  setTimeout(()=>taskEvent('host'),3800);
+  setTimeout(()=>{taskEvent('host');addHeart(g.id,'meet')},3800);
 }
 // Family who visited your house on their own phone come by on yours.
 async function checkVisits(){
@@ -1388,6 +1421,59 @@ setInterval(checkVisits,20000);setTimeout(checkVisits,4000);
 function talkTo(n){
   n.say={txt:n.hi[Math.random()*n.hi.length|0],t:3};n.vx=0;n.dir=player.x<n.x?-1:1;
   tone(660,.08,'triangle',.07);tone(880,.1,'triangle',.07,.08);
+  if(n.family)taskEvent('family');else addHeart(n.id,'chat');
+}
+// Made-up neighbors become better friends: one heart a day for chatting, one for a visit either way.
+function addHeart(id,kind){
+  const n=MADE_UP.find(m=>m.id===id);
+  if(!n||(S.spouse&&S.spouse.id===id)||S.heartDay[id+kind]===S.day||(S.hearts[id]||0)>=5)return;
+  S.heartDay[id+kind]=S.day;S.hearts[id]=(S.hearts[id]||0)+1;save();
+  const h=S.hearts[id];
+  setTimeout(()=>toast(h<5?`❤️ You and ${n.name} are better friends!  ${'❤️'.repeat(h)}${'🤍'.repeat(5-h)}`
+    :n.marry&&!S.spouse?`💍 You and ${n.name} are best friends! You could propose in 🏘️ Neighbors…`:`❤️ You and ${n.name} are best friends!`,3500),1200);
+}
+// ── Marriage and kids ────────────────────────────────────────────────────────
+let wedding=null;   // {t, partner} while the wedding plays
+function propose(n){
+  if(busy()||S.spouse)return;
+  if(!confirm(`Ask ${n.name} to marry you? 💍`))return;
+  nbEl.style.display='none';guests.length=0;
+  wedding={t:0,partner:n};
+  goalsEl.style.display=$('nbBtns').style.display='none';toastEl.style.opacity=0;   // the wedding gets the whole screen
+  [523,659,784,1047,784,1047].forEach((f,i)=>tone(f,.35,'triangle',.09,i*.3));
+}
+function updateWedding(dt){
+  if(!wedding)return;
+  wedding.t+=dt;
+  if(wedding.t>=6.5){
+    const n=wedding.partner;wedding=null;goalsEl.style.display='block';showVisitUI();
+    S.spouse={id:n.id,name:n.name,look:{...n.look},since:S.day};save();
+    toast(`💒 You and ${n.name} got married! ${n.name} moved in with you.`,4000);
+  }
+}
+const KID_NAMES=['Sunny','Milo','Pip','Rosie','Leo','Bea','Ollie','Luna','Finn','Daisy','Max Jr.','Ivy'];
+function haveBaby(){
+  if(!confirm(`Have a baby with ${S.spouse.name}? 👶`))return;
+  const name=((prompt("What's the baby's name?")||'').trim()||KID_NAMES[Math.random()*KID_NAMES.length|0]).slice(0,12);
+  const a=S.look,b=S.spouse.look,p=()=>Math.random()<.5?a:b;
+  S.kids.push({name,born:S.day,look:{...randomLook(),skin:p().skin,hairC:p().hairC,eyeC:p().eyeC,hat:0,glasses:0}});
+  save();emit('💕',player.x,player.y-110,3);emit('👶',player.x,player.y-120,1,28);
+  [784,988,1175].forEach((f,i)=>tone(f,.25,'sine',.08,i*.15));
+  toast(`👶 Welcome to the family, ${name}! In 2 days ${name} will be big enough to walk around.`,4500);
+}
+// your spouse and grown-up kids live at home, walking around like guests do
+const residents=new Map();
+function homePeople(){
+  const list=[];
+  const add=(key,make)=>{if(!residents.has(key))residents.set(key,make());list.push(residents.get(key))};
+  if(S.spouse)add('spouse',()=>({id:S.spouse.id,name:S.spouse.name,look:{...randomLook(),...S.spouse.look},family:true,
+    x:MINX+60+Math.random()*(HW-MINX-160),dir:1,walk:0,vx:0,greeted:true,
+    hi:[`Love you, ${S.name||'dear'}! 💕`,'How was your day?','Want to cook dinner together?','Our house is the best! 🏡',
+      ...(S.kids.length?['The kids are so big now!']:['Should we get a crib? 👶'])]}));
+  S.kids.forEach((k,i)=>{if(S.day-k.born>=2)add('kid'+i+k.name,()=>({id:'kid'+i,name:k.name,look:k.look,family:true,scale:.7,
+    x:MINX+40+Math.random()*(HW-MINX-120),dir:1,walk:0,vx:0,greeted:true,
+    hi:[`I love you, ${S.name||'Mom'}!`,'Can we play in the backyard?','Look how high I can jump! 🦘',"What's for dinner?",'Read me a story? 📖','Can we go to the moon? 🚀']}))});
+  return list;
 }
 function updateNpc(n,dt){
   if(n.say&&(n.say.t-=dt)<=0)n.say=null;
@@ -1413,11 +1499,11 @@ function updateNpc(n,dt){
 // ── Update ───────────────────────────────────────────────────────────────────
 const SPEED=170;
 function update(dt,T){
-  updateTrip(dt);
+  updateTrip(dt);updateWedding(dt);
   const st=player.f!==0?stand(player.f):player.x>HW-WALL?CAR_Y:player.x<WALL?YARD_Y:stand(0);   // a step down outside
   if(!player.climb)player.y=st;
   player.moving=false;
-  if(mode==='play'&&!drive&&!fade&&!rocketing()){
+  if(mode==='play'&&!busy()){
     let kx=(keys.ArrowRight||keys.KeyD?1:0)-(keys.ArrowLeft||keys.KeyA?1:0);
     if(kx&&!player.climb){player.path=[];standUp();
       player.x=Math.max(minX(player.f),Math.min(maxX(player.f),player.x+kx*SPEED*dt));player.dir=kx;player.moving=true}
@@ -1469,7 +1555,7 @@ function update(dt,T){
   for(let i=guests.length-1;i>=0;i--)if(guests[i].gone)guests.splice(i,1);
   if(mode==='play'&&!visiting&&!drive&&!work&&!fade&&!guests.length){   // once a day a neighbor may drop by
     homeTime+=dt;
-    if(homeTime>75&&S.dropIn!==S.day){S.dropIn=S.day;const n=MADE_UP[Math.random()*MADE_UP.length|0];invite(n,'🔔 Surprise! '+n.name+' dropped by!')}
+    if(homeTime>75&&S.dropIn!==S.day){S.dropIn=S.day;const pool=MADE_UP.filter(m=>!(S.spouse&&S.spouse.id===m.id)),n=pool[Math.random()*pool.length|0];invite(n,'🔔 Surprise! '+n.name+' dropped by!')}
   }
   // pets wander while you play
   for(const it of S.items){
@@ -1740,7 +1826,7 @@ function draw(T){
   for(const it of vis)if(ITEMS[it.t].rug)drawItem(it,T);
   for(const it of vis)if(ITEMS[it.t].wall)drawItem(it,T);
   for(const it of vis)if(!ITEMS[it.t].wall&&!ITEMS[it.t].rug&&!(inPlayer(it)&&/bath|swim/.test(player.act.kind)))drawItem(it,T);
-  for(const n of people())drawPlayer(n.look,n.x,npcY(n),{dir:n.dir,walk:n.walk,T});
+  for(const n of people()){X.save();X.translate(n.x,npcY(n));X.scale(n.scale||1,n.scale||1);drawPlayer(n.look,0,0,{dir:n.dir,walk:n.walk,T});X.restore()}
   drawPlayerAt(T);
   nightShade(T);
   drawCar(carX(),CAR_Y,T,!!drive);
@@ -1770,7 +1856,7 @@ function draw(T){
   }else if(player.say)drawBubble(player.say.txt,sx,sy);
   else if(mode==='play'&&S.name)nameTag(S.name,sx,sy);
   if(mode==='play')for(const n of people()){
-    const [nx,ny]=toScreen(n.x,npcY(n)-100);
+    const [nx,ny]=toScreen(n.x,npcY(n)-100*(n.scale||1));
     if(n.say)drawBubble(n.say.txt,nx,ny);else nameTag(n.name,nx,ny);
   }
   // selected-item toolbar
@@ -1786,6 +1872,30 @@ function draw(T){
     R(0,0,W,H,`rgba(8,8,24,${Math.min(.95,a)})`);
   }
   if(rocketing()&&player.act.t>5&&player.act.t<8.5)drawMoon(player.act.t,T);
+  if(wedding)drawWedding(wedding.t,T);
+}
+function drawWedding(t,T){
+  X.globalAlpha=Math.max(0,Math.min(1,t/.5,(6.5-t)/.5));
+  const g=X.createLinearGradient(0,0,0,H);g.addColorStop(0,'#ffe4f0');g.addColorStop(1,'#d8f3dc');X.fillStyle=g;X.fillRect(0,0,W,H);
+  const s=Math.min(2,H/380), cx=W/2, gy=H*.78;
+  R(0,gy,W,H-gy,'#8fd17f');
+  // flower arch
+  X.lineWidth=10*s;X.strokeStyle='#fff';X.beginPath();X.arc(cx,gy-90*s,80*s,Math.PI,0);X.stroke();
+  R(cx-85*s,gy-90*s,10*s,90*s,'#fff');R(cx+75*s,gy-90*s,10*s,90*s,'#fff');
+  for(let i=0;i<=12;i++){const a=Math.PI+i*Math.PI/12;E(cx+Math.cos(a)*80*s,gy-90*s+Math.sin(a)*80*s,7*s,7*s,['#ff6b9d','#ffd23f','#ff8fb8','#c39bff'][i%4])}
+  // the two of you
+  X.save();X.translate(cx-30*s,gy);X.scale(s,s);drawPlayer(S.look,0,0,{dir:1,T});X.restore();
+  X.save();X.translate(cx+30*s,gy);X.scale(s,s);drawPlayer({...randomLook(),...wedding.partner.look},0,0,{dir:-1,T});X.restore();
+  // hearts float up, confetti falls
+  for(let i=0;i<14;i++){
+    const k=(T*.25+i/14)%1;X.font=`${16+i%3*6}px sans-serif`;X.textAlign='center';
+    X.fillText('💕',cx+Math.sin(i*2.3+T)*W*.35,gy-k*H*.8);
+  }
+  for(let i=0;i<40;i++){const fx=(i*97.3+T*30*(1+i%3))%W, fy=(i*53.1+T*80*(1+i%2))%H;R(fx,fy,5,8,['#ff6b9d','#ffd23f','#6bcBff','#7ee081'][i%4])}
+  const line2=(S.name||'You')+' & '+wedding.partner.name;
+  txt('💒 Just married!',W/2,H*.2,Math.min(30,W/12),'#fff');
+  txt(line2,W/2,H*.2+Math.min(40,W/9),Math.min(26,(W-30)/line2.length*1.8),'#fff');
+  X.globalAlpha=1;
 }
 function drawMoon(t,T){
   X.globalAlpha=Math.max(0,Math.min(1,(t-5)/.4,(8.5-t)/.4));
