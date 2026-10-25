@@ -181,7 +181,7 @@
             <span id="message"></span>
         </div>
         <canvas id="gameCanvas" width="800" height="500"></canvas>
-        <p class="info" id="statusText">Collect all the stars and reach the flag!</p>
+        <p class="info" id="statusText">Collect all the stars and reach the flag! Jump on monsters to stomp them.</p>
         <p class="controls" id="controlsText">Controls: Arrow Keys or WASD to move | SPACE to jump | R to restart</p>
         <button class="mode-btn" id="modeBtn">2 Player Co-op (connect another device)</button>
 
@@ -215,7 +215,7 @@
         const BRICK_HEIGHT = 25;
 
         // Game state
-        let player, remotePlayer, platforms, stars, finishFlag, waterLevel, collectedStars, gameState, currentLevel;
+        let player, remotePlayer, platforms, stars, monsters, finishFlag, waterLevel, collectedStars, gameState, currentLevel;
         let playerStartPos;
 
         // Co-op networking state. Each device fully simulates only its own
@@ -315,6 +315,9 @@
                         starCountEl.textContent = collectedStars;
                     }
                     break;
+                case 'stomp':
+                    if (monsters[msg.i]) monsters[msg.i].dead = true;
+                    break;
                 case 'won':
                     gameState = 'won';
                     statusTextEl.textContent = currentLevel < levels.length - 1
@@ -348,6 +351,7 @@
                     {x: 470, y: 270},
                     {x: 610, y: 240},
                 ],
+                monsters: [{p: 3}],
                 playerStart: {x: 50, y: 350},
                 flagPos: {x: 740, y: 210}
             },
@@ -368,6 +372,7 @@
                     {x: 570, y: 280},
                     {x: 690, y: 230},
                 ],
+                monsters: [{p: 1}, {p: 4}],
                 playerStart: {x: 40, y: 370},
                 flagPos: {x: 725, y: 230}
             },
@@ -392,6 +397,7 @@
                     {x: 530, y: 200},
                     {x: 610, y: 160},
                 ],
+                monsters: [{p: 3}, {p: 6}, {bat: {x: 280, y: 250, range: 120}}],
                 playerStart: {x: 30, y: 380},
                 flagPos: {x: 725, y: 120}
             },
@@ -415,6 +421,7 @@
                     {x: 470, y: 230},
                     {x: 690, y: 130},
                 ],
+                monsters: [{p: 2}, {p: 4}, {bat: {x: 480, y: 150, range: 150}}],
                 playerStart: {x: 40, y: 370},
                 flagPos: {x: 715, y: 130}
             },
@@ -435,6 +442,7 @@
                     {x: 645, y: 310},
                     {x: 740, y: 260},
                 ],
+                monsters: [{p: 1}, {p: 3}, {p: 4}],
                 playerStart: {x: 40, y: 380},
                 flagPos: {x: 735, y: 260}
             },
@@ -460,6 +468,7 @@
                     {x: 700, y: 190},
                     {x: 710, y: 90},
                 ],
+                monsters: [{p: 3}, {p: 5}, {bat: {x: 300, y: 300, range: 100}}, {bat: {x: 600, y: 110, range: 80}}],
                 playerStart: {x: 40, y: 380},
                 flagPos: {x: 725, y: 90}
             }
@@ -622,6 +631,15 @@
                 angle: Math.random() * Math.PI * 2
             }));
 
+            // Slimes walk back and forth along their platform; bats fly side to side, bobbing
+            monsters = (level.monsters || []).map(m => {
+                if (m.bat) return { type: 'bat', x: m.bat.x, y: m.bat.y, baseY: m.bat.y, minX: m.bat.x - m.bat.range,
+                    maxX: m.bat.x + m.bat.range, vx: 1.6, width: 30, height: 18, t: Math.random() * 6, dead: false };
+                const p = platforms[m.p];
+                return { type: 'slime', x: p.x + p.width / 2 - 14, y: p.y - 22, minX: p.x, maxX: p.x + p.width - 28,
+                    vx: 0.9, width: 28, height: 22, t: 0, dead: false };
+            });
+
             finishFlag = {
                 x: level.flagPos.x,
                 y: level.flagPos.y,
@@ -639,7 +657,7 @@
             messageEl.textContent = '';
             statusTextEl.textContent = (numPlayers === 2 && !peerConnected)
                 ? 'Waiting for Player 2 to join...'
-                : 'Collect all the stars and reach the flag!';
+                : 'Collect all the stars and reach the flag! Jump on monsters to stomp them.';
         }
 
         // Collision detection
@@ -743,6 +761,29 @@
                 }
             }
 
+            // Monsters
+            for (let i = 0; i < monsters.length; i++) {
+                const m = monsters[i];
+                if (m.dead) continue;
+                m.t += 0.08;
+                m.x += m.vx;
+                if (m.x < m.minX || m.x > m.maxX) { m.vx = -m.vx; m.x = Math.max(m.minX, Math.min(m.maxX, m.x)); }
+                if (m.type === 'bat') m.y = m.baseY + Math.sin(m.t) * 30;
+                if (!rectCollision(player, m)) continue;
+                if (player.vy > 0 && player.y + player.height - player.vy <= m.y + 8) {
+                    // Stomp! Bounce off and the monster poofs
+                    m.dead = true;
+                    player.vy = JUMP_FORCE * 0.7;
+                    runScore += 100;
+                    messageEl.textContent = 'Stomp! +100';
+                    messageEl.style.color = '#ffd700';
+                    wsSend({ type: 'stomp', i });
+                } else {
+                    hitByMonster();
+                    return;
+                }
+            }
+
             // Check finish - in co-op, both players must be at the flag together
             const coopActive = numPlayers === 2 && peerConnected;
             const remoteAtFlag = !coopActive || rectCollision(
@@ -793,6 +834,24 @@
             if (coopActive && netTick % 3 === 0) {
                 wsSend({ type: 'pos', x: player.x, y: player.y });
             }
+        }
+
+        // A monster touched the player from the side: same as falling in the water
+        function hitByMonster() {
+            if (numPlayers === 2 && peerConnected) {
+                player.x = playerStartPos.x;
+                player.y = playerStartPos.y;
+                player.vx = 0;
+                player.vy = 0;
+                player.onGround = false;
+                statusTextEl.textContent = 'A monster got you - back to the start. Jump on them!';
+                wsSend({ type: 'pos', x: player.x, y: player.y });
+            } else {
+                gameState = 'dead';
+                statusTextEl.textContent = 'A monster got you! Tap restart. (Tip: jump on their heads!)';
+            }
+            messageEl.textContent = 'Ouch!';
+            messageEl.style.color = '#ff0000';
         }
 
         // Draw functions
@@ -926,6 +985,52 @@
             ctx.stroke();
         }
 
+        function drawMonster(m) {
+            if (m.dead) return;
+            const facing = m.vx > 0 ? 1 : -1;
+            if (m.type === 'slime') {
+                // A green blob that squishes as it walks
+                const squish = Math.sin(m.t * 3) * 2;
+                ctx.fillStyle = '#4caf50';
+                ctx.beginPath();
+                ctx.ellipse(m.x + 14, m.y + 13 - squish / 2, 14 + squish, 11 - squish / 2, 0, Math.PI, 0);
+                ctx.lineTo(m.x + 28 + squish, m.y + 22);
+                ctx.lineTo(m.x - squish, m.y + 22);
+                ctx.fill();
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.beginPath();
+                ctx.ellipse(m.x + 8, m.y + 7, 4, 2.5, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(m.x + 10 + facing * 3, m.y + 8, 5, 6);
+                ctx.fillRect(m.x + 17 + facing * 3, m.y + 8, 5, 6);
+                ctx.fillStyle = '#000';
+                ctx.fillRect(m.x + 12 + facing * 4, m.y + 10, 2, 3);
+                ctx.fillRect(m.x + 19 + facing * 4, m.y + 10, 2, 3);
+            } else {
+                // A purple bat, flapping
+                const flap = Math.sin(m.t * 6) * 8;
+                ctx.fillStyle = '#6c3483';
+                ctx.beginPath();
+                ctx.moveTo(m.x + 15, m.y + 9);
+                ctx.lineTo(m.x - 6, m.y + 2 - flap);
+                ctx.lineTo(m.x + 6, m.y + 14);
+                ctx.closePath();
+                ctx.moveTo(m.x + 15, m.y + 9);
+                ctx.lineTo(m.x + 36, m.y + 2 - flap);
+                ctx.lineTo(m.x + 24, m.y + 14);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = '#8e44ad';
+                ctx.beginPath();
+                ctx.ellipse(m.x + 15, m.y + 9, 9, 8, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#ff3b3b';
+                ctx.fillRect(m.x + 10, m.y + 6, 3, 3);
+                ctx.fillRect(m.x + 17, m.y + 6, 3, 3);
+            }
+        }
+
         function drawBackground() {
             // Sky gradient
             const gradient = ctx.createLinearGradient(0, 0, 0, waterLevel);
@@ -970,6 +1075,8 @@
 
             // Draw flag
             drawFlag();
+
+            for (const m of monsters) drawMonster(m);
 
             // Draw players
             if (gameState !== 'dead') {

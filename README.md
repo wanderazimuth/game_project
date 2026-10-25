@@ -12,7 +12,7 @@ server uses only the Python standard library.
 | Game | Description | Controls |
 |---|---|---|
 | **Galaga** | Classic space shooter | Arrow keys / A D to move, Space to fire |
-| **Brick Runner** | Fast-paced brick game — collect the stars. **2-player co-op** | Arrow keys / WASD to move, Space to jump, R to restart |
+| **Brick Runner** | Fast-paced brick game — collect the stars and stomp the slimes and bats. **2-player co-op** | Arrow keys / WASD to move, Space to jump, R to restart |
 | **Lava Drop** | Dodge asteroids raining from the sky | Arrow keys / A D to move |
 | **Magma Runner** | Jump across magma platforms above the lava. **2-player co-op** | Arrow keys / WASD to move, Space to jump, R to restart |
 | **Space Salvager** | Collect crystals for fuel through 20 waves of enemies | Arrow keys / WASD to move, Space to fire, E for epic weapon |
