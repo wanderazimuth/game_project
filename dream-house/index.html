@@ -547,12 +547,11 @@ function load(){
   return null;
 }
 let saveTimer=0;
-function save(){
+function saveNow(){
   clearTimeout(saveTimer);
-  saveTimer=setTimeout(()=>{
-    try{localStorage.setItem(SAVE_KEY,JSON.stringify({...S,items:S.items.map(({id,vx,happy,...k})=>k),px:player.x,pf:player.f}))}catch(e){}
-  },300);
+  try{localStorage.setItem(SAVE_KEY,JSON.stringify({...S,items:S.items.map(({id,vx,happy,...k})=>k),px:player.x,pf:player.f}))}catch(e){}
 }
+function save(){clearTimeout(saveTimer);saveTimer=setTimeout(saveNow,300)}
 const loaded=load();
 let S=loaded||newHome();
 S.items.forEach(fill);
@@ -1382,6 +1381,18 @@ function frame(now){
   else draw(T);
   requestAnimationFrame(frame);
 }
+// The installed app can stay open in the background for days. Coming back to it, reload if the
+// arcade has a newer Dream House (the house is saved first, so nothing is lost).
+const pageTime=Date.parse(document.lastModified);
+async function checkForUpdate(){
+  if(document.hidden||drive||work||fade||mode==='me')return;
+  try{
+    const r=await fetch(location.pathname,{method:'HEAD',cache:'no-store'});
+    if(r.ok&&Date.parse(r.headers.get('Last-Modified'))>pageTime+1000){saveNow();location.reload()}
+  }catch(e){}
+}
+addEventListener('visibilitychange',checkForUpdate);
+addEventListener('pageshow',e=>{if(e.persisted)checkForUpdate()});
 setMode(loaded?'play':'me');
 if(!loaded)toast('Welcome! First, make your player',3000);
 requestAnimationFrame(frame);
