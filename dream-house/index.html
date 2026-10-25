@@ -42,6 +42,10 @@ button{font:inherit;cursor:pointer;border:none}
 #nbBtns button{height:52px;padding:0 16px;border-radius:16px;background:rgba(40,30,70,.88);color:#fff;font-weight:800;font-size:16px}
 #visitTag{position:fixed;left:12px;bottom:28px;max-width:calc(100vw - 170px);overflow:hidden;text-overflow:ellipsis;z-index:4;background:#ffcf4a;color:#3a2a00;font-weight:800;
   font-size:14px;padding:6px 14px;border-radius:12px;display:none;white-space:nowrap}
+#choose{position:fixed;inset:0;z-index:8;background:rgba(20,15,40,.6);display:none;align-items:center;justify-content:center;padding:16px}
+#choose .modalIn{background:#fff;border-radius:20px;padding:18px;width:min(360px,100%)}
+#choose h2{color:#4a2a7a;margin-bottom:12px}
+#chB{display:flex;flex-direction:column;gap:8px}
 #nb{position:fixed;inset:0;z-index:8;background:rgba(20,15,40,.6);display:none;align-items:center;justify-content:center;padding:16px}
 #nbIn{background:#fff;border-radius:20px;padding:16px;width:min(420px,100%);max-height:80vh;overflow-y:auto;touch-action:pan-y}
 #nbIn h2{color:#4a2a7a;margin-bottom:10px}
@@ -112,6 +116,7 @@ button{font:inherit;cursor:pointer;border:none}
 <div id="goals"></div>
 <div id="nbBtns"><button id="nbOpen">🏘️ Neighbors</button><button id="nbHome">🏠 Go home</button></div>
 <div id="visitTag"></div>
+<div id="choose" class="modal"><div class="modalIn"><h2 id="chT"></h2><div id="chB"></div></div></div>
 <div id="nb"><div id="nbIn"><h2>🏘️ Visit a neighbor</h2><div id="nbList"></div><button class="big" id="nbClose">Close</button></div></div>
 <div id="me"><div id="meIn">
   <canvas id="preview"></canvas>
@@ -576,6 +581,7 @@ const TASKS={
   visit:{txt:'Visit a neighbor 🏘️',acts:['visit'],has:[],eve:true},
   host:{txt:'Have a friend over 🔔',acts:['host'],has:[],eve:true},
   family:{txt:'Spend time with your family 💕',acts:['family'],has:[],eve:true},
+  city:{txt:'Go to the city 🏙️',acts:['city'],has:[],eve:true},
   sleep:{txt:'Go to bed',acts:['sleep'],has:['bed'],need:'a bed',eve:true},
 };
 const CARS=[{n:'Car',price:0},{n:'Truck',price:60},{n:'Sports car',price:90}];
@@ -701,12 +707,13 @@ function load(){
 }
 let saveTimer=0;
 let visiting=null;   // {id,name,home,pos,npc} while you're at someone else's house
+let inCity=false, townsfolk=[], ride=null, movie=null;   // a trip to the city
 const PERSONAL=['look','name','tasks','coins','day','owned','night','car','hearts','heartDay','spouse','kids'];   // yours, wherever you are
 const myHouse=()=>visiting?{...visiting.home,...Object.fromEntries(PERSONAL.map(k=>[k,S[k]]))}:S;
 const clean=items=>items.map(({id,vx,happy,...k})=>k);
 function saveNow(){
   clearTimeout(saveTimer);
-  const home=myHouse(), pos=visiting?visiting.pos:{px:player.x,pf:player.f};
+  const home=myHouse(), pos=visiting?visiting.pos:inCity?{px:CAR_X-16,pf:0}:{px:player.x,pf:player.f};
   try{localStorage.setItem(SAVE_KEY,JSON.stringify({...home,items:clean(home.items),...pos}))}catch(e){}
   if(!visiting)share();
 }
@@ -781,9 +788,10 @@ function setMode(m){
   }
   if(m==='build')buildTray();
 }
-const busy=()=>drive||work||fade||rocketing()||wedding;
+const busy=()=>drive||work||fade||rocketing()||wedding||ride||movie;
 const go=m=>()=>{if(drive||work)return toast('Finish your work day first!');if(wedding)return;
-  if(m==='build'&&visiting)return toast('You can only build at your own house — tap 🏠 Go home first',3000);if(rocketing())return toast('Wait for the rocket to land!');setMode(m)};
+  if(m==='build'&&visiting)return toast('You can only build at your own house — tap 🏠 Go home first',3000);
+  if(m==='build'&&inCity)return toast('You can only build at home — tap your car to drive back',3000);if(rocketing())return toast('Wait for the rocket to land!');setMode(m)};
 $('mBuild').onclick=go('build');
 $('mMe').onclick=go('me');
 $('mPlay').onclick=go('play');
@@ -878,7 +886,7 @@ function buildRows(){
 }
 $('name').oninput=e=>{S.name=e.target.value.trim();save()};
 $('meRand').onclick=()=>{S.look={...randomLook(),job:S.look.job};save();buildRows()};
-$('meDone').onclick=()=>{setMode(S.items.length>6?'play':'build');if(mode==='build')toast('Now build your house! Pick something below, then tap a room',3500)};
+$('meDone').onclick=()=>{setMode(S.items.length>6||inCity||visiting?'play':'build');if(mode==='build')toast('Now build your house! Pick something below, then tap a room',3500)};
 function drawPreview(T){
   const dp=devicePixelRatio||1,w=prevC.clientWidth,h=prevC.clientHeight;
   if(prevC.width!==w*dp){prevC.width=w*dp;prevC.height=h*dp}
@@ -907,9 +915,10 @@ function camTarget(){
   }
   if(mode==='play'){
     const s=Math.max(fitS,Math.min(vh/(FLOOR_H*2.1),W/(ROOM_W*2)));
-    let x=drive?carX()+CAR_W/2:player.x, y=(drive?CAR_Y:player.y)-INT_H/2+10;
+    let x=drive?carX()+CAR_W/2:player.x, y=(drive?(inCity?0:CAR_Y):player.y)-INT_H/2+10;
+    const L0=inCity?-60:YARD_L-40, R0=inCity?CITY_W+60:OUT_X+90;
     const halfW=W/2/s;
-    if(!drive)x=OUT_X+90-(YARD_L-40)<=halfW*2?(YARD_L-40+OUT_X+90)/2:Math.max(YARD_L-40+halfW,Math.min(OUT_X+90-halfW,x));
+    if(!drive)x=R0-L0<=halfW*2?(L0+R0)/2:Math.max(L0+halfW,Math.min(R0-halfW,x));
     return {x,y,s,vy:viewTop+vh/2};
   }
   const s=fitS*zoom, cx=W<600?HW/2:HW/2+100, mx=Math.max(0,(HW+460)/2-W/2/s), my=Math.max(0,(botY-topY)/2-vh/2/s);
@@ -1002,14 +1011,15 @@ addEventListener('keydown',e=>{
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();
   if(player.climb||busy())return;
   if(e.code==='ArrowUp'||e.code==='KeyW'){
-    if(player.f<S.floors-1&&player.x>0&&player.x<MINX+40){standUp();player.path=[{walk:WALL+16},{climb:1}]}
+    if(!inCity&&player.f<S.floors-1&&player.x>0&&player.x<MINX+40){standUp();player.path=[{walk:WALL+16},{climb:1}]}
   }
   if(e.code==='ArrowDown'||e.code==='KeyS'){
-    if(player.f>0&&player.x>0&&player.x<MINX+40){standUp();player.path=[{walk:MINX+8},{climb:-1}]}
+    if(!inCity&&player.f>0&&player.x>0&&player.x<MINX+40){standUp();player.path=[{walk:MINX+8},{climb:-1}]}
   }
   if(e.code==='Space'||e.code==='KeyE'||e.code==='Enter'){
     if(player.act){standUp();return}
-    if(player.f===0&&Math.abs(player.x-(CAR_X+CAR_W/2))<CAR_W/2+20)return startWork();
+    if(player.f===0&&Math.abs(player.x-(carX()+CAR_W/2))<CAR_W/2+20)return carTapped();
+    if(inCity){const sh=CITY_SPOTS().find(c=>Math.abs(player.x-c.door)<60);if(sh)cityAction(sh.id);else say('Walk up to a shop!');return}
     let best=null,bd=60;
     for(const it of S.items){
       if(it.f!==player.f)continue;
@@ -1030,10 +1040,11 @@ function routeTo(f,x,item){
   if(item)path.push({use:item});
   standUp();player.path=path;
 }
-const maxX=f=>f===0?OUT_X:HW-WALL-16;   // only the ground floor has doors: front door to the car
-const minX=f=>f===0?YARD_L+20:WALL+16;  // and back door to the backyard
+const maxX=f=>inCity?CITY_W-20:f===0?OUT_X:HW-WALL-16;   // only the ground floor has doors: front door to the car
+const minX=f=>inCity?20:f===0?YARD_L+20:WALL+16;  // and back door to the backyard
 function playTap(wx,wy){
   if(player.climb||busy())return;
+  if(inCity)return cityTap(wx,wy);
   if(wy>40||wy<-S.floors*FLOOR_H)return;
   if(wx>=CAR_X-6&&wx<=CAR_X+CAR_W+6&&wy>=CAR_Y-80&&wy<=10)return routeTo(0,CAR_X+60,'car');
   for(const n of people())
@@ -1140,7 +1151,7 @@ const hasFor=id=>{const h=myHouse();return !TASKS[id].has.length||h.items.some(i
 function newTasks(){
   // prefer tasks the house has furniture for; the rest tell you what to build
   const pick=(ids,n)=>{const sh=ids.sort(()=>Math.random()-.5);return [...sh.filter(hasFor),...sh.filter(id=>!hasFor(id))].slice(0,n)};
-  return ['breakfast',...pick(['wash','dress'],1),'work',...pick(['pet','plant','relax','dinner','bath','lights','yard','visit','host',...(S.spouse?['family']:[])],2),'sleep'].map(id=>({id,done:false}));
+  return ['breakfast',...pick(['wash','dress'],1),'work',...pick(['pet','plant','relax','dinner','bath','lights','yard','visit','host','city',...(S.spouse?['family']:[])],2),'sleep'].map(id=>({id,done:false}));
 }
 if(!S.tasks)S.tasks=newTasks();
 const workDone=()=>S.tasks.some(t=>t.id==='work'&&t.done);
@@ -1185,13 +1196,28 @@ function buy(key,price,name,then){
 
 // The car drives off the right of the screen to work, and back.
 let drive=null, work=null;
-const carX=()=>CAR_X+(drive?drive.x:0);
+const carX=()=>(inCity?CITY_CAR:CAR_X)+(drive?drive.x:0);
 function startWork(){
   if(drive||work)return;
   if(visiting)return say('I should go home before I drive to work');
   if(workDone())return say('Work is done for today — have fun at home!');
   standUp();player.path=[];player.f=0;player.x=CAR_X+60;guests.length=0;
   drive={dir:1,t:0,x:0};say('Off to work!',1.5);
+  tone(110,.5,'sawtooth',.05);tone(165,.4,'sawtooth',.04,.3);
+}
+function carTapped(){
+  if(busy())return;
+  if(visiting)return say('I should go home before I drive anywhere');
+  if(inCity)return choose('🚗 Ready to go?',[['🏠 Drive home',()=>startDrive('home')]]);
+  const opts=[];
+  if(!workDone())opts.push(['🏢 Go to work',startWork]);
+  opts.push(['🏙️ Drive to the city',()=>startDrive('city')]);
+  choose('🚗 Where to?',opts);
+}
+function startDrive(dest){
+  if(busy())return;
+  standUp();player.path=[];player.f=0;player.x=carX()+60;guests.length=0;
+  drive={dir:1,t:0,x:0,dest};say(dest==='city'?'To the city! 🏙️':'Heading home!',1.5);
   tone(110,.5,'sawtooth',.05);tone(165,.4,'sawtooth',.04,.3);
 }
 function startJob(){
@@ -1218,11 +1244,12 @@ function updateTrip(dt){
     drive.t+=dt;
     if(drive.dir>0){
       drive.x=360*drive.t*drive.t;
-      if(drive.t>=2.3){drive=null;startJob()}
+      if(drive.t>=2.3){const d=drive.dest;drive=null;if(d==='city')enterCity();else if(d==='home')leaveCity();else startJob()}
     }else{
       const k=Math.min(1,drive.t/2.4);
       drive.x=1600*(1-k)*(1-k);
-      if(k>=1){
+      if(k>=1&&drive.from==='city'){drive=null;player.f=0;player.x=CAR_X-16;player.dir=-1;say('Home sweet home! 🏠',2)}
+      else if(k>=1){
         drive=null;player.f=0;player.x=CAR_X-16;player.dir=-1;S.night=true;
         taskEvent('work');renderGoals();
         say('Home again! Evening time 🌙',3);
@@ -1311,10 +1338,11 @@ const MADE_UP=[
 ];
 const nbEl=$('nb'),nbList=$('nbList');
 function showVisitUI(){
-  $('nbBtns').style.display=mode==='play'?'block':'none';
+  $('nbBtns').style.display=mode==='play'&&!inCity?'block':'none';
   $('nbOpen').style.display=visiting?'none':'inline-block';
   $('nbHome').style.display=visiting?'inline-block':'none';
-  const tag=$('visitTag');tag.style.display=visiting&&mode==='play'?'block':'none';tag.textContent=visiting?'Visiting '+visiting.name:'';
+  const tag=$('visitTag');tag.style.display=(visiting||inCity)&&mode==='play'?'block':'none';
+  tag.textContent=visiting?'Visiting '+visiting.name:inCity?'🏙️ In the city — tap your car to go home':'';
 }
 $('nbClose').onclick=()=>{nbEl.style.display='none'};
 $('nbHome').onclick=()=>{if(!busy())travel(null)};
@@ -1384,8 +1412,8 @@ function travel(n){
 function newRoomFallback(){return {w:WALLC[0],p:0,fl:0}}
 // Guests at your house: invited, dropping by, or family who visited your house on their phone.
 const guests=[];
-const people=()=>visiting?[visiting.npc]:[...homePeople(),...guests];
-const npcY=n=>n.x>HW-WALL?CAR_Y:stand(0);
+const people=()=>visiting?[visiting.npc]:inCity?townsfolk:[...homePeople(),...guests];
+const npcY=n=>inCity?0:n.x>HW-WALL?CAR_Y:stand(0);
 let homeTime=0;
 function invite(g,msg){
   if(visiting)return toast('Go home first to have guests over');
@@ -1407,7 +1435,7 @@ function invite(g,msg){
 }
 // Family who visited your house on their own phone come by on yours.
 async function checkVisits(){
-  if(!MY_ID||visiting||mode!=='play'||drive||work||fade)return;
+  if(!MY_ID||visiting||inCity||mode!=='play'||drive||work||fade)return;
   try{
     const v=await (await fetch('/houses/'+MY_ID+'/visits',{cache:'no-store'})).json();
     const fresh=v.filter(x=>x.time>(S.visitsSeen||0));
@@ -1491,16 +1519,171 @@ function updateNpc(n,dt){
   else if(n.vx&&Math.random()<dt*.35)n.vx=0;
   if(n.vx){
     n.x+=n.vx*dt;n.dir=Math.sign(n.vx);n.walk+=dt*12;
-    if(n.x<MINX+20){n.x=MINX+20;n.vx=-n.vx}
-    if(n.x>HW-WALL-20){n.x=HW-WALL-20;n.vx=-n.vx}
+    const lo=n.minX??MINX+20, hi=n.maxX??HW-WALL-20;   // townspeople walk the whole street
+    if(n.x<lo){n.x=lo;n.vx=-n.vx}
+    if(n.x>hi){n.x=hi;n.vx=-n.vx}
   }else n.walk=0;
+}
+
+// ── The city ─────────────────────────────────────────────────────────────────
+// A street of shops and a park. You walk along the sidewalk; tap a shop to go in.
+const CITY_W=2560, CITY_CAR=40;
+const SHOPS=[
+  {id:'icecream',x:260,w:220,h:200,c:'#ffd1dc',sign:'🍦 Ice Cream',price:3,awn:['#ff6b9d','#fff']},
+  {id:'pizza',x:520,w:240,h:240,c:'#e8b48a',sign:'🍕 Pizza',price:5,awn:['#e74c3c','#fff']},
+  {id:'movie',x:800,w:300,h:300,c:'#4a2a7a',sign:'🎬 MOVIES',price:4,marquee:true},
+  {id:'pets',x:1700,w:240,h:220,c:'#c6ecff',sign:'🐾 Pet Shop',price:15,awn:['#27ae60','#fff']},
+  {id:'library',x:1980,w:260,h:260,c:'#d6c3a5',sign:'📚 Library',columns:true},
+  {id:'clothes',x:2280,w:240,h:230,c:'#e2d4ff',sign:'👕 Clothes',awn:['#9b59b6','#fff']},
+];
+const WHEEL={x:1300,r:130,y:-170}, FOUNTAIN=1560;
+const CITY_SPOTS=()=>[...SHOPS.map(sh=>({id:sh.id,door:sh.x+sh.w/2})),{id:'ferris',door:WHEEL.x},{id:'fountain',door:FOUNTAIN}];
+const TOWN_NAMES=['Sam','Ava','Noah','Mia','Zed','Lulu','Omar','Ivy','Theo','Nia'];
+const TOWN_LINES=['Nice day in the city!','Have you tried the ice cream? 🍦','The ferris wheel is the best!','Hi neighbor! 👋',
+  'I love the movies 🍿','I just adopted a kitten! 🐱','The library has comic books 📚','Pizza for lunch? 🍕'];
+let wheelA=0;
+function choose(title,opts){
+  const el=$('choose'),box=$('chB');$('chT').textContent=title;box.innerHTML='';
+  for(const [label,fn,cls] of [...opts,['Not now',null,' alt']]){
+    const b=document.createElement('button');b.className='big'+(cls||'');b.textContent=label;
+    b.onclick=()=>{el.style.display='none';if(fn)fn()};box.appendChild(b);
+  }
+  el.style.display='flex';
+}
+function enterCity(){
+  fade={t:0,dur:1.2,mid(){
+    inCity=true;player.f=0;player.x=CITY_CAR+CAR_W+40;player.dir=1;player.path=[];cam.init=false;
+    townsfolk=[...TOWN_NAMES].sort(()=>Math.random()-.5).slice(0,6).map((name,i)=>({id:'town-'+name,name,look:randomLook(),
+      x:300+i*360+Math.random()*120,dir:1,walk:0,vx:0,greeted:true,minX:60,maxX:CITY_W-60,hi:TOWN_LINES}));
+    showVisitUI();
+  },done(){say('Welcome to the city! 🏙️',2.5);taskEvent('city')}};
+}
+function leaveCity(){
+  fade={t:0,dur:1,mid(){inCity=false;townsfolk=[];drive={dir:-1,t:0,x:1600,from:'city'};cam.init=false;showVisitUI()},done(){}};
+}
+function cityTap(wx,wy){
+  if(wx>=carX()-6&&wx<=carX()+CAR_W+6&&wy>=-80&&wy<=10)return routeTo(0,CITY_CAR+60,'car');
+  for(const n of townsfolk)if(Math.abs(wx-n.x)<24&&wy>-100&&wy<10){talkTo(n);return routeTo(0,n.x+(player.x<n.x?-44:44))}
+  const sh=SHOPS.find(sh=>wx>=sh.x&&wx<=sh.x+sh.w&&wy>=-sh.h-20&&wy<=10);
+  if(sh)return routeTo(0,sh.x+sh.w/2,sh.id);
+  if(Math.hypot(wx-WHEEL.x,wy-WHEEL.y)<WHEEL.r+30)return routeTo(0,WHEEL.x,'ferris');
+  if(Math.abs(wx-FOUNTAIN)<60&&wy>-110&&wy<10)return routeTo(0,FOUNTAIN,'fountain');
+  routeTo(0,Math.max(20,Math.min(CITY_W-20,wx)));
+}
+function pay(n){
+  if(S.coins<n){say(`I need 🪙${n} — time to go to work!`,2.5);return false}
+  S.coins-=n;renderGoals();save();tone(1300,.06,'square',.04);tone(1700,.08,'square',.04,.07);return true;
+}
+function adopt(t){
+  if(!pay(15))return;
+  const d=ITEMS[t];
+  S.items.push(fill({t,f:0,x:MINX+Math.random()*(MAXX-d.w-MINX),c:ITEMC[Math.random()*ITEMC.length|0]}));save();
+  emit('❤️',player.x,player.y-110,3);
+  say(t==='dog'?'A puppy! 🐶 It will be waiting at home!':'A kitten! 🐱 It will be waiting at home!',3);
+}
+function cityAction(id){
+  if(busy())return;
+  const top=player.y-110;
+  switch(id){
+    case 'icecream':if(pay(3)){emit('🍦',player.x,top,1,28);say('Yum! 🍦');taskEvent('eat')}break;
+    case 'pizza':if(pay(5)){emit('🍕',player.x,top,1,28);say('Best pizza in town!');taskEvent(S.night?'cook':'eat')}break;
+    case 'movie':if(pay(4)){movie={t:0};taskEvent('relax');goalsEl.style.display=$('visitTag').style.display='none'}break;
+    case 'pets':choose('🐾 Pet Shop',[['🐶 Adopt a puppy — 🪙15',()=>adopt('dog')],['🐱 Adopt a kitten — 🪙15',()=>adopt('cat')]]);break;
+    case 'library':emit('📖',player.x,top,2);say('Shh… reading time 📚');taskEvent('relax');break;
+    case 'clothes':say("Let's try on some clothes! 👕",1.2);setTimeout(()=>{if(inCity&&mode==='play')setMode('me')},900);break;
+    case 'ferris':
+      if(pay(2)){   // ride in the gondola nearest the bottom, once all the way around
+        let best=0,bd=9;
+        for(let k=0;k<8;k++){const a=((wheelA+k*Math.PI/4)%(Math.PI*2)+Math.PI*2)%(Math.PI*2), d=Math.abs(a-Math.PI/2);if(d<bd){bd=d;best=k}}
+        ride={k:best,turned:0};say('Wheee!',1.5);
+      }break;
+    case 'fountain':if(pay(1)){emit('✨',FOUNTAIN,-60,3);say(['I wished for a rocket! 🚀','I wished for a puppy! 🐶','I wished for a bigger house! 🏡'][Math.random()*3|0])}break;
+  }
+}
+function updateCity(dt){
+  wheelA+=dt*(ride?.6:.25);
+  if(ride&&(ride.turned+=dt*.6)>=Math.PI*2){ride=null;say('What a view! 🎡',2.5);taskEvent('relax')}
+  if(movie&&(movie.t+=dt)>=6){movie=null;say('What a great movie! 🍿',2.5);goalsEl.style.display='block';showVisitUI()}
+}
+function drawShop(sh,T,lit){
+  const {x,w,h,c}=sh, cx=x+w/2;
+  if(!lit){
+    R(x,-h,w,h,c);R(x-6,-h-10,w+12,12,shade(c,-35));
+    if(sh.columns)for(let i=0;i<4;i++)R(x+20+i*(w-52)/3,-h+40,12,h-40,shade(c,25));
+    return;
+  }
+  const night=S.night;
+  for(let yy=-h+24;yy<-150;yy+=50)for(let xx=x+22;xx<x+w-40;xx+=52)R(xx,yy,30,32,night&&(xx*7+yy)%3?'#ffe9a8':'#bfe6ff');
+  R(x+14,-88,cx-x-44,62,night?'#ffe9a8':'#bfe6ff');R(cx+30,-88,cx-x-44,62,night?'#ffe9a8':'#bfe6ff');
+  RR(cx-24,-76,48,76,[8,8,0,0],'#5d4037');E(cx+14,-38,3,3,'#f1c40f');
+  if(sh.awn)for(let i=0;i*22<w-16;i++){R(x+8+i*22,-112,22,18,sh.awn[i%2]);E(x+19+i*22,-94,11,5,sh.awn[i%2])}
+  RR(cx-82,-146,164,32,8,sh.marquee?'#222':'#fff');
+  X.font='bold 17px system-ui';X.textAlign='center';X.fillStyle=sh.marquee?'#ffcf4a':'#4a2a7a';X.fillText(sh.sign,cx,-124);
+  if(sh.marquee)for(let i=0;i<14;i++)E(cx-78+i*12,-150,3,3,(i+(T*6|0))%2?'#ffe066':'#7a5a00');
+  if(sh.price){RR(cx+50,-112,40,18,6,'#ffcf4a');X.font='bold 11px system-ui';X.fillStyle='#3a2a00';X.fillText('🪙'+sh.price,cx+70,-99)}
+}
+function drawPark(T,lit){
+  const {x:wx,r,y:wy}=WHEEL;
+  if(!lit){
+    R(1140,-8,520,8,'#7ec850');
+    for(const tx of [1170,1630]){R(tx-6,-60,12,60,'#7b4a2b');E(tx,-80,34,36,'#3fa048')}
+    L(wx,wy,wx-70,0,'#8e44ad',8);L(wx,wy,wx+70,0,'#8e44ad',8);
+    return;
+  }
+  X.strokeStyle='#e84393';X.lineWidth=6;X.beginPath();X.arc(wx,wy,r,0,Math.PI*2);X.stroke();
+  for(let k=0;k<8;k++){const a=wheelA+k*Math.PI/4;L(wx,wy,wx+Math.cos(a)*r,wy+Math.sin(a)*r,'#f8a5c2',3)}
+  E(wx,wy,10,10,'#8e44ad');
+  for(let k=0;k<8;k++){
+    const a=wheelA+k*Math.PI/4, gx=wx+Math.cos(a)*r, gy=wy+Math.sin(a)*r;
+    L(gx,gy,gx,gy+10,'#555',2);
+    if(ride&&ride.k===k){X.save();X.translate(gx,gy+40);X.scale(.6,.6);drawPlayer(S.look,0,0,{dir:1,pose:'sit',T});X.restore()}
+    RR(gx-18,gy+10,36,22,[4,4,10,10],['#e74c3c','#3498db','#f1c40f','#27ae60'][k%4]);
+  }
+  E(FOUNTAIN,-6,56,10,'#95a5a6');E(FOUNTAIN,-10,48,7,'#7fd3ff');R(FOUNTAIN-6,-50,12,44,'#bdc3c7');E(FOUNTAIN,-52,18,5,'#bdc3c7');
+  for(let i=0;i<10;i++){const k=(T*1.2+i/10)%1, side=i%2?1:-1;E(FOUNTAIN+side*k*40,-56-Math.sin(k*Math.PI)*34+k*40,2.5,2.5,'#9fe0ff')}
+  R(1400,-24,70,6,'#8d5a3b');R(1404,-18,5,18,'#555');R(1461,-18,5,18,'#555');R(1400,-40,70,5,'#8d5a3b');
+}
+function drawCity(T){
+  // far-away skyline, the street, then the shops
+  for(let i=0;i<24;i++){const bx=-200+i*130, bh=180+((i*97)%5)*60;R(bx,-bh-60,110,bh+60,S.night?'#262d5c':'#c3d6ea')}
+  R(-600,0,CITY_W+1200,900,'#5b5b66');R(-600,0,CITY_W+1200,16,'#b0b0b8');R(-600,14,CITY_W+1200,3,'#8a8a94');
+  for(let i=-600;i<CITY_W+600;i+=80)R(i,56,40,5,'#f1f1f1');
+  R(0,-6,220,6,'#8a8a94');for(let i=10;i<210;i+=50)R(i,-6,3,6,'#fff');   // parking lot
+  for(const sh of SHOPS)drawShop(sh,T,false);
+  drawPark(T,false);
+  for(let lx=230;lx<CITY_W;lx+=290)R(lx,-120,5,120,'#444');
+  if(S.night)R(-600,-900,CITY_W+1200,1800,'rgba(12,14,48,.45)');
+  // signs, windows and lights stay bright at night
+  for(const sh of SHOPS)drawShop(sh,T,true);
+  drawPark(T,true);
+  for(let lx=230;lx<CITY_W;lx+=290){E(lx+2,-124,9,6,S.night?'#ffe066':'#ddd');if(S.night)glow(lx+2,-120,70,.35)}
+  for(const n of townsfolk)drawPlayer(n.look,n.x,0,{dir:n.dir,walk:n.walk,T});
+  if(!ride)drawPlayerAt(T);
+  drawCar(carX(),0,T,!!drive);
+}
+function drawMovie(t,T){
+  X.globalAlpha=Math.max(0,Math.min(1,t/.4,(6-t)/.4));
+  R(0,0,W,H,'#0d0a1a');
+  const sw=Math.min(W-40,560), sh=sw*.5, sx=W/2-sw/2, sy=Math.max(70,H*.16);
+  RR(sx-8,sy-8,sw+16,sh+16,6,'#3a2a50');
+  const g=X.createLinearGradient(0,sy,0,sy+sh);g.addColorStop(0,'#7cc8ff');g.addColorStop(1,'#d9f1ff');X.fillStyle=g;X.fillRect(sx,sy,sw,sh);
+  R(sx,sy+sh*.78,sw,sh*.22,'#7ec850');
+  X.save();X.beginPath();X.rect(sx,sy,sw,sh);X.clip();   // the cartoon: a puppy flies a rocket across the sky
+  const k=(t/6), px=sx-60+k*(sw+120), py=sy+sh*.45+Math.sin(t*3)*sh*.12;
+  X.font=`${sh*.22|0}px sans-serif`;X.textAlign='center';X.textBaseline='middle';
+  X.fillText('🚀',px,py);X.fillText('🐶',px-sh*.18,py-sh*.1);X.fillText('☀️',sx+sw*.85,sy+sh*.2);X.fillText('🌳',sx+sw*.15,sy+sh*.7);
+  X.textBaseline='alphabetic';X.restore();
+  for(let i=0;i<Math.ceil(W/46);i++)E(23+i*46,H-40+(i%2)*6,18,22,'#1d1630');   // heads in the seats
+  X.font='40px sans-serif';X.textAlign='center';X.fillText('🍿',W-50,H-80);
+  txt('🎬 Space Puppies',W/2,sy+sh+40,Math.min(24,W/14));
+  X.globalAlpha=1;
 }
 
 // ── Update ───────────────────────────────────────────────────────────────────
 const SPEED=170;
 function update(dt,T){
-  updateTrip(dt);updateWedding(dt);
-  const st=player.f!==0?stand(player.f):player.x>HW-WALL?CAR_Y:player.x<WALL?YARD_Y:stand(0);   // a step down outside
+  updateTrip(dt);updateWedding(dt);updateCity(dt);
+  const st=inCity?0:player.f!==0?stand(player.f):player.x>HW-WALL?CAR_Y:player.x<WALL?YARD_Y:stand(0);   // a step down outside
   if(!player.climb)player.y=st;
   player.moving=false;
   if(mode==='play'&&!busy()){
@@ -1522,7 +1705,7 @@ function update(dt,T){
         player.path.shift();
         const up=s.climb>0, f1=player.f+s.climb;
         player.climb={t:0,x0:player.x,y0:stand(player.f),x1:up?MINX+8:WALL+16,y1:stand(f1),f1};
-      }else if(s.use){player.path.shift();if(s.use==='car')startWork();else if(S.items.includes(s.use))use(s.use)}
+      }else if(s.use){player.path.shift();if(s.use==='car')carTapped();else if(typeof s.use==='string')cityAction(s.use);else if(S.items.includes(s.use))use(s.use)}
       if(!player.path.length)save();
     }
   }
@@ -1553,7 +1736,7 @@ function update(dt,T){
   if(player.act&&player.act.kind==='bath'&&Math.random()<dt*3){const b=box(player.act.it);emit('🫧',b.x+b.w/2,b.y+10,1,16)}
   for(const n of people())updateNpc(n,dt);
   for(let i=guests.length-1;i>=0;i--)if(guests[i].gone)guests.splice(i,1);
-  if(mode==='play'&&!visiting&&!drive&&!work&&!fade&&!guests.length){   // once a day a neighbor may drop by
+  if(mode==='play'&&!visiting&&!inCity&&!busy()&&!guests.length){   // once a day a neighbor may drop by
     homeTime+=dt;
     if(homeTime>75&&S.dropIn!==S.day){S.dropIn=S.day;const pool=MADE_UP.filter(m=>!(S.spouse&&S.spouse.id===m.id)),n=pool[Math.random()*pool.length|0];invite(n,'🔔 Surprise! '+n.name+' dropped by!')}
   }
@@ -1821,6 +2004,8 @@ function draw(T){
   drawSky(T);
   X.save();
   X.translate(W/2,cam.vy);X.scale(cam.s,cam.s);X.translate(-cam.x,-cam.y);
+  if(inCity)drawCity(T);
+  else{
   drawHouse(T);
   const vis=S.items.filter(i=>i.f<S.floors);
   for(const it of vis)if(ITEMS[it.t].rug)drawItem(it,T);
@@ -1831,6 +2016,7 @@ function draw(T){
   nightShade(T);
   drawCar(carX(),CAR_Y,T,!!drive);
   nightOutside(vis,T);
+  }
   // selection outline
   if(mode==='build'&&selected){
     const b=box(selected);
@@ -1842,19 +2028,19 @@ function draw(T){
     const last=[...player.path].reverse().find(s=>s.walk!=null);
     if(last){
       let ff=player.f;for(const s of player.path)if(s.climb)ff+=s.climb;
-      E(last.walk,stand(ff)+2,12,4,'rgba(255,207,74,.7)');
+      E(last.walk,inCity?2:stand(ff)+2,12,4,'rgba(255,207,74,.7)');
     }
   }
   for(const p of parts){X.globalAlpha=Math.min(1,p.life);X.font=p.size+'px sans-serif';X.textAlign='center';X.fillText(p.txt,p.x,p.y)}
   X.globalAlpha=1;
   X.restore();
   // name tag + speech in screen space so they stay readable when zoomed out
-  const [sx,sy]=drive?toScreen(carX()+CAR_W/2,CAR_Y-80):toScreen(player.x,player.y-(player.act&&player.act.kind==='sleep'?40:(player.act&&player.act.kind!=='stand'?80:100)));
+  const [sx,sy]=drive?toScreen(carX()+CAR_W/2,(inCity?0:CAR_Y)-80):toScreen(player.x,player.y-(player.act&&player.act.kind==='sleep'?40:(player.act&&player.act.kind!=='stand'?80:100)));
   if(!drive&&player.act&&player.act.kind!=='stand'&&!player.act.noSeat){
     const b=box(player.act.it);const [bx,by]=toScreen(b.x+b.w/2,b.y-24);
     if(player.say)drawBubble(player.say.txt,bx,by);
   }else if(player.say)drawBubble(player.say.txt,sx,sy);
-  else if(mode==='play'&&S.name)nameTag(S.name,sx,sy);
+  else if(mode==='play'&&S.name&&!ride)nameTag(S.name,sx,sy);
   if(mode==='play')for(const n of people()){
     const [nx,ny]=toScreen(n.x,npcY(n)-100*(n.scale||1));
     if(n.say)drawBubble(n.say.txt,nx,ny);else nameTag(n.name,nx,ny);
@@ -1873,6 +2059,7 @@ function draw(T){
   }
   if(rocketing()&&player.act.t>5&&player.act.t<8.5)drawMoon(player.act.t,T);
   if(wedding)drawWedding(wedding.t,T);
+  if(movie)drawMovie(movie.t,T);
 }
 function drawWedding(t,T){
   X.globalAlpha=Math.max(0,Math.min(1,t/.5,(6.5-t)/.5));
@@ -1967,7 +2154,7 @@ function frame(now){
 // arcade has a newer Dream House (the house is saved first, so nothing is lost).
 const pageTime=Date.parse(document.lastModified);
 async function checkForUpdate(){
-  if(document.hidden||drive||work||fade||visiting||mode==='me')return;
+  if(document.hidden||busy()||visiting||inCity||mode==='me')return;
   try{
     const r=await fetch(location.pathname,{method:'HEAD',cache:'no-store'});
     if(r.ok&&Date.parse(r.headers.get('Last-Modified'))>pageTime+1000){saveNow();location.reload()}
