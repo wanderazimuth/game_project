@@ -10,5 +10,9 @@ __pycache__/
 # Live high-score data (written by the server at runtime)
 game-server/scores.json
 
+# Dream House houses shared by each device (written by the server at runtime)
+game-server/houses.json
+game-server/houses.json.tmp
+
 # Local Claude Code settings
 .claude/settings.local.json

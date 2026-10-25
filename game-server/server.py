@@ -6,9 +6,11 @@ import hashlib
 import http.server
 import json
 import os
+import re
 import socketserver
 import struct
 import threading
+import time
 
 PORT = int(os.environ.get("ARCADE_PORT", 8080))
 GAMES_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -89,6 +91,38 @@ def add_score(game, name, score):
         data[game] = bucket[:10]
         _save_scores(data)
         return list(data[game])
+
+# ── Dream House: each device shares its house so the family can visit ─────────
+HOUSES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "houses.json")
+HOUSES_LOCK = threading.Lock()
+HOUSE_MAX_BYTES = 200_000
+HOUSE_ID = re.compile(r"[a-z0-9]{8,32}")   # a random id each device makes for itself
+
+def _load_houses():
+    try:
+        with open(HOUSES_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def list_houses():
+    with HOUSES_LOCK:
+        return [{"id": k, "name": v["name"], "day": v["day"], "updated": v["updated"]}
+                for k, v in _load_houses().items()]
+
+def get_house(house_id):
+    with HOUSES_LOCK:
+        entry = _load_houses().get(house_id)
+        return entry and entry["house"]
+
+def save_house(house_id, name, day, house):
+    with HOUSES_LOCK:
+        data = _load_houses()
+        data[house_id] = {"name": name, "day": day, "house": house, "updated": int(time.time())}
+        tmp = HOUSES_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(data, f)
+        os.replace(tmp, HOUSES_FILE)
 
 LANDING_PAGE_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
@@ -421,6 +455,18 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(data)
             return
 
+        # Dream House neighbors: the list, or one house
+        if self.path == "/houses":
+            self.send_json(list_houses())
+            return
+        if self.path.startswith("/houses/"):
+            house = get_house(self.path[8:].strip("/"))
+            if house is None:
+                self.send_error(404)
+            else:
+                self.send_json(house)
+            return
+
         if self.path.split("?")[0] in APP_FILES:
             data, content_type = app_file(self.path.split("?")[0])
             self.send_response(200)
@@ -460,7 +506,35 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
             except (ValueError, KeyError, TypeError):
                 self.send_error(400)
             return
+        if self.path.startswith("/houses/"):
+            house_id = self.path[8:].strip("/")
+            length = int(self.headers.get("Content-Length", 0))
+            if not HOUSE_ID.fullmatch(house_id):
+                self.send_error(400)
+                return
+            if length > HOUSE_MAX_BYTES:
+                self.send_error(413)
+                return
+            try:
+                body = json.loads(self.rfile.read(length))
+                house = body["house"]
+                if not isinstance(house, dict):
+                    raise TypeError
+                name = str(body.get("name", "")).strip()[:16] or "Neighbor"
+                save_house(house_id, name, int(body.get("day", 1)), house)
+                self.send_json({"ok": True})
+            except (ValueError, KeyError, TypeError):
+                self.send_error(400)
+            return
         self.send_error(404)
+
+    def send_json(self, obj):
+        data = json.dumps(obj).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def log_message(self, format, *args):
         pass  # Silence request logs
