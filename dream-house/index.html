@@ -198,6 +198,7 @@ const SEASON_DAYS=3;
 // seasonOff shifts the calendar when you pick a season in Build mode; it carries on from there
 const seasonOf=day=>SEASONS[(Math.floor(((day||1)-1)/SEASON_DAYS)+(S.seasonOff||0))%4];
 const season=()=>seasonOf(S.day);
+const isChristmas=(day=S.day)=>seasonOf(day).n==='Winter'&&(day-1)%SEASON_DAYS===1;
 // a tree's leaves for the season: blossoms in spring, apples in summer and fall, snow in winter
 function seasonTree(x,y,rx,ry){
   const se=season();
@@ -563,6 +564,17 @@ const ITEMS={
   snowman:{n:'Snowman',w:70,h:150,c:'#e74c3c',out:true,act:'snowman',draw(x,y,w,h,c,it,T){
     drawSnowman(x+w/2,y,{...(it&&it.snow),scarf:c,balls:[1,1,1],melt:season().n!=='Winter'},T);
   }},
+  xmastree:{n:'Christmas tree',w:72,h:124,c:'#2e8b3a',act:'xmastree',draw(x,y,w,h,c,it,T){
+    const cx=x+w/2;
+    R(cx-6,y-16,12,16,'#7b4a2b');R(cx-14,y-10,28,10,'#c0392b');
+    for(const [ty,hw] of [[y-14,36],[y-48,28],[y-80,20]])P([cx-hw,ty,cx+hw,ty,cx,ty-40],c);
+    for(let i=0;i<12;i++){const a=i*2.4, r=(i%4)*7+6, oy=y-26-(i*8)%84;E(cx+Math.cos(a)*Math.min(r,(y-oy)/3.2),oy,3,3,['#e74c3c','#f1c40f','#3498db','#e84393','#fff'][(i+(T*3|0))%5])}
+    star(cx,y-h+6,9,'#f1c40f');if(it)glow(cx,y-h+6,24,.5);
+  }},
+  present:{n:'Present',w:30,h:30,c:'#e74c3c',act:'present',draw(x,y,w,h,c){
+    RR(x,y-24,w,24,3,c);R(x+w/2-3,y-24,6,24,'#f1c40f');RR(x-2,y-28,w+4,7,2,shade(c,-20));R(x+w/2-3,y-28,6,7,'#f1c40f');
+    E(x+w/2-6,y-31,6,4,'#f1c40f');E(x+w/2+6,y-31,6,4,'#f1c40f');
+  }},
   // bought with coins earned at work
   treehouse:{n:'Treehouse',w:140,h:240,c:'#e67e22',out:true,price:100,act:'treehouse',draw(x,y,w,h,c,it,T){
     const cx=x+w/2+10, inside=it&&player.act&&player.act.it===it&&player.act.t>=1.3;
@@ -620,7 +632,7 @@ const ITEMS={
   }},
 };
 const CATALOG=['swing','slide','sandbox','pool','grill','picnic','flowers','tree','campfire','doghouse','birdbath','greenhouse','treehouse','rocket',
-  'arcade','trampoline','disco','goldtoilet','bed','crib','sofa','armchair','chair','table','desk','tv','lamp','plant','bookshelf','fridge','stove','sink',
+  'arcade','trampoline','disco','goldtoilet','bed','crib','sofa','armchair','chair','table','desk','tv','lamp','plant','xmastree','bookshelf','fridge','stove','sink',
   'tub','toilet','piano','fireplace','rug','dresser','toybox','dog','cat','tank','window','picture','clock','shelf','mirror','chandelier'];
 
 // ── The player ───────────────────────────────────────────────────────────────
@@ -925,6 +937,7 @@ function buildTray(){
     SEASONS.forEach((se,i)=>btn('pat',se.e+' '+se.n,()=>{
       const block=Math.floor((S.day-1)/SEASON_DAYS);
       S.seasonOff=((i-block)%4+4)%4;save();renderGoals();buildTray();
+      christmasPresents();
       toast(`${se.e} It's ${se.n.toLowerCase()} now!`+(se.n==='Winter'?' Build a snowman ⛄':se.n==='Fall'?' Pumpkins can grow 🎃':''),3000);
     },season()===se));
     add(Object.assign(document.createElement('span'),{className:'lbl',textContent:'Roof'}));
@@ -1488,6 +1501,16 @@ function use(it){
     case 'rocket':player.act={kind:'rocket',it,t:0};break;
     case 'swim':player.act={kind:'swim',it};say('Splash! 💦');break;
     case 'sand':emit('🏰',cx,top,1,26);say('Building a sandcastle!');break;
+    case 'present':{
+      const locked=Object.entries(ITEMS).filter(([k,d])=>d.price&&!S.owned.includes(k));
+      S.items.splice(S.items.indexOf(it),1);emit('🎉',cx,top,3);[523,659,784,1047,1319].forEach((f,i)=>tone(f,.18,'triangle',.07,i*.08));
+      if(locked.length&&Math.random()<.4){const [k,d]=locked[Math.random()*locked.length|0];S.owned.push(k);say(`A ${d.n.toLowerCase()}! 🎁`,3);toast(`🎁 You got a ${d.n}! Find it free in 🛠 Build`,4000)}
+      else{const n=5+(Math.random()*11|0);S.coins+=n;emit('🪙',cx,top-20,2);say(`${n} coins! 🎁`,2.5)}
+      renderGoals();save();
+      if(S.kids.some(k=>S.day-k.born>=2))for(const n of homePeople())if(n.scale)n.say={txt:['Presents! 🎁','Merry Christmas! 🎄','Is that for me?'][Math.random()*3|0],t:2.5};
+      break;
+    }
+    case 'xmastree':emit('✨',cx,top,3);say(isChristmas()?'Merry Christmas! 🎄':'Oh Christmas tree! 🎄');tone(988,.3,'sine',.05);tone(1319,.4,'sine',.05,.15);break;
     case 'snowman':
       if(season().n!=='Winter')say('It melted… 💧 See you next winter!');
       else{emit('❄️',cx,top,3);say(['Brrr! ⛄','I love winter!','Want to build another snowman?','Hug me — gently! ❄️'][Math.random()*4|0])}
@@ -1538,6 +1561,14 @@ function growPlots(ms){
   return changed;
 }
 if(S.farmT)growPlots(Math.max(0,Date.now()-S.farmT));   // the time the game was closed
+function christmasPresents(){
+  if(!isChristmas()||S.xmasDay===S.day||visiting)return;
+  S.xmasDay=S.day;
+  const tree=S.items.find(i=>i.t==='xmastree'), f=tree?tree.f:0, x0=tree?tree.x-30:ROOM_W+60;
+  for(let i=0;i<3;i++)S.items.push(fill({t:'present',f,x:Math.max(MINX,Math.min(MAXX-30,x0+i*(tree?42:36)+(i>1&&tree?40:0))),c:['#e74c3c','#3498db','#27ae60'][i]}));
+  save();
+}
+christmasPresents();
 let farmIt=null, farmTimer=0;
 const chime=()=>[784,988,1175,1568].forEach((f,i)=>tone(f,.5,'sine',.045,i*.09));
 function openFarm(it){farmIt=it;plotsOf(it);renderFarm();$('farm').style.display='flex';clearInterval(farmTimer);farmTimer=setInterval(renderFarm,1000)}
@@ -1605,7 +1636,7 @@ function renderGoals(){
   showVisitUI();
   const wd=workDone(), n=S.tasks.filter(t=>t.done).length;
   const next=S.tasks.find(t=>!t.done&&(!TASKS[t.id].eve||wd));
-  let h=`<div class="hd">${S.night?'🌙':season().e} ${season().n} · Day ${S.day}<span>🪙 ${S.coins}</span><span style="margin-left:auto">${n}/${S.tasks.length} ${goalsOpen?'▴':'▾'}</span></div>`;
+  let h=`<div class="hd">${isChristmas()?'🎄 Christmas':(S.night?'🌙':season().e)+' '+season().n} · Day ${S.day}<span>🪙 ${S.coins}</span><span style="margin-left:auto">${n}/${S.tasks.length} ${goalsOpen?'▴':'▾'}</span></div>`;
   if(goalsOpen)h+='<ul>'+S.tasks.map(t=>{
     const d=TASKS[t.id], later=d.eve&&!wd&&!t.done;
     return `<li class="${t.done?'done':later?'later':''}">${t.done?'✅':later?'🌙':'⬜'} ${d.txt}`+
@@ -1622,10 +1653,11 @@ function endDay(){
     S.day++;S.night=false;S.coins+=10;S.tasks=newTasks();
     const h=visiting?visiting.home:S;
     if(season().n!=='Winter'&&h.items.some(i=>i.t==='snowman')){h.items=h.items.filter(i=>i.t!=='snowman');melted=true}
-    renderGoals();showVisitUI();save();
+    christmasPresents();renderGoals();showVisitUI();save();
   },
     done(){
       const se=season(), was=seasonOf(S.day-1);
+      if(isChristmas()){toast('🎄 Merry Christmas! It\'s snowing — open your presents 🎁   +🪙10 for finishing yesterday',6000);if(melted)setTimeout(()=>toast('💧 Your snowman melted… see you next winter!',4000),6200);return}
       if(se!==was){
         const crops=Object.entries(CROPS).filter(([k])=>inSeason(k)).map(([,c])=>c.e).join(' ');
         toast(`${se.e} ${se.n} is here! Now you can grow ${crops}`+(se.n==='Winter'?'  — and tap ⛄ to build a snowman!':se.n==='Fall'?'  — and go 🎃 trick-or-treating at night!':'')+'   +🪙10 for finishing yesterday',6000);
@@ -2464,6 +2496,10 @@ function drawHouse(T){
   if(S.items.some(i=>i.t==='fireplace'&&i.on))for(let i=0;i<3;i++){const s=(T*.5+i/3)%1;E(HW*.72+17+Math.sin(T+i)*8,top-170-s*80,8+s*14,6+s*10,`rgba(220,220,220,${.6-s*.6})`)}
   P([-36,top+4,HW+36,top+4,HW/2,top-150],S.roof);
   if(se.n==='Winter'){P([-36,top+4,HW/2,top-150,HW+36,top+4,HW+16,top+4,HW/2,top-132,-16,top+4],'#fff');R(HW*.72-4,top-162,42,8,'#fff')}
+  if(isChristmas())for(let i=0;i<=36;i++){   // string lights along the roof
+    const k=i/36, side=i<18?0:1, kk=side?(k-.5)*2:k*2, lx=side?HW/2+kk*(HW/2+36):-36+kk*(HW/2+36), ly=side?top-150+kk*154:top+4-kk*154;
+    E(lx,ly+6,4,5,['#e74c3c','#f1c40f','#2ecc71','#3498db','#e84393'][(i+(T*2|0))%5]);
+  }
   P([-36,top+4,HW+36,top+4,HW+26,top-6,-26,top-6],shade(S.roof,-30));
   // rooms
   for(let f=0;f<nF;f++){
@@ -2629,11 +2665,15 @@ function nightOutside(vis,T){
   for(const it of vis)if(isOut(it)&&it.on&&ITEMS[it.t].light)drawItem(it,T);   // a campfire stays bright
 }
 function drawSeasonFx(T){
-  const fx=season().fx;
+  const fx=season().fx, xmas=isChristmas();
   if(!fx)return;
-  for(let i=0;i<30;i++){
+  if(xmas){   // Santa's sleigh crosses the sky
+    const sx=((T*60)%(W+500))-250, sy=H*.2+Math.sin(T*1.5)*12;
+    X.font='26px sans-serif';X.textAlign='center';X.textBaseline='middle';X.fillText('🎅🛷🦌🦌',sx,sy);X.textBaseline='alphabetic';
+  }
+  for(let i=0;i<(xmas?90:30);i++){
     const sp=fx==='snow'?1:1.6, x=((i*137.5+T*(12+i%5*6)*sp)%(W+40))-20, y=((i*89.3+T*(28+i%4*9))%(H+40))-20;
-    if(fx==='snow')E(x,y,1.5+i%3,1.5+i%3,'rgba(255,255,255,.9)');
+    if(fx==='snow'){const r=(xmas?2.5:1.5)+i%3;E(x,y,r,r,'rgba(255,255,255,.9)')}
     else{X.save();X.translate(x,y);X.rotate(T*2+i);E(0,0,fx==='leaf'?6:4,fx==='leaf'?3:2.5,fx==='leaf'?['#e67e22','#d35400','#f1c40f'][i%3]:'#ffb6d1');X.restore()}
   }
 }
