@@ -1130,6 +1130,7 @@ function startJob(){
 function goHome(){
   work=null;setMode('play');
   drive={dir:-1,t:0,x:1600};
+  cam.init=false;   // start the camera on the car instead of swooping over from the work screen
 }
 function workTap(x,y){
   if(work.over){const b=work.btn;if(b&&x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h)goHome();return}
@@ -1301,15 +1302,13 @@ function drawFloor(fl,x,y,w,h){
 function drawItem(it,T){
   const d=ITEMS[it.t],b=box(it);
   X.save();
-  if(S.night&&isOut(it)&&!(d.light&&it.on))X.filter='brightness(0.6)';
   if(it.flip){X.translate(b.x*2+d.w,0);X.scale(-1,1)}
   d.draw(b.x,b.by,d.w,d.h,it.c,it,T);
   X.restore();
 }
 function drawHouse(T){
   const nF=S.floors, top=-nF*FLOOR_H;
-  // lawn, yards, sign (everything outside is dimmer at night)
-  if(S.night)X.filter='brightness(0.6)';
+  // lawn, yards, sign
   R(-3000,0,HW+6000,900,'#7ec850');R(-3000,0,HW+6000,6,'#5fae3a');
   for(let i=-30;i<HW+40;i+=26)P([i,2,i+5,-8,i+10,2],'#5fae3a');
   // backyard: picket fence, stepping stones from the back door, a tree past the fence
@@ -1326,7 +1325,6 @@ function drawHouse(T){
     X.fillStyle='#5a3418';X.font='bold 11px system-ui';X.textAlign='center';
     X.fillText(S.name.slice(0,12)+"'s",sx,-63);X.fillText('House',sx,-50);
   }
-  X.filter='none';
   // roof + chimney
   R(HW*.72,top-150,34,90,shade(S.roof,-30));R(HW*.72-4,top-156,42,10,shade(S.roof,-45));
   if(S.items.some(i=>i.t==='fireplace'&&i.on))for(let i=0;i<3;i++){const s=(T*.5+i/3)%1;E(HW*.72+17+Math.sin(T+i)*8,top-170-s*80,8+s*14,6+s*10,`rgba(220,220,220,${.6-s*.6})`)}
@@ -1476,6 +1474,16 @@ function nightShade(T){
     R(r*ROOM_W,-(f+1)*FLOOR_H,ROOM_W,FLOOR_H,`rgba(12,14,48,${a})`);
   }
 }
+// At night, one dark layer over everything outside the house (the rooms have their own, in
+// nightShade). A canvas filter on each outside thing did the same but made phones stutter.
+function nightOutside(vis,T){
+  if(!S.night)return;
+  const l=cam.x-W/cam.s, t=cam.y-H/cam.s, top=-S.floors*FLOOR_H;
+  X.fillStyle='rgba(12,14,48,.4)';X.beginPath();
+  X.rect(l,t,2*W/cam.s,2*H/cam.s);X.rect(0,top,HW,-top);
+  X.fill('evenodd');
+  for(const it of vis)if(isOut(it)&&it.on&&ITEMS[it.t].light)drawItem(it,T);   // a campfire stays bright
+}
 function drawBubble(txt,x,y){
   X.font='bold 13px system-ui';
   const w=Math.min(X.measureText(txt).width+18,260);
@@ -1495,12 +1503,10 @@ function draw(T){
   for(const it of vis)if(ITEMS[it.t].rug)drawItem(it,T);
   for(const it of vis)if(ITEMS[it.t].wall)drawItem(it,T);
   for(const it of vis)if(!ITEMS[it.t].wall&&!ITEMS[it.t].rug&&!(inPlayer(it)&&/bath|swim/.test(player.act.kind)))drawItem(it,T);
-  X.save();
-  if(S.night&&player.f===0&&(player.x<0||player.x>HW))X.filter='brightness(0.6)';
   drawPlayerAt(T);
-  X.restore();
   nightShade(T);
   drawCar(carX(),CAR_Y,T,!!drive);
+  nightOutside(vis,T);
   // selection outline
   if(mode==='build'&&selected){
     const b=box(selected);
