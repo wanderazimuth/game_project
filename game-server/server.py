@@ -26,6 +26,7 @@ GAMES = {
     "dungeon-runner": ("dungeon-runner", "Dungeon Runner", "Grab the key and escape each room before time runs out"),
     "td": ("td", "TD", "Tower defense — build towers to stop 20 waves of monsters"),
     "fish-off": ("fish-off", "Fish Off", "2 players, 2 phones — catch the most fish in 90 seconds"),
+    "dream-house": ("dream-house", "Dream House", "Make your player, then design and decorate your own house"),
 }
 
 # What makes the arcade an installable app: url_path -> (file in app/, content type).
@@ -50,6 +51,9 @@ def app_file(path):
 # Games played by two people on separate devices; the All Scores page lists
 # them in their own section.
 TWO_PLAYER_GAMES = {"brick-runner", "magma-runner", "fish-off", "td"}
+
+# Games with nothing to score; the All Scores page leaves them out.
+UNSCORED_GAMES = {"dream-house"}
 
 # ── Score management ──────────────────────────────────────────────────────────
 SCORES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scores.json")
@@ -220,7 +224,7 @@ def build_score_sections(keys):
     return sections
 
 def build_all_scores_page():
-    sections = build_score_sections(k for k in GAMES if k not in TWO_PLAYER_GAMES)
+    sections = build_score_sections(k for k in GAMES if k not in TWO_PLAYER_GAMES | UNSCORED_GAMES)
     two_player_sections = build_score_sections(k for k in GAMES if k in TWO_PLAYER_GAMES)
 
     return f"""<!DOCTYPE html>
