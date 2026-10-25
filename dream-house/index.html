@@ -52,6 +52,7 @@ button{font:inherit;cursor:pointer;border:none}
 .bed .emo{font-size:28px}
 .bed .what{flex:1;min-width:120px}
 .bed small{display:block;font-weight:600;color:#5f8f62}
+.seed.off{opacity:.3}
 .seed{width:44px;height:44px;border-radius:10px;background:#fff;font-size:22px;border:2px solid #cfe8c7}
 .grow{height:8px;border-radius:4px;background:#cfe8c7;margin-top:6px;overflow:hidden}
 .grow i{display:block;height:100%;background:#5cb85c}
@@ -129,7 +130,7 @@ button{font:inherit;cursor:pointer;border:none}
 <div id="goals"></div>
 <div id="nbBtns"><button id="nbOpen">🏘️ Neighbors</button><button id="nbHome">🏠 Go home</button></div>
 <div id="visitTag"></div>
-<div id="farm"><div class="modalIn"><h2>🌱 Greenhouse</h2><div id="farmAll"></div><div id="farmBeds"></div><button class="big" id="farmClose">Done</button></div></div>
+<div id="farm"><div class="modalIn"><h2 id="farmT">🌱 Greenhouse</h2><div id="farmAll"></div><div id="farmBeds"></div><button class="big" id="farmClose">Done</button></div></div>
 <div id="choose" class="modal"><div class="modalIn"><h2 id="chT"></h2><div id="chB"></div></div></div>
 <div id="nb"><div id="nbIn"><h2>🏘️ Visit a neighbor</h2><div id="nbList"></div><button class="big" id="nbClose">Close</button></div></div>
 <div id="me"><div id="meIn">
@@ -175,6 +176,23 @@ const FLOORS=[
 const ROOFC=['#c0392b','#7f4f24','#2c3e50','#16a085','#8e44ad','#e67e22','#2e86de','#e84393'];
 const SIDEC=['#f5e6c8','#ffffff','#d6c3a5','#b8d8e8','#f2c6c2','#cfe8c0','#9b8e7e','#5e6472'];
 const BOOKC=['#e74c3c','#3498db','#f1c40f','#27ae60','#9b59b6','#e67e22','#1abc9c','#34495e'];
+
+// ── Seasons: each lasts 3 game days ─────────────────────────────────────────
+const SEASONS=[
+  {n:'Spring',e:'🌸',grass:'#8fd16a',tuft:'#6fbf4f',leaf:'#5cc06a',fx:'petal'},
+  {n:'Summer',e:'☀️',grass:'#7ec850',tuft:'#5fae3a',leaf:'#3fa048',fx:null},
+  {n:'Fall',e:'🍂',grass:'#c2b450',tuft:'#a89a3a',leaf:'#e67e22',fx:'leaf'},
+  {n:'Winter',e:'❄️',grass:'#f2f6fb',tuft:'#dfe8f2',leaf:'#eef3f8',fx:'snow'}];
+const SEASON_DAYS=3;
+const seasonOf=day=>SEASONS[Math.floor(((day||1)-1)/SEASON_DAYS)%4];
+const season=()=>seasonOf(S.day);
+// a tree's leaves for the season: blossoms in spring, apples in summer and fall, snow in winter
+function seasonTree(x,y,rx,ry){
+  const se=season();
+  E(x,y,rx,ry,se.leaf);E(x-rx*.3,y-ry*.35,rx*.6,ry*.55,shade(se.leaf,18));
+  if(se.n==='Spring')for(let i=0;i<7;i++)E(x+Math.cos(i*2.4)*rx*.6,y+Math.sin(i*2.4)*ry*.55,3.5,3.5,'#ffb6d1');
+  if(se.n==='Winter')E(x,y-ry*.55,rx*.85,ry*.35,'#fff');
+}
 
 // ── Small drawing helpers ────────────────────────────────────────────────────
 function R(x,y,w,h,c){X.fillStyle=c;X.fillRect(x,y,w,h)}
@@ -480,9 +498,12 @@ const ITEMS={
     R(x,y-12,w,12,'#6d4c41');for(let i=0;i<w;i+=14)R(x+i,y-13,12,4,'#b5543c');
   }},
   tree:{n:'Apple tree',w:100,h:180,c:'#3fa048',out:true,act:'apple',draw(x,y,w,h,c){
+    const se=season(), lc=c==='#3fa048'?se.leaf:c;   // a recolored tree keeps its color
     R(x+w/2-9,y-84,18,84,'#7b4a2b');L(x+w/2,y-70,x+w/2+24,y-96,'#7b4a2b',6);
-    E(x+w/2,y-h+56,w/2,52,shade(c,-15));E(x+w/2-24,y-h+44,32,32,c);E(x+w/2+22,y-h+40,30,30,c);E(x+w/2,y-h+30,30,28,shade(c,20));
-    for(const [ax,ay] of [[-26,62],[18,74],[30,46],[-8,40],[-34,84],[6,92]])E(x+w/2+ax,y-h+ay,4.5,4.5,'#e74c3c');
+    E(x+w/2,y-h+56,w/2,52,shade(lc,-15));E(x+w/2-24,y-h+44,32,32,lc);E(x+w/2+22,y-h+40,30,30,lc);E(x+w/2,y-h+30,30,28,shade(lc,20));
+    const dots=se.n==='Spring'?'#ffb6d1':se.n==='Winter'?null:'#e74c3c';
+    if(dots)for(const [ax,ay] of [[-26,62],[18,74],[30,46],[-8,40],[-34,84],[6,92]])E(x+w/2+ax,y-h+ay,4.5,4.5,dots);
+    if(se.n==='Winter'){E(x+w/2,y-h+22,38,12,'#fff');E(x+w/2-26,y-h+30,18,7,'#fff');E(x+w/2+24,y-h+26,18,7,'#fff')}
   }},
   campfire:{n:'Campfire',w:64,h:34,c:'#7f8c8d',out:true,act:'toggle',light:true,draw(x,y,w,h,c,it,T){
     if(it&&it.on){
@@ -516,6 +537,7 @@ const ITEMS={
       else E(cx,y-31,4,2.5,'#c8a165');
       X.font='18px sans-serif';X.textAlign='center';X.textBaseline='middle';
       if(st>=3){X.fillText(CROPS[p.crop].e,cx,y-72);X.font='12px sans-serif';X.fillText('✨',cx+12+Math.sin(T*3+i)*2,y-86)}
+      else if(!inSeason(p.crop)){X.font='13px sans-serif';X.fillText('💤',cx,y-60-st*8)}
       else if(!p.wet){X.font='14px sans-serif';X.fillText('💧',cx,y-62-st*8-Math.abs(Math.sin(T*3+i))*5)}
       X.textBaseline='alphabetic';
     }
@@ -1221,7 +1243,8 @@ function use(it){
     case 'rocket':player.act={kind:'rocket',it,t:0};break;
     case 'swim':player.act={kind:'swim',it};say('Splash! 💦');break;
     case 'sand':emit('🏰',cx,top,1,26);say('Building a sandcastle!');break;
-    case 'apple':emit('🍎',cx,top+40,2,24);say('A juicy apple! 🍎');tone(600,.08,'triangle',.08);break;
+    case 'apple':if(['Spring','Winter'].includes(season().n))return say(season().n==='Spring'?'Just blossoms now — apples come in summer 🌸':'No apples in winter ❄️');
+      emit('🍎',cx,top+40,2,24);say('A juicy apple! 🍎');tone(600,.08,'triangle',.08);break;
     case 'birds':emit('🐦',cx,top,2);say('Tweet tweet!');tone(1800,.06,'sine',.05);tone(2100,.06,'sine',.05,.1);break;
   }
   const EV={bath:'bath',water:'water',read:'relax',eat:'eat',cook:'cook',wash:'wash',piano:'relax',outfit:'outfit',
@@ -1246,14 +1269,20 @@ if(!S.tasks)S.tasks=newTasks();
 // ── Greenhouse farming ───────────────────────────────────────────────────────
 // Each stage of growing needs one watering; plants never wilt, they just wait for water.
 const CROPS={
-  carrot:{e:'🥕',n:'Carrot',min:2,coins:3},sunflower:{e:'🌻',n:'Sunflower',min:3,coins:4},tomato:{e:'🍅',n:'Tomato',min:4,coins:5},
-  strawberry:{e:'🍓',n:'Strawberry',min:6,coins:8},pumpkin:{e:'🎃',n:'Pumpkin',min:10,coins:15}};
+  carrot:{e:'🥕',n:'Carrot',min:2,coins:3,seasons:['Spring','Fall','Winter']},
+  strawberry:{e:'🍓',n:'Strawberry',min:6,coins:8,seasons:['Spring']},
+  sunflower:{e:'🌻',n:'Sunflower',min:3,coins:4,seasons:['Summer']},
+  tomato:{e:'🍅',n:'Tomato',min:4,coins:5,seasons:['Summer']},
+  pumpkin:{e:'🎃',n:'Pumpkin',min:10,coins:15,seasons:['Fall']},
+  cabbage:{e:'🥬',n:'Cabbage',min:3,coins:4,seasons:['Fall','Winter']}};
+const inSeason=crop=>CROPS[crop].seasons.includes(season().n);
+const seasonList=crop=>CROPS[crop].seasons.join(' or ');
 const stageMs=p=>CROPS[p.crop].min*60000/3;
 const plotsOf=it=>it.plots=it.plots||[{},{},{},{}];
 function growPlots(ms){
   let changed=false;
   for(const it of myHouse().items)if(it.t==='greenhouse')for(const p of plotsOf(it)){
-    if(!p.crop||!p.wet||p.stage>=3)continue;
+    if(!p.crop||!p.wet||p.stage>=3||!inSeason(p.crop))continue;   // out of season, it rests
     p.prog=(p.prog||0)+ms;
     if(p.prog>=stageMs(p)){p.stage++;p.prog=0;p.wet=false;changed=true}
   }
@@ -1265,7 +1294,7 @@ const chime=()=>[784,988,1175,1568].forEach((f,i)=>tone(f,.5,'sine',.045,i*.09))
 function openFarm(it){farmIt=it;plotsOf(it);renderFarm();$('farm').style.display='flex';clearInterval(farmTimer);farmTimer=setInterval(renderFarm,1000)}
 $('farmClose').onclick=()=>{$('farm').style.display='none';clearInterval(farmTimer);farmIt=null};
 function plant(p,crop){Object.assign(p,{crop,stage:0,prog:0,wet:false});tone(330,.12,'triangle',.06);save();renderFarm()}
-function water(p){if(!p.crop||p.wet||p.stage>=3)return false;p.wet=true;return true}
+function water(p){if(!p.crop||p.wet||p.stage>=3||!inSeason(p.crop))return false;p.wet=true;return true}
 function harvest(p){
   if(!p.crop||p.stage<3)return 0;
   const c=CROPS[p.crop];S.coins+=c.coins;emit(c.e,player.x,player.y-110,1,26);
@@ -1275,9 +1304,10 @@ function farmDid(msg){taskEvent('farm');save();renderGoals();renderFarm();say(ms
 function renderFarm(){
   if(!farmIt)return;
   const plots=plotsOf(farmIt), all=$('farmAll'), beds=$('farmBeds');
+  $('farmT').textContent=`🌱 Greenhouse · ${season().e} ${season().n}`;
   all.innerHTML='';beds.innerHTML='';
   const btn=(parent,label,cls,fn)=>{const b=document.createElement('button');b.className=cls;b.textContent=label;b.onclick=fn;parent.appendChild(b);return b};
-  if(plots.some(p=>p.crop&&!p.wet&&p.stage<3))btn(all,'💧 Water all','big',()=>{plots.forEach(water);chime();emit('💧',player.x,player.y-110,3);farmDid('Drink up, little plants 💧')});
+  if(plots.some(p=>p.crop&&!p.wet&&p.stage<3&&inSeason(p.crop)))btn(all,'💧 Water all','big',()=>{plots.forEach(water);chime();emit('💧',player.x,player.y-110,3);farmDid('Drink up, little plants 💧')});
   if(plots.some(p=>p.crop&&p.stage>=3))btn(all,'🧺 Harvest all','big alt',()=>{let c=0;plots.forEach(p=>c+=harvest(p));chime();farmDid(`What a harvest! +🪙${c}`)});
   plots.forEach((p,i)=>{
     const d=document.createElement('div');d.className='bed';
@@ -1288,15 +1318,18 @@ function renderFarm(){
       what.append('Bed '+(i+1)+' is empty',Object.assign(document.createElement('small'),{textContent:'Pick a seed to plant'}));
       row.append(Object.assign(document.createElement('span'),{className:'emo',textContent:'🟫'}),what);
       const seeds=document.createElement('div');seeds.className='row';seeds.style.marginTop='6px';
-      for(const [k,cr] of Object.entries(CROPS))btn(seeds,cr.e,'seed',()=>plant(p,k)).title=`${cr.n} — ${cr.min} min, 🪙${cr.coins}`;
+      for(const [k,cr] of Object.entries(CROPS)){
+        const ok=inSeason(k), b=btn(seeds,cr.e,'seed'+(ok?'':' off'),()=>ok?plant(p,k):toast(`${cr.e} ${cr.n} only grows in ${seasonList(k)}`,2500));
+        b.title=ok?`${cr.n} — ${cr.min} min, 🪙${cr.coins}`:`${cr.n} — plant in ${seasonList(k)}`;
+      }
       d.appendChild(seeds);
     }else{
       const stage=['Seed','Sprout','Growing','Ready!'][p.stage];
-      const sub=p.stage>=3?`Ready to pick — 🪙${c.coins}`:p.wet?'Growing nicely…':'Thirsty! Needs water 💧';
+      const sub=p.stage>=3?`Ready to pick — 🪙${c.coins}`:!inSeason(p.crop)?`💤 Resting until ${seasonList(p.crop)}`:p.wet?'Growing nicely…':'Thirsty! Needs water 💧';
       what.append(`${c.n} · ${stage}`,Object.assign(document.createElement('small'),{textContent:sub}));
       row.append(Object.assign(document.createElement('span'),{className:'emo',textContent:p.stage>=3?c.e:p.stage?'🌱':'🫘'}),what);
       if(p.stage>=3)btn(row,'🧺 Pick','big alt',()=>{const n=harvest(p);chime();farmDid(`Fresh ${c.e}! +🪙${n}`)});
-      else if(!p.wet)btn(row,'💧 Water','big',()=>{water(p);chime();emit('💧',player.x,player.y-110,2);farmDid('Splash! 💧')});
+      else if(!p.wet&&inSeason(p.crop))btn(row,'💧 Water','big',()=>{water(p);chime();emit('💧',player.x,player.y-110,2);farmDid('Splash! 💧')});
       if(p.stage<3){const g=document.createElement('div');g.className='grow';const bar=document.createElement('i');
         bar.style.width=Math.round((p.stage+(p.prog||0)/stageMs(p))/3*100)+'%';g.appendChild(bar);d.appendChild(g)}
     }
@@ -1322,7 +1355,7 @@ goalsEl.onclick=()=>{goalsOpen=!goalsOpen;renderGoals()};
 function renderGoals(){
   const wd=workDone(), n=S.tasks.filter(t=>t.done).length;
   const next=S.tasks.find(t=>!t.done&&(!TASKS[t.id].eve||wd));
-  let h=`<div class="hd">${S.night?'🌙':'☀️'} Day ${S.day}<span>🪙 ${S.coins}</span><span style="margin-left:auto">${n}/${S.tasks.length} ${goalsOpen?'▴':'▾'}</span></div>`;
+  let h=`<div class="hd">${S.night?'🌙':season().e} ${season().n} · Day ${S.day}<span>🪙 ${S.coins}</span><span style="margin-left:auto">${n}/${S.tasks.length} ${goalsOpen?'▴':'▾'}</span></div>`;
   if(goalsOpen)h+='<ul>'+S.tasks.map(t=>{
     const d=TASKS[t.id], later=d.eve&&!wd&&!t.done;
     return `<li class="${t.done?'done':later?'later':''}">${t.done?'✅':later?'🌙':'⬜'} ${d.txt}`+
@@ -1335,7 +1368,13 @@ let fade=null;   // fade to black and back: mid() runs while the screen is dark
 function endDay(){
   S.tasks.find(t=>t.id==='sleep').done=true;renderGoals();
   fade={t:0,dur:3.2,mid(){S.day++;S.night=false;S.coins+=10;S.tasks=newTasks();renderGoals();save()},
-    done(){toast('☀️ Good morning! Day '+S.day+'   +🪙10 for finishing yesterday',3500)}};
+    done(){
+      const se=season(), was=seasonOf(S.day-1);
+      if(se!==was){
+        const crops=Object.entries(CROPS).filter(([k])=>inSeason(k)).map(([,c])=>c.e).join(' ');
+        toast(`${se.e} ${se.n} is here! Now you can grow ${crops}   +🪙10 for finishing yesterday`,5500);
+      }else toast('☀️ Good morning! Day '+S.day+'   +🪙10 for finishing yesterday',3500);
+    }};
 }
 function buy(key,price,name,then){
   if(S.coins<price)return toast(`${name} costs 🪙${price} — you have 🪙${S.coins}. Go to work to earn more!`,3200);
@@ -2143,15 +2182,16 @@ function drawItem(it,T){
 function drawHouse(T){
   const nF=S.floors, top=-nF*FLOOR_H;
   // lawn, yards, sign
-  R(-3000,0,HW+6000,900,'#7ec850');R(-3000,0,HW+6000,6,'#5fae3a');
-  for(let i=-30;i<HW+40;i+=26)P([i,2,i+5,-8,i+10,2],'#5fae3a');
+  const se=season();
+  R(-3000,0,HW+6000,900,se.grass);R(-3000,0,HW+6000,6,se.tuft);
+  for(let i=-30;i<HW+40;i+=26)P([i,2,i+5,-8,i+10,2],se.tuft);
   // backyard: picket fence, stepping stones from the back door, a tree past the fence
-  E(YARD_L-60,-80,44,52,'#3fa048');R(YARD_L-66,-30,12,30,'#7b4a2b');E(YARD_L-70,-104,30,30,'#4cb556');
+  R(YARD_L-66,-30,12,30,'#7b4a2b');seasonTree(YARD_L-62,-86,44,56);
   R(YARD_L,-40,-YARD_L-14,5,'#e8dcc8');R(YARD_L,-18,-YARD_L-14,5,'#e8dcc8');
   for(let x=YARD_L;x<-14;x+=17){RR(x,-54,11,54,[5,5,0,0],'#fff8ec')}
   RR(YARD_L-6,-64,10,64,[3,3,0,0],'#e8dcc8');
   for(let i=0;i<3;i++)E(-30-i*34,-1,11,3,'#b9b9b9');
-  E(OUT_X+60,-40,30,32,'#3fa048');R(OUT_X+56,-12,9,12,'#7b4a2b');
+  R(OUT_X+56,-12,9,12,'#7b4a2b');seasonTree(OUT_X+60,-40,30,32);
   R(HW,CAR_Y,OUT_X-HW+20,8,'#a4a4a4');R(HW,CAR_Y,OUT_X-HW+20,2,'#c4c4c4');   // driveway
   const owner=visiting?visiting.name:S.name;
   if(owner){
@@ -2164,6 +2204,7 @@ function drawHouse(T){
   R(HW*.72,top-150,34,90,shade(S.roof,-30));R(HW*.72-4,top-156,42,10,shade(S.roof,-45));
   if(S.items.some(i=>i.t==='fireplace'&&i.on))for(let i=0;i<3;i++){const s=(T*.5+i/3)%1;E(HW*.72+17+Math.sin(T+i)*8,top-170-s*80,8+s*14,6+s*10,`rgba(220,220,220,${.6-s*.6})`)}
   P([-36,top+4,HW+36,top+4,HW/2,top-150],S.roof);
+  if(se.n==='Winter'){P([-36,top+4,HW/2,top-150,HW+36,top+4,HW+16,top+4,HW/2,top-132,-16,top+4],'#fff');R(HW*.72-4,top-162,42,8,'#fff')}
   P([-36,top+4,HW+36,top+4,HW+26,top-6,-26,top-6],shade(S.roof,-30));
   // rooms
   for(let f=0;f<nF;f++){
@@ -2326,6 +2367,15 @@ function nightOutside(vis,T){
   X.fill('evenodd');
   for(const it of vis)if(isOut(it)&&it.on&&ITEMS[it.t].light)drawItem(it,T);   // a campfire stays bright
 }
+function drawSeasonFx(T){
+  const fx=season().fx;
+  if(!fx)return;
+  for(let i=0;i<30;i++){
+    const sp=fx==='snow'?1:1.6, x=((i*137.5+T*(12+i%5*6)*sp)%(W+40))-20, y=((i*89.3+T*(28+i%4*9))%(H+40))-20;
+    if(fx==='snow')E(x,y,1.5+i%3,1.5+i%3,'rgba(255,255,255,.9)');
+    else{X.save();X.translate(x,y);X.rotate(T*2+i);E(0,0,fx==='leaf'?6:4,fx==='leaf'?3:2.5,fx==='leaf'?['#e67e22','#d35400','#f1c40f'][i%3]:'#ffb6d1');X.restore()}
+  }
+}
 function nameTag(name,x,y){
   X.font='bold 12px system-ui';const w=X.measureText(name).width+12;
   RR(x-w/2,y-14,w,18,8,'rgba(40,30,70,.7)');X.fillStyle='#fff';X.textAlign='center';X.fillText(name,x,y-1);
@@ -2375,6 +2425,7 @@ function draw(T){
   for(const p of parts){X.globalAlpha=Math.min(1,p.life);X.font=p.size+'px sans-serif';X.textAlign='center';X.fillText(p.txt,p.x,p.y)}
   X.globalAlpha=1;
   X.restore();
+  if(!inMine)drawSeasonFx(T);
   // name tag + speech in screen space so they stay readable when zoomed out
   const [sx,sy]=drive?toScreen(carX()+CAR_W/2,(away()?0:CAR_Y)-80):toScreen(player.x,player.y-(player.act&&player.act.kind==='sleep'?40:(player.act&&player.act.kind!=='stand'?80:100)));
   if(!drive&&player.act&&player.act.kind!=='stand'&&!player.act.noSeat){
