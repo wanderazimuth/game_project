@@ -42,6 +42,15 @@ button{font:inherit;cursor:pointer;border:none}
 #nbBtns button{height:52px;padding:0 16px;border-radius:16px;background:rgba(40,30,70,.88);color:#fff;font-weight:800;font-size:16px}
 #visitTag{position:fixed;left:12px;bottom:28px;max-width:calc(100vw - 170px);overflow:hidden;text-overflow:ellipsis;z-index:4;background:#ffcf4a;color:#3a2a00;font-weight:800;
   font-size:14px;padding:6px 14px;border-radius:12px;display:none;white-space:nowrap}
+#snow{position:fixed;inset:0;z-index:8;background:rgba(20,30,60,.5);display:none;align-items:center;justify-content:center;padding:16px}
+#snow .modalIn{background:#f2f8ff;border-radius:20px;padding:16px;width:min(400px,100%);max-height:88vh;overflow-y:auto;touch-action:pan-y;text-align:center}
+#snow h2{color:#2c4a7a;margin-bottom:6px}
+#snowC{margin:0 auto;width:180px;height:200px;background:linear-gradient(#cfe6ff,#f6fbff);border-radius:16px}
+#snowStep{color:#2c4a7a;font-weight:700;margin:8px 0}
+#snowOpts .row{margin-bottom:8px;text-align:left}
+#snowOpts b{display:block;color:#2c4a7a;font-size:13px;margin-bottom:4px}
+#snowOpts .ch{display:flex;gap:6px;flex-wrap:wrap}
+.snowBtns{display:flex;gap:8px;justify-content:center;margin-top:8px}
 #farm{position:fixed;inset:0;z-index:8;background:rgba(20,40,20,.45);display:none;align-items:center;justify-content:center;padding:16px}
 #farm .modalIn{background:#f4fff0;border-radius:20px;padding:16px;width:min(420px,100%);max-height:85vh;overflow-y:auto;touch-action:pan-y}
 #farm h2{color:#2e6b34;margin-bottom:8px}
@@ -128,8 +137,10 @@ button{font:inherit;cursor:pointer;border:none}
 <div id="zoom"><button id="zIn" title="Zoom in">+</button><button id="zOut" title="Zoom out">−</button></div>
 <div id="toast"></div>
 <div id="goals"></div>
-<div id="nbBtns"><button id="nbOpen">🏘️ Neighbors</button><button id="nbHome">🏠 Go home</button></div>
+<div id="nbBtns"><button id="snowBtn">⛄ Snowman</button> <button id="nbOpen">🏘️ Neighbors</button><button id="nbHome">🏠 Go home</button></div>
 <div id="visitTag"></div>
+<div id="snow"><div class="modalIn"><h2>⛄ Build a snowman</h2><canvas id="snowC"></canvas><div id="snowStep"></div><div id="snowOpts"></div>
+  <div class="snowBtns"><button class="big alt" id="snowCancel">Cancel</button></div></div></div>
 <div id="farm"><div class="modalIn"><h2 id="farmT">🌱 Greenhouse</h2><div id="farmAll"></div><div id="farmBeds"></div><button class="big" id="farmClose">Done</button></div></div>
 <div id="choose" class="modal"><div class="modalIn"><h2 id="chT"></h2><div id="chB"></div></div></div>
 <div id="nb"><div id="nbIn"><h2>🏘️ Visit a neighbor</h2><div id="nbList"></div><button class="big" id="nbClose">Close</button></div></div>
@@ -547,6 +558,9 @@ const ITEMS={
     L(x+6,y-h+42,x+w-6,y-h+42,c,3);
     X.font='16px sans-serif';X.textAlign='center';
     for(let i=0;i<2;i++)X.fillText('🦋',x+w*(.3+.4*i)+Math.sin(T*.8+i*2)*40,y-h+70+Math.sin(T*2.3+i)*14);
+  }},
+  snowman:{n:'Snowman',w:70,h:150,c:'#e74c3c',out:true,act:'snowman',draw(x,y,w,h,c,it,T){
+    drawSnowman(x+w/2,y,{...(it&&it.snow),scarf:c,balls:[1,1,1],melt:season().n!=='Winter'},T);
   }},
   // bought with coins earned at work
   treehouse:{n:'Treehouse',w:140,h:240,c:'#e67e22',out:true,price:100,act:'treehouse',draw(x,y,w,h,c,it,T){
@@ -1134,6 +1148,90 @@ function petIt(it){
   const b=box(it),cx=b.x+b.w/2;it.happy=2.5;emit('❤️',cx,b.y,3);
   if(it.t==='dog'){say(it.helmet?'Good space dog! 🧑‍🚀':'Good dog!');tone(420,.08,'square',.05);tone(380,.1,'square',.05,.12)}else say('Purrrr…');
 }
+// ── Snowman building (winter only) ──────────────────────────────────────────
+const SNOW_HATS=['None','Top hat','Beanie','Flower crown','Party hat'], SNOW_NOSE=['Carrot','Pebble'],
+  SNOW_ARMS=['Sticks','Mittens','None'], SNOW_BTNS=['Coal','Candy','None'],
+  SNOW_SCARF=['#e74c3c','#3498db','#27ae60','#f1c40f','#9b59b6','#e84393'];
+let snowB=null;   // the snowman being built: three balls to roll, then decorations
+const snowC=$('snowC'),snowCtx=snowC.getContext('2d');
+$('snowBtn').onclick=()=>{
+  if(busy()||season().n!=='Winter')return;
+  snowB={balls:[0,0,0],hat:1,nose:0,scarf:SNOW_SCARF[0],arms:0,buttons:0};
+  $('snow').style.display='flex';renderSnow();
+};
+$('snowCancel').onclick=()=>{$('snow').style.display='none';snowB=null};
+function renderSnow(){
+  const step=$('snowStep'),opts=$('snowOpts');opts.innerHTML='';
+  const k=snowB.balls.findIndex(b=>b<1);
+  const mk=(cls,html,fn,on)=>{const b=document.createElement('button');b.className=cls+(on?' on':'');b.innerHTML=html;b.onclick=fn;return b};
+  if(k>=0){   // rolling
+    step.textContent=['Roll a BIG snowball for the bottom!','Now a medium one for the middle!','And a small one for the head!'][k];
+    const roll=mk('big','⚪ Roll!',()=>{
+      snowB.balls[k]=Math.min(1,snowB.balls[k]+.2);tone(180+Math.random()*60,.08,'triangle',.05);
+      if(snowB.balls[k]>=1){tone(660,.12,'sine',.07);tone(880,.15,'sine',.07,.1)}
+      renderSnow();
+    });
+    roll.style.width='100%';opts.appendChild(roll);return;
+  }
+  step.textContent='Now decorate your snowman!';
+  const row=(label,list,key,colors)=>{
+    const r=document.createElement('div');r.className='row';r.innerHTML='<b>'+label+'</b>';
+    const ch=document.createElement('div');ch.className='ch';
+    list.forEach((v,i)=>{
+      const b=colors?mk('cs','',()=>{snowB[key]=v;renderSnow()},snowB[key]===v):mk('ts',v,()=>{snowB[key]=i;renderSnow()},snowB[key]===i);
+      if(colors)b.style.background=v;ch.appendChild(b);
+    });
+    r.appendChild(ch);opts.appendChild(r);
+  };
+  row('Hat',SNOW_HATS,'hat');row('Nose',SNOW_NOSE,'nose');row('Scarf',SNOW_SCARF,'scarf',true);row('Arms',SNOW_ARMS,'arms');row('Buttons',SNOW_BTNS,'buttons');
+  const done=mk('big','⛄ Done',finishSnowman);done.style.width='100%';opts.appendChild(done);
+}
+function finishSnowman(){
+  const {hat,nose,arms,buttons,scarf}=snowB, d=ITEMS.snowman;
+  const x=player.f===0&&player.x<0?player.x-d.w/2:-160-Math.random()*300;   // next to you if you're out back
+  S.items.push(fill({t:'snowman',f:0,x:Math.max(YARD_L+10,Math.min(YARD_MAX(d.w),x)),c:scarf,snow:{hat,nose,arms,buttons}}));
+  $('snow').style.display='none';snowB=null;save();
+  emit('❄️',player.x,player.y-110,4);[523,659,784,1047].forEach((f,i)=>tone(f,.2,'sine',.07,i*.1));
+  say(player.x<0?'Meet my snowman! ⛄':'My snowman is in the backyard! ⛄',3);taskEvent('yard');
+}
+// o: {balls:[0..1 x3], hat, nose, arms, buttons, scarf, melt}; (x,y) is the bottom middle
+function drawSnowman(x,y,o,T){
+  if(o.melt){   // spring: a puddle with the carrot and the hat left behind
+    E(x,y-2,40,7,'rgba(160,210,255,.8)');E(x,y-6,22,8,'#fff');
+    if(o.nose===0)P([x-8,y-8,x+10,y-6,x-8,y-4],'#e67e22');
+    if(o.hat===1){R(x+14,y-16,16,12,'#222');R(x+10,y-6,24,3,'#222')}
+    return;
+  }
+  const R0=[30,23,17], r=o.balls.map((b,i)=>b>0?R0[i]*(.3+.7*b):0);
+  const y0=y-r[0]*.85, y1=y0-r[0]*.7-r[1]*.75, y2=y1-r[1]*.7-r[2]*.8;
+  const ball=(cy,rr)=>{if(!rr)return;E(x,cy,rr,rr*.92,'#fff');E(x+rr*.3,cy+rr*.3,rr*.6,rr*.4,'rgba(170,200,235,.45)');E(x-rr*.35,cy-rr*.35,rr*.25,rr*.18,'rgba(255,255,255,.9)')};
+  E(x,y,r[0]+8,5,'rgba(120,150,190,.25)');
+  ball(y0,r[0]);if(o.balls[0]>=1)ball(y1,r[1]);if(o.balls[1]>=1)ball(y2,r[2]);
+  if(o.balls.some(b=>b<1))return;
+  if(o.arms!==2){   // stick arms, maybe with mittens
+    L(x-20,y1,x-46,y1-20,'#6d4c41',3);L(x-38,y1-14,x-44,y1-28,'#6d4c41',2);L(x+20,y1,x+46,y1-22,'#6d4c41',3);L(x+38,y1-16,x+48,y1-30,'#6d4c41',2);
+    if(o.arms===1){E(x-48,y1-22,6,6,o.scarf);E(x+48,y1-24,6,6,o.scarf)}
+  }
+  if(o.buttons!==2)for(let i=0;i<3;i++)E(x,y1-10+i*10,2.8,2.8,o.buttons===0?'#2d3436':['#e74c3c','#2ecc71','#3498db'][i]);
+  E(x-6,y2-4,2.4,2.4,'#2d3436');E(x+6,y2-4,2.4,2.4,'#2d3436');
+  for(let i=-2;i<=2;i++)E(x+i*4,y2+9-i*i*.8,1.6,1.6,'#2d3436');   // a coal smile
+  if(o.nose===0)P([x,y2-1,x+16,y2+2,x,y2+4],'#e67e22');else E(x,y2+1,3,3,'#7f8c8d');
+  RR(x-r[2]-1,y2+r[2]*.62,r[2]*2+2,7,3,o.scarf);R(x+6,y2+r[2]*.62+4,7,16,shade(o.scarf,-20));
+  const hy=y2-r[2]*.85;
+  if(o.hat===1){R(x-11,hy-22,22,22,'#222');R(x-11,hy-6,22,4,'#c0392b');R(x-17,hy-1,34,4,'#222')}
+  if(o.hat===2){X.fillStyle=o.scarf;X.beginPath();X.arc(x,hy+4,r[2]*.9,Math.PI,0);X.fill();R(x-r[2]*.9,hy,r[2]*1.8,5,shade(o.scarf,-25));E(x,hy-r[2]*.8,5,5,'#fff')}
+  if(o.hat===3)for(let i=0;i<5;i++)E(x-12+i*6,hy+2-Math.abs(i-2)*2,4,4,['#ff6b9d','#ffd23f','#c39bff','#ff6b9d','#7ee081'][i]);
+  if(o.hat===4){P([x-10,hy+2,x+10,hy+2,x,hy-26],'#9b59b6');E(x,hy-27,4,4,'#f1c40f');for(let i=0;i<3;i++)E(x-4+i*4,hy-6-i*6,1.6,1.6,'#fff')}
+}
+function drawSnowPreview(T){
+  const dp=devicePixelRatio||1,w=snowC.clientWidth,h=snowC.clientHeight;
+  if(snowC.width!==w*dp){snowC.width=w*dp;snowC.height=h*dp}
+  snowCtx.setTransform(dp,0,0,dp,0,0);snowCtx.clearRect(0,0,w,h);
+  X=snowCtx;X.save();X.translate(w/2,h-16);X.scale(1.15,1.15);
+  E(0,0,70,8,'#fff');drawSnowman(0,0,snowB,T);
+  X.restore();X=ctx;
+}
+
 // ── Puppy space program: unlocked by watching Space Puppies ─────────────────
 const SOUVENIRS=[['🌙','a moon rock'],['⭐','a little star'],['🪐','a tiny planet'],['☄️','a comet crumb']];
 function launchPup(it){
@@ -1243,11 +1341,15 @@ function use(it){
     case 'rocket':player.act={kind:'rocket',it,t:0};break;
     case 'swim':player.act={kind:'swim',it};say('Splash! 💦');break;
     case 'sand':emit('🏰',cx,top,1,26);say('Building a sandcastle!');break;
+    case 'snowman':
+      if(season().n!=='Winter')say('It melted… 💧 See you next winter!');
+      else{emit('❄️',cx,top,3);say(['Brrr! ⛄','I love winter!','Want to build another snowman?','Hug me — gently! ❄️'][Math.random()*4|0])}
+      break;
     case 'apple':if(['Spring','Winter'].includes(season().n))return say(season().n==='Spring'?'Just blossoms now — apples come in summer 🌸':'No apples in winter ❄️');
       emit('🍎',cx,top+40,2,24);say('A juicy apple! 🍎');tone(600,.08,'triangle',.08);break;
     case 'birds':emit('🐦',cx,top,2);say('Tweet tweet!');tone(1800,.06,'sine',.05);tone(2100,.06,'sine',.05,.1);break;
   }
-  const EV={bath:'bath',water:'water',read:'relax',eat:'eat',cook:'cook',wash:'wash',piano:'relax',outfit:'outfit',
+  const EV={snowman:'yard',bath:'bath',water:'water',read:'relax',eat:'eat',cook:'cook',wash:'wash',piano:'relax',outfit:'outfit',
     toys:'relax',pet:'pet',fish:'relax',arcade:'relax',type:'relax',birds:'relax',apple:'eat'};
   if(EV[d.act])taskEvent(EV[d.act]);
   if(['swing','slide','swim','sand','bounce','treehouse','rocket'].includes(d.act)&&!(isOut(it)&&taskEvent('yard')))taskEvent('relax');
@@ -1367,13 +1469,20 @@ function renderGoals(){
 let fade=null;   // fade to black and back: mid() runs while the screen is dark
 function endDay(){
   S.tasks.find(t=>t.id==='sleep').done=true;renderGoals();
-  fade={t:0,dur:3.2,mid(){S.day++;S.night=false;S.coins+=10;S.tasks=newTasks();renderGoals();save()},
+  let melted=false;
+  fade={t:0,dur:3.2,mid(){
+    S.day++;S.night=false;S.coins+=10;S.tasks=newTasks();
+    const h=visiting?visiting.home:S;
+    if(season().n!=='Winter'&&h.items.some(i=>i.t==='snowman')){h.items=h.items.filter(i=>i.t!=='snowman');melted=true}
+    renderGoals();showVisitUI();save();
+  },
     done(){
       const se=season(), was=seasonOf(S.day-1);
       if(se!==was){
         const crops=Object.entries(CROPS).filter(([k])=>inSeason(k)).map(([,c])=>c.e).join(' ');
-        toast(`${se.e} ${se.n} is here! Now you can grow ${crops}   +🪙10 for finishing yesterday`,5500);
+        toast(`${se.e} ${se.n} is here! Now you can grow ${crops}`+(se.n==='Winter'?'  — and tap ⛄ to build a snowman!':'')+'   +🪙10 for finishing yesterday',6000);
       }else toast('☀️ Good morning! Day '+S.day+'   +🪙10 for finishing yesterday',3500);
+      if(melted)setTimeout(()=>toast('💧 Your snowman melted… see you next winter!',4000),6200);
     }};
 }
 function buy(key,price,name,then){
@@ -1529,6 +1638,7 @@ const nbEl=$('nb'),nbList=$('nbList');
 function showVisitUI(){
   $('nbBtns').style.display=mode==='play'&&!away()?'block':'none';
   $('nbOpen').style.display=visiting?'none':'inline-block';
+  $('snowBtn').style.display=!visiting&&!away()&&season().n==='Winter'?'inline-block':'none';
   $('nbHome').style.display=visiting?'inline-block':'none';
   const tag=$('visitTag');tag.style.display=(visiting||away())&&mode==='play'?'block':'none';
   goalsEl.style.display=mode==='play'&&!inMine?'block':'none';
@@ -2539,6 +2649,7 @@ function frame(now){
   const dt=Math.min(.05,(now-last)/1000);last=now;
   const T=now/1000;
   update(dt,T);
+  if(snowB)drawSnowPreview(T);
   if(mode==='me')drawPreview(T);
   else draw(T);
   requestAnimationFrame(frame);
