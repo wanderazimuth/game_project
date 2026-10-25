@@ -582,6 +582,7 @@ const TASKS={
   host:{txt:'Have a friend over 🔔',acts:['host'],has:[],eve:true},
   family:{txt:'Spend time with your family 💕',acts:['family'],has:[],eve:true},
   city:{txt:'Go to the city 🏙️',acts:['city'],has:[],eve:true},
+  mine:{txt:'Explore the mine ⛏️',acts:['mine'],has:[],eve:true},
   sleep:{txt:'Go to bed',acts:['sleep'],has:['bed'],need:'a bed',eve:true},
 };
 const CARS=[{n:'Car',price:0},{n:'Truck',price:60},{n:'Sports car',price:90}];
@@ -708,12 +709,14 @@ function load(){
 let saveTimer=0;
 let visiting=null;   // {id,name,home,pos,npc} while you're at someone else's house
 let inCity=false, townsfolk=[], ride=null, movie=null;   // a trip to the city
+let inMine=false, mine=null;                              // a trip to the mine
+const away=()=>inCity||inMine;
 const PERSONAL=['look','name','tasks','coins','day','owned','night','car','hearts','heartDay','spouse','kids'];   // yours, wherever you are
 const myHouse=()=>visiting?{...visiting.home,...Object.fromEntries(PERSONAL.map(k=>[k,S[k]]))}:S;
 const clean=items=>items.map(({id,vx,happy,...k})=>k);
 function saveNow(){
   clearTimeout(saveTimer);
-  const home=myHouse(), pos=visiting?visiting.pos:inCity?{px:CAR_X-16,pf:0}:{px:player.x,pf:player.f};
+  const home=myHouse(), pos=visiting?visiting.pos:away()?{px:CAR_X-16,pf:0}:{px:player.x,pf:player.f};
   try{localStorage.setItem(SAVE_KEY,JSON.stringify({...home,items:clean(home.items),...pos}))}catch(e){}
   if(!visiting)share();
 }
@@ -777,7 +780,7 @@ function setMode(m){
   bar.style.display=m==='build'?'block':'none';
   zoomEl.style.display=m==='build'?'flex':'none';
   meEl.style.display=m==='me'?'block':'none';
-  goalsEl.style.display=m==='play'?'block':'none';
+  goalsEl.style.display=m==='play'&&!inMine?'block':'none';
   showVisitUI();
   toastEl.style.top=m==='build'?'62px':'auto';toastEl.style.bottom=m==='build'?'auto':'84px';
   if(m!=='build'){selected=null;tool=null;drag=null}
@@ -791,7 +794,7 @@ function setMode(m){
 const busy=()=>drive||work||fade||rocketing()||wedding||ride||movie;
 const go=m=>()=>{if(drive||work)return toast('Finish your work day first!');if(wedding)return;
   if(m==='build'&&visiting)return toast('You can only build at your own house — tap 🏠 Go home first',3000);
-  if(m==='build'&&inCity)return toast('You can only build at home — tap your car to drive back',3000);if(rocketing())return toast('Wait for the rocket to land!');setMode(m)};
+  if(m==='build'&&away())return toast('You can only build at home — tap your car to drive back',3000);if(rocketing())return toast('Wait for the rocket to land!');setMode(m)};
 $('mBuild').onclick=go('build');
 $('mMe').onclick=go('me');
 $('mPlay').onclick=go('play');
@@ -886,7 +889,7 @@ function buildRows(){
 }
 $('name').oninput=e=>{S.name=e.target.value.trim();save()};
 $('meRand').onclick=()=>{S.look={...randomLook(),job:S.look.job};save();buildRows()};
-$('meDone').onclick=()=>{setMode(S.items.length>6||inCity||visiting?'play':'build');if(mode==='build')toast('Now build your house! Pick something below, then tap a room',3500)};
+$('meDone').onclick=()=>{setMode(S.items.length>6||away()||visiting?'play':'build');if(mode==='build')toast('Now build your house! Pick something below, then tap a room',3500)};
 function drawPreview(T){
   const dp=devicePixelRatio||1,w=prevC.clientWidth,h=prevC.clientHeight;
   if(prevC.width!==w*dp){prevC.width=w*dp;prevC.height=h*dp}
@@ -915,8 +918,8 @@ function camTarget(){
   }
   if(mode==='play'){
     const s=Math.max(fitS,Math.min(vh/(FLOOR_H*2.1),W/(ROOM_W*2)));
-    let x=drive?carX()+CAR_W/2:player.x, y=(drive?(inCity?0:CAR_Y):player.y)-INT_H/2+10;
-    const L0=inCity?-60:YARD_L-40, R0=inCity?CITY_W+60:OUT_X+90;
+    let x=drive?carX()+CAR_W/2:player.x, y=(drive?(away()?0:CAR_Y):player.y)-INT_H/2+10;
+    const L0=inMine?-260:inCity?-60:YARD_L-40, R0=inMine?MINE_W+60:inCity?CITY_W+60:OUT_X+90;
     const halfW=W/2/s;
     if(!drive)x=R0-L0<=halfW*2?(L0+R0)/2:Math.max(L0+halfW,Math.min(R0-halfW,x));
     return {x,y,s,vy:viewTop+vh/2};
@@ -1019,6 +1022,7 @@ addEventListener('keydown',e=>{
   if(e.code==='Space'||e.code==='KeyE'||e.code==='Enter'){
     if(player.act){standUp();return}
     if(player.f===0&&Math.abs(player.x-(carX()+CAR_W/2))<CAR_W/2+20)return carTapped();
+    if(inMine){mineSpace();return}
     if(inCity){const sh=CITY_SPOTS().find(c=>Math.abs(player.x-c.door)<60);if(sh)cityAction(sh.id);else say('Walk up to a shop!');return}
     let best=null,bd=60;
     for(const it of S.items){
@@ -1040,10 +1044,11 @@ function routeTo(f,x,item){
   if(item)path.push({use:item});
   standUp();player.path=path;
 }
-const maxX=f=>inCity?CITY_W-20:f===0?OUT_X:HW-WALL-16;   // only the ground floor has doors: front door to the car
-const minX=f=>inCity?20:f===0?YARD_L+20:WALL+16;  // and back door to the backyard
+const maxX=f=>inMine?MINE_W-20:inCity?CITY_W-20:f===0?OUT_X:HW-WALL-16;   // only the ground floor has doors: front door to the car
+const minX=f=>inMine?(mine&&mine.floor===1?-60:20):away()?20:f===0?YARD_L+20:WALL+16;  // and back door to the backyard
 function playTap(wx,wy){
   if(player.climb||busy())return;
+  if(inMine)return mineTap(wx,wy);
   if(inCity)return cityTap(wx,wy);
   if(wy>40||wy<-S.floors*FLOOR_H)return;
   if(wx>=CAR_X-6&&wx<=CAR_X+CAR_W+6&&wy>=CAR_Y-80&&wy<=10)return routeTo(0,CAR_X+60,'car');
@@ -1151,7 +1156,7 @@ const hasFor=id=>{const h=myHouse();return !TASKS[id].has.length||h.items.some(i
 function newTasks(){
   // prefer tasks the house has furniture for; the rest tell you what to build
   const pick=(ids,n)=>{const sh=ids.sort(()=>Math.random()-.5);return [...sh.filter(hasFor),...sh.filter(id=>!hasFor(id))].slice(0,n)};
-  return ['breakfast',...pick(['wash','dress'],1),'work',...pick(['pet','plant','relax','dinner','bath','lights','yard','visit','host','city',...(S.spouse?['family']:[])],2),'sleep'].map(id=>({id,done:false}));
+  return ['breakfast',...pick(['wash','dress'],1),'work',...pick(['pet','plant','relax','dinner','bath','lights','yard','visit','host','city','mine',...(S.spouse?['family']:[])],2),'sleep'].map(id=>({id,done:false}));
 }
 if(!S.tasks)S.tasks=newTasks();
 const workDone=()=>S.tasks.some(t=>t.id==='work'&&t.done);
@@ -1196,7 +1201,7 @@ function buy(key,price,name,then){
 
 // The car drives off the right of the screen to work, and back.
 let drive=null, work=null;
-const carX=()=>(inCity?CITY_CAR:CAR_X)+(drive?drive.x:0);
+const carX=()=>(inMine?MINE_CAR:inCity?CITY_CAR:CAR_X)+(drive?drive.x:0);
 function startWork(){
   if(drive||work)return;
   if(visiting)return say('I should go home before I drive to work');
@@ -1208,10 +1213,11 @@ function startWork(){
 function carTapped(){
   if(busy())return;
   if(visiting)return say('I should go home before I drive anywhere');
-  if(inCity)return choose('🚗 Ready to go?',[['🏠 Drive home',()=>startDrive('home')]]);
+  if(away())return choose('🚗 Ready to go?',[['🏠 Drive home',()=>startDrive('home')]]);
   const opts=[];
   if(!workDone())opts.push(['🏢 Go to work',startWork]);
   opts.push(['🏙️ Drive to the city',()=>startDrive('city')]);
+  opts.push(['⛏️ Drive to the mine',()=>startDrive('mine')]);
   choose('🚗 Where to?',opts);
 }
 function startDrive(dest){
@@ -1244,11 +1250,11 @@ function updateTrip(dt){
     drive.t+=dt;
     if(drive.dir>0){
       drive.x=360*drive.t*drive.t;
-      if(drive.t>=2.3){const d=drive.dest;drive=null;if(d==='city')enterCity();else if(d==='home')leaveCity();else startJob()}
+      if(drive.t>=2.3){const d=drive.dest;drive=null;if(d==='city')enterCity();else if(d==='mine')enterMine();else if(d==='home')leaveAway();else startJob()}
     }else{
       const k=Math.min(1,drive.t/2.4);
       drive.x=1600*(1-k)*(1-k);
-      if(k>=1&&drive.from==='city'){drive=null;player.f=0;player.x=CAR_X-16;player.dir=-1;say('Home sweet home! 🏠',2)}
+      if(k>=1&&drive.from==='away'){drive=null;player.f=0;player.x=CAR_X-16;player.dir=-1;say('Home sweet home! 🏠',2)}
       else if(k>=1){
         drive=null;player.f=0;player.x=CAR_X-16;player.dir=-1;S.night=true;
         taskEvent('work');renderGoals();
@@ -1338,11 +1344,12 @@ const MADE_UP=[
 ];
 const nbEl=$('nb'),nbList=$('nbList');
 function showVisitUI(){
-  $('nbBtns').style.display=mode==='play'&&!inCity?'block':'none';
+  $('nbBtns').style.display=mode==='play'&&!away()?'block':'none';
   $('nbOpen').style.display=visiting?'none':'inline-block';
   $('nbHome').style.display=visiting?'inline-block':'none';
-  const tag=$('visitTag');tag.style.display=(visiting||inCity)&&mode==='play'?'block':'none';
-  tag.textContent=visiting?'Visiting '+visiting.name:inCity?'🏙️ In the city — tap your car to go home':'';
+  const tag=$('visitTag');tag.style.display=(visiting||away())&&mode==='play'?'block':'none';
+  goalsEl.style.display=mode==='play'&&!inMine?'block':'none';
+  tag.textContent=visiting?'Visiting '+visiting.name:inMine?'⛏️ The mine — floor '+(mine?mine.floor:1):inCity?'🏙️ In the city — tap your car to go home':'';
 }
 $('nbClose').onclick=()=>{nbEl.style.display='none'};
 $('nbHome').onclick=()=>{if(!busy())travel(null)};
@@ -1412,7 +1419,7 @@ function travel(n){
 function newRoomFallback(){return {w:WALLC[0],p:0,fl:0}}
 // Guests at your house: invited, dropping by, or family who visited your house on their phone.
 const guests=[];
-const people=()=>visiting?[visiting.npc]:inCity?townsfolk:[...homePeople(),...guests];
+const people=()=>visiting?[visiting.npc]:inMine?[]:inCity?townsfolk:[...homePeople(),...guests];
 const npcY=n=>inCity?0:n.x>HW-WALL?CAR_Y:stand(0);
 let homeTime=0;
 function invite(g,msg){
@@ -1435,7 +1442,7 @@ function invite(g,msg){
 }
 // Family who visited your house on their own phone come by on yours.
 async function checkVisits(){
-  if(!MY_ID||visiting||inCity||mode!=='play'||drive||work||fade)return;
+  if(!MY_ID||visiting||away()||mode!=='play'||drive||work||fade)return;
   try{
     const v=await (await fetch('/houses/'+MY_ID+'/visits',{cache:'no-store'})).json();
     const fresh=v.filter(x=>x.time>(S.visitsSeen||0));
@@ -1558,8 +1565,8 @@ function enterCity(){
     showVisitUI();
   },done(){say('Welcome to the city! 🏙️',2.5);taskEvent('city')}};
 }
-function leaveCity(){
-  fade={t:0,dur:1,mid(){inCity=false;townsfolk=[];drive={dir:-1,t:0,x:1600,from:'city'};cam.init=false;showVisitUI()},done(){}};
+function leaveAway(){   // drive home from the city or the mine
+  fade={t:0,dur:1,mid(){inCity=inMine=false;townsfolk=[];mine=null;drive={dir:-1,t:0,x:1600,from:'away'};cam.init=false;showVisitUI()},done(){}};
 }
 function cityTap(wx,wy){
   if(wx>=carX()-6&&wx<=carX()+CAR_W+6&&wy>=-80&&wy<=10)return routeTo(0,CITY_CAR+60,'car');
@@ -1679,16 +1686,191 @@ function drawMovie(t,T){
   X.globalAlpha=1;
 }
 
+// ── The mine ─────────────────────────────────────────────────────────────────
+// A dark tunnel with rocks to mine and monsters to fight. 12 hits and you wake up in bed.
+const MINE_W=3200, MINE_CAR=-200, MAX_HITS=12, SAFE_X=260;   // monsters stay out of the entrance
+const ROCKS={stone:{c:'#7f8c8d',coins:1,fx:'🪨'},copper:{c:'#e67e22',coins:2,fx:'🟠'},gold:{c:'#f1c40f',coins:4,fx:'✨'},gem:{c:'#5ef2ff',coins:8,fx:'💎'}};
+const MONSTERS={
+  slime:{hp:2,speed:45,w:26,see:420},
+  bat:{hp:1,speed:85,w:20,see:520},
+  spider:{hp:3,speed:65,w:26,see:380},
+};
+function mineFloor(floor){
+  const r=()=>Math.random(), monsters=[], rocks=[];
+  const kinds=floor===1?['slime','slime','bat']:['slime','bat','spider','spider'];
+  for(let i=0;i<5+floor*2;i++){const t=kinds[r()*kinds.length|0];monsters.push({t,x:SAFE_X+200+r()*(MINE_W-SAFE_X-400),hp:MONSTERS[t].hp,vx:0,ph:r()*6,hurt:0,dead:0})}
+  for(let x=SAFE_X+60;x<MINE_W-200;x+=150+r()*120){
+    const roll=r()+floor*.08;
+    rocks.push({x,kind:roll>1.02?'gem':roll>.85?'gold':roll>.55?'copper':'stone',hp:3,shake:0});
+  }
+  return {floor,monsters,rocks};
+}
+function enterMine(){
+  fade={t:0,dur:1.2,mid(){
+    inMine=true;mine={...mineFloor(1),hits:0,loot:0};
+    player.f=0;player.x=MINE_CAR+CAR_W+40;player.dir=1;player.path=[];player.target=null;player.hurt=player.hurtCd=0;cam.init=false;
+    showVisitUI();
+  },done(){say('Into the mine! ⛏️ Tap monsters to fight, rocks to mine',3.5);taskEvent('mine')}};
+}
+function changeFloor(floor){
+  fade={t:0,dur:1,mid(){
+    Object.assign(mine,mineFloor(floor));
+    player.x=floor===1?MINE_CAR+CAR_W+40:140;player.path=[];player.target=null;cam.init=false;showVisitUI();
+  },done(){say(floor===1?'Back at the entrance':'Floor '+floor+' — watch out! 🕷️',2.5)}};
+}
+function faint(){   // 12 hits: wake up at home in bed
+  player.target=null;player.path=[];
+  fade={t:0,dur:2.4,mid(){
+    inMine=false;mine=null;player.hurt=player.hurtCd=0;
+    const bed=S.items.find(i=>i.t==='bed'&&i.f<S.floors);
+    if(bed){player.f=bed.f;player.x=bed.x+60;player.act={kind:'sleep',it:bed}}else{player.f=0;player.x=HW/2}
+    cam.init=false;showVisitUI();save();
+  },done(){say('Ouch… I fainted in the mine and woke up in bed 🛏️',4)}};
+  say('Oh no… 😵',2);tone(300,.3,'sawtooth',.06);tone(200,.5,'sawtooth',.06,.3);
+}
+const ladderDown=()=>MINE_W-140, ladderUp=()=>mine&&mine.floor>1?100:null;
+function mineTap(wx,wy){
+  if(mine.floor===1&&wx>=carX()-6&&wx<=carX()+CAR_W+6&&wy>=-80&&wy<=10)return routeTo(0,carX()+CAR_W+30,'car');
+  const m=mine.monsters.find(m=>!m.dead&&Math.abs(wx-m.x)<34&&wy>monY(m)-50&&wy<monY(m)+20);
+  if(m){player.target=m;return}
+  const rk=mine.rocks.find(r=>r.hp>0&&Math.abs(wx-r.x)<40&&wy>-70&&wy<10);
+  if(rk){player.target=rk;return}
+  player.target=null;
+  if(Math.abs(wx-ladderDown())<40&&wy>-200)return routeTo(0,ladderDown(),'down');
+  if(ladderUp()&&Math.abs(wx-ladderUp())<40&&wy>-200)return routeTo(0,ladderUp(),'up');
+  routeTo(0,Math.max(20,Math.min(MINE_W-20,wx)));
+}
+function mineAction(id){
+  if(id==='down')changeFloor(mine.floor+1);
+  if(id==='up')changeFloor(1);
+}
+function mineSpace(){   // keyboard: Space uses the car or a ladder, otherwise swings
+  if(mine.floor===1&&Math.abs(player.x-(carX()+CAR_W/2))<CAR_W/2+30)return carTapped();
+  if(Math.abs(player.x-ladderDown())<50)return mineAction('down');
+  if(ladderUp()&&Math.abs(player.x-ladderUp())<50)return mineAction('up');
+  swing();
+}
+const monY=m=>m.t==='bat'?-80+Math.sin(m.ph*3)*26:0;
+function swing(){
+  if(player.swingCd>0)return;
+  player.swing=.3;player.swingCd=.42;tone(200,.06,'square',.04);
+  const reach=(x,w)=>{const dx=x-player.x;return Math.abs(dx)<w+34&&(Math.sign(dx)===player.dir||Math.abs(dx)<14)};
+  for(const m of mine.monsters)if(!m.dead&&reach(m.x,MONSTERS[m.t].w)){
+    m.hp--;m.hurt=.25;m.x+=player.dir*26;tone(500,.06,'square',.05);
+    if(m.hp<=0){m.dead=.01;S.coins++;mine.loot++;emit('💥',m.x,monY(m)-20,1,22);emit('+1 🪙',m.x,monY(m)-50,1,16);renderGoals();save()}
+  }
+  for(const r of mine.rocks)if(r.hp>0&&reach(r.x,24)){
+    r.hp--;r.shake=.2;tone(150,.05,'triangle',.06);
+    if(r.hp<=0){const k=ROCKS[r.kind];S.coins+=k.coins;mine.loot+=k.coins;emit(k.fx,r.x,-40,2,22);emit('+'+k.coins+' 🪙',r.x,-70,1,16);renderGoals();save()}
+  }
+}
+function updateMine(dt){
+  if(!inMine||!mine)return;
+  player.swing=Math.max(0,(player.swing||0)-dt);player.swingCd=Math.max(0,(player.swingCd||0)-dt);
+  player.hurt=Math.max(0,(player.hurt||0)-dt);player.hurtCd=Math.max(0,(player.hurtCd||0)-dt);
+  if(mode!=='play'||fade||drive)return;
+  // walk up to what you tapped, then keep swinging at it
+  const t=player.target;
+  if(t){
+    if(t.hp<=0)player.target=null;
+    else{
+      const dx=t.x-player.x;player.dir=Math.sign(dx)||player.dir;
+      if(Math.abs(dx)>44)player.path=[{walk:t.x-Math.sign(dx)*38}];
+      else{player.path=[];swing()}
+    }
+  }
+  for(const m of mine.monsters){
+    if(m.dead){m.dead+=dt;continue}
+    const M=MONSTERS[m.t], dx=player.x-m.x;
+    m.ph+=dt;m.hurt=Math.max(0,m.hurt-dt);
+    if(Math.abs(dx)<M.see&&player.x>SAFE_X-40)m.vx=Math.sign(dx)*M.speed;
+    else if(Math.random()<dt*.5)m.vx=(Math.random()<.5?-1:1)*M.speed*.4;
+    if(m.hurt>0)m.vx=0;
+    m.x=Math.max(SAFE_X,Math.min(MINE_W-60,m.x+m.vx*dt));
+    if(Math.abs(dx)<M.w&&player.hurtCd<=0&&!(m.t==='bat'&&monY(m)<-95)){   // ouch!
+      mine.hits++;player.hurtCd=1;player.hurt=.6;player.target=null;player.path=[];
+      player.x=Math.max(20,Math.min(MINE_W-20,player.x+(Math.sign(dx)||1)*40));
+      tone(160,.15,'square',.08);emit('💥',player.x,player.y-60,1,20);
+      if(mine.hits>=MAX_HITS)return faint();
+      say(['Ouch!','Ow!','Hey!','Yikes!'][Math.random()*4|0],1);
+    }
+  }
+  mine.monsters=mine.monsters.filter(m=>!m.dead||m.dead<.35);
+  for(const r of mine.rocks)r.shake=Math.max(0,r.shake-dt);
+}
+function drawMonster(m,T,eyesOnly){
+  const y=monY(m), a=m.dead?Math.max(0,1-m.dead/.35):1, d=Math.sign(player.x-m.x)||1;
+  X.globalAlpha=a;
+  if(m.t==='slime'){
+    const hop=Math.abs(Math.sin(m.ph*6))*12, sq=1+Math.sin(m.ph*12)*.06;
+    if(!eyesOnly){E(m.x,y-14-hop,22*sq,16/sq,m.hurt>0?'#fff':'rgba(80,220,110,.9)');E(m.x-7,y-22-hop,6,4,'rgba(255,255,255,.6)')}
+    E(m.x-6+d*3,y-16-hop,3,4,'#111');E(m.x+6+d*3,y-16-hop,3,4,'#111');
+  }else if(m.t==='bat'){
+    const f=Math.sin(m.ph*18)*10;
+    if(!eyesOnly){P([m.x,y,m.x-28,y-8-f,m.x-14,y+4],'#5b3a7a');P([m.x,y,m.x+28,y-8-f,m.x+14,y+4],'#5b3a7a');E(m.x,y,10,9,m.hurt>0?'#fff':'#6c4a8f')}
+    E(m.x-4,y-2,2.5,2.5,'#ff3b3b');E(m.x+4,y-2,2.5,2.5,'#ff3b3b');
+  }else{
+    const st=Math.sin(m.ph*14)*4;
+    if(!eyesOnly){
+      for(let i=0;i<4;i++)for(const sd of [-1,1])L(m.x+sd*6,y-12,m.x+sd*(16+i*4),y-(i%2?st:-st)*.5,'#222',2.5);
+      E(m.x,y-14,15,11,m.hurt>0?'#fff':'#2d2d2d');E(m.x+d*10,y-12,8,7,'#3a3a3a');
+    }
+    E(m.x+d*12,y-14,2.2,2.2,'#ff3b3b');E(m.x+d*8,y-14,2.2,2.2,'#ff3b3b');
+  }
+  X.globalAlpha=1;
+}
+function drawMine(T){
+  const fl=mine.floor;
+  // entrance daylight on the first floor, rock walls everywhere else
+  if(fl===1){R(-900,-600,900,600,S.night?'#1b2552':'#9fd8ff');R(-900,0,900,700,'#7ec850')}
+  else R(-900,-600,900,1300,'#22170f');
+  R(0,-600,MINE_W+900,600,'#3b2a20');
+  for(let i=0;i<160;i++){const x=(i*211)%(MINE_W+200), y=-40-((i*97)%220);E(x,y,18+(i%4)*8,10+(i%3)*6,(i%3)?'#46332a':'#33241c')}
+  P([0,-600,0,-250,...Array.from({length:40},(_,i)=>[i*85,-250-(i%3)*18-(i%2)*10]).flat(),MINE_W+900,-250,MINE_W+900,-600],'#22170f');
+  R(0,0,MINE_W+900,700,'#2b1d14');R(0,-4,MINE_W+900,4,'#5d4037');
+  for(let x=20;x<MINE_W;x+=34)R(x,-3,18,3,'#6d4c41');L(0,-5,MINE_W,-5,'#9aa0a6',2);
+  for(let x=300;x<MINE_W;x+=320){R(x,-230,12,230,'#7b4a2b');R(x+130,-230,12,230,'#7b4a2b');R(x-6,-236,160,14,'#8d5a3b')}
+  if(fl===1)drawCar(carX(),0,T,!!drive);
+  // ladders
+  const ladder=(x,up)=>{L(x-14,0,x-14,-210,'#a1714b',4);L(x+14,0,x+14,-210,'#a1714b',4);for(let y=-14;y>-210;y-=22)L(x-14,y,x+14,y,'#8d5a3b',3);
+    RR(x-38,-250,76,26,8,'#fff3d6');X.font='bold 13px system-ui';X.textAlign='center';X.fillStyle='#5a3418';X.fillText(up?'⬆ Exit':'⬇ Deeper',x,-232)};
+  ladder(ladderDown(),false);if(ladderUp())ladder(ladderUp(),true);
+  for(const r of mine.rocks){
+    if(r.hp<=0)continue;
+    const k=ROCKS[r.kind], sx=r.shake>0?Math.sin(T*90)*2:0, sz=.7+r.hp*.1;
+    E(r.x+sx,-18*sz,30*sz,22*sz,'#6b6b73');E(r.x+sx-8,-26*sz,12*sz,8*sz,'#85858d');
+    for(let i=0;i<4;i++)E(r.x+sx-14+i*9,-16*sz-(i%2)*10,4,4,k.c);
+  }
+  for(const m of mine.monsters)drawMonster(m,T,false);
+  drawPlayerAt(T);
+  // darkness, with your lantern lighting the way; glowing eyes and lamps show through
+  const g=X.createRadialGradient(player.x,player.y-50,60,player.x,player.y-50,330);
+  g.addColorStop(0,'rgba(5,3,10,0)');g.addColorStop(1,'rgba(5,3,10,.88)');
+  X.fillStyle=g;X.fillRect(fl===1?0:-900,-700,MINE_W+1900,1500);
+  for(let x=460;x<MINE_W;x+=640){L(x,-236,x,-200,'#555',2);E(x,-192,7,9,'#ffd27a');glow(x,-190,90,.35)}
+  for(const m of mine.monsters)drawMonster(m,T,true);
+  for(const r of mine.rocks)if(r.hp>0&&r.kind==='gem')glow(r.x,-20,40,.25);
+}
+function drawMineHud(){
+  const left=MAX_HITS-mine.hits;
+  RR(8,58,Math.min(W-16,300),48,12,'rgba(40,30,70,.85)');
+  X.font='15px sans-serif';X.textAlign='left';X.textBaseline='middle';
+  for(let i=0;i<MAX_HITS;i++)X.fillText(i<left?'❤️':'🖤',16+i*20.5,73);
+  X.font='bold 12px system-ui';X.fillStyle='#fff';
+  X.fillText('Floor '+mine.floor+'   ·   🪙 +'+mine.loot+' this trip',16,94);
+  X.textBaseline='alphabetic';
+}
+
 // ── Update ───────────────────────────────────────────────────────────────────
 const SPEED=170;
 function update(dt,T){
-  updateTrip(dt);updateWedding(dt);updateCity(dt);
-  const st=inCity?0:player.f!==0?stand(player.f):player.x>HW-WALL?CAR_Y:player.x<WALL?YARD_Y:stand(0);   // a step down outside
+  updateTrip(dt);updateWedding(dt);updateCity(dt);updateMine(dt);
+  const st=away()?0:player.f!==0?stand(player.f):player.x>HW-WALL?CAR_Y:player.x<WALL?YARD_Y:stand(0);   // a step down outside
   if(!player.climb)player.y=st;
   player.moving=false;
   if(mode==='play'&&!busy()){
     let kx=(keys.ArrowRight||keys.KeyD?1:0)-(keys.ArrowLeft||keys.KeyA?1:0);
-    if(kx&&!player.climb){player.path=[];standUp();
+    if(kx&&!player.climb){player.path=[];player.target=null;standUp();
       player.x=Math.max(minX(player.f),Math.min(maxX(player.f),player.x+kx*SPEED*dt));player.dir=kx;player.moving=true}
     if(player.climb){
       const c=player.climb;c.t+=dt/1.1;
@@ -1705,7 +1887,7 @@ function update(dt,T){
         player.path.shift();
         const up=s.climb>0, f1=player.f+s.climb;
         player.climb={t:0,x0:player.x,y0:stand(player.f),x1:up?MINX+8:WALL+16,y1:stand(f1),f1};
-      }else if(s.use){player.path.shift();if(s.use==='car')carTapped();else if(typeof s.use==='string')cityAction(s.use);else if(S.items.includes(s.use))use(s.use)}
+      }else if(s.use){player.path.shift();if(s.use==='car')carTapped();else if(typeof s.use==='string')(inMine?mineAction:cityAction)(s.use);else if(S.items.includes(s.use))use(s.use)}
       if(!player.path.length)save();
     }
   }
@@ -1736,7 +1918,7 @@ function update(dt,T){
   if(player.act&&player.act.kind==='bath'&&Math.random()<dt*3){const b=box(player.act.it);emit('🫧',b.x+b.w/2,b.y+10,1,16)}
   for(const n of people())updateNpc(n,dt);
   for(let i=guests.length-1;i>=0;i--)if(guests[i].gone)guests.splice(i,1);
-  if(mode==='play'&&!visiting&&!inCity&&!busy()&&!guests.length){   // once a day a neighbor may drop by
+  if(mode==='play'&&!visiting&&!away()&&!busy()&&!guests.length){   // once a day a neighbor may drop by
     homeTime+=dt;
     if(homeTime>75&&S.dropIn!==S.day){S.dropIn=S.day;const pool=MADE_UP.filter(m=>!(S.spouse&&S.spouse.id===m.id)),n=pool[Math.random()*pool.length|0];invite(n,'🔔 Surprise! '+n.name+' dropped by!')}
   }
@@ -1966,7 +2148,14 @@ function drawPlayerAt(T){
     return;
   }
   if(a&&a.noSeat){const b=box(a.it);drawPlayer(S.look,b.x+ITEMS[a.it.t].w/2,b.by,{...o,dir:1});return}
+  if(inMine&&player.hurt>0&&(T*20|0)%2)return;   // blink after a hit
   drawPlayer(S.look,player.x,player.y,o);
+  if(inMine){   // pickaxe: resting on the shoulder, or mid-swing
+    const k=player.swing>0?1-player.swing/.3:0, a=player.swing>0?-2.3+k*3.1:-.7;
+    X.save();X.translate(player.x+player.dir*13,player.y-38);X.scale(player.dir,1);X.rotate(a);
+    R(-2,-30,4,32,'#8d5a3b');P([-14,-30,14,-30,10,-25,-10,-25],'#95a5a6');P([-14,-30,-18,-24,-10,-25],'#7f8c8d');P([14,-30,18,-24,10,-25],'#7f8c8d');
+    X.restore();
+  }
 }
 function nightShade(T){
   if(!S.night)return;
@@ -2004,7 +2193,8 @@ function draw(T){
   drawSky(T);
   X.save();
   X.translate(W/2,cam.vy);X.scale(cam.s,cam.s);X.translate(-cam.x,-cam.y);
-  if(inCity)drawCity(T);
+  if(inMine)drawMine(T);
+  else if(inCity)drawCity(T);
   else{
   drawHouse(T);
   const vis=S.items.filter(i=>i.f<S.floors);
@@ -2028,14 +2218,14 @@ function draw(T){
     const last=[...player.path].reverse().find(s=>s.walk!=null);
     if(last){
       let ff=player.f;for(const s of player.path)if(s.climb)ff+=s.climb;
-      E(last.walk,inCity?2:stand(ff)+2,12,4,'rgba(255,207,74,.7)');
+      E(last.walk,away()?2:stand(ff)+2,12,4,'rgba(255,207,74,.7)');
     }
   }
   for(const p of parts){X.globalAlpha=Math.min(1,p.life);X.font=p.size+'px sans-serif';X.textAlign='center';X.fillText(p.txt,p.x,p.y)}
   X.globalAlpha=1;
   X.restore();
   // name tag + speech in screen space so they stay readable when zoomed out
-  const [sx,sy]=drive?toScreen(carX()+CAR_W/2,(inCity?0:CAR_Y)-80):toScreen(player.x,player.y-(player.act&&player.act.kind==='sleep'?40:(player.act&&player.act.kind!=='stand'?80:100)));
+  const [sx,sy]=drive?toScreen(carX()+CAR_W/2,(away()?0:CAR_Y)-80):toScreen(player.x,player.y-(player.act&&player.act.kind==='sleep'?40:(player.act&&player.act.kind!=='stand'?80:100)));
   if(!drive&&player.act&&player.act.kind!=='stand'&&!player.act.noSeat){
     const b=box(player.act.it);const [bx,by]=toScreen(b.x+b.w/2,b.y-24);
     if(player.say)drawBubble(player.say.txt,bx,by);
@@ -2060,6 +2250,7 @@ function draw(T){
   if(rocketing()&&player.act.t>5&&player.act.t<8.5)drawMoon(player.act.t,T);
   if(wedding)drawWedding(wedding.t,T);
   if(movie)drawMovie(movie.t,T);
+  if(inMine&&mine)drawMineHud();
 }
 function drawWedding(t,T){
   X.globalAlpha=Math.max(0,Math.min(1,t/.5,(6.5-t)/.5));
@@ -2154,7 +2345,7 @@ function frame(now){
 // arcade has a newer Dream House (the house is saved first, so nothing is lost).
 const pageTime=Date.parse(document.lastModified);
 async function checkForUpdate(){
-  if(document.hidden||busy()||visiting||inCity||mode==='me')return;
+  if(document.hidden||busy()||visiting||away()||mode==='me')return;
   try{
     const r=await fetch(location.pathname,{method:'HEAD',cache:'no-store'});
     if(r.ok&&Date.parse(r.headers.get('Last-Modified'))>pageTime+1000){saveNow();location.reload()}
