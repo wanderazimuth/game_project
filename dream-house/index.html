@@ -122,6 +122,7 @@ button{font:inherit;cursor:pointer;border:none}
   <div id="tabs">
     <button class="tab" data-tab="furn">Furniture</button>
     <button class="tab" data-tab="yard">Backyard</button>
+    <button class="tab" data-tab="front">Front yard</button>
     <button class="tab" data-tab="walls">Walls</button>
     <button class="tab" data-tab="floors">Floors</button>
     <button class="tab" data-tab="house">House</button>
@@ -395,6 +396,20 @@ const ITEMS={
     E(x+46,y-35,2,2,'#222');E(x+39,y-32,4,9,d);
     if(it&&it.helmet){E(x+47,y-31,17,16,'rgba(200,240,255,.3)');X.strokeStyle='#fff';X.lineWidth=2;X.beginPath();X.ellipse(x+47,y-31,17,16,0,0,Math.PI*2);X.stroke();R(x+32,y-17,30,4,'#bdc3c7')}
   }},
+  robodog:{n:'Robo puppy',w:54,h:50,c:'#b0bec5',act:'robopet',pet:true,both:true,draw(x,y,w,h,c,it,T){
+    const mv=it&&it.vx?Math.sin(T*14)*3:0, tr=it&&it.happy>0?it.trick:null, k=tr?2.5-it.happy:0, legs=shade(c,-45);
+    X.save();
+    if(tr==='spin'){X.translate(x+w/2,y-24);X.rotate(Math.min(1,k/1.2)*Math.PI*4);X.translate(-x-w/2,-y+24)}
+    if(tr==='jump')X.translate(0,-Math.abs(Math.sin(k*5))*26);
+    const eye=tr==='lights'?`hsl(${(T*400)%360|0},90%,60%)`:'#5ef2ff';
+    R(x+8+mv,y-12,6,12,legs);R(x+18-mv,y-12,6,12,legs);R(x+30+mv,y-12,6,12,legs);R(x+40-mv,y-12,6,12,legs);
+    L(x+6,y-24,x-4,y-34+Math.sin(T*(it&&it.happy?18:5))*4,shade(c,-25),3);E(x-4,y-35+Math.sin(T*(it&&it.happy?18:5))*4,3,3,eye);
+    RR(x+4,y-30,40,20,8,c);R(x+9,y-23,30,3,eye);
+    RR(x+30,y-44,24,19,6,shade(c,18));P([x+33,y-44,x+36,y-52,x+41,y-44],legs);
+    E(x+46,y-36,3.5,3.5,eye);if(tr==='lights')glow(x+40,y-30,40,.5);
+    L(x+40,y-44,x+40,y-52,legs,2);E(x+40,y-53,2.8,2.8,(T*3|0)%2?'#ff5252':'#ffeb3b');
+    X.restore();
+  }},
   cat:{n:'Cat',w:44,h:34,c:'#7f8c8d',act:'pet',pet:true,both:true,draw(x,y,w,h,c,it,T){
     const mv=it&&it.vx?Math.sin(T*14)*3:0, d=shade(c,-30);
     R(x+9+mv,y-10,4,10,d);R(x+15-mv,y-10,4,10,c);R(x+26+mv,y-10,4,10,d);R(x+31-mv,y-10,4,10,c);
@@ -586,6 +601,18 @@ const ITEMS={
     for(let i=0;i<3;i++)E(x+26+i*19,y-38,5,5,['#e74c3c','#f1c40f','#2ecc71'][(i+(T*3|0))%3]);
     R(cx-2,y-150,4,20,'#999');E(cx,y-152,5,5,(T*4|0)%2?'#5ef2ff':'#fff');
   }},
+  mailbox:{n:'Mailbox',w:34,h:64,c:'#2e86de',out:true,act:'mail',draw(x,y,w,h,c){
+    R(x+w/2-3,y-40,6,40,'#6d4c41');
+    RR(x,y-64,w,26,[13,13,3,3],c);R(x+3,y-46,w-6,3,shade(c,-30));
+    const mail=S.mailDay!==S.day;   // the flag is up when there's mail
+    R(x+w-4,mail?y-74:y-60,3,mail?20:12,'#555');R(x+w-4,mail?y-74:y-60,12,7,'#e74c3c');
+  }},
+  lamppost:{n:'Lamp post',w:30,h:132,c:'#2d3436',out:true,act:'toggle',light:true,draw(x,y,w,h,c,it){
+    const cx=x+w/2;
+    R(cx-9,y-8,18,8,c);R(cx-3,y-110,6,104,c);R(cx-12,y-112,24,5,c);
+    if(it&&it.on)glow(cx,y-120,80,.5);
+    P([cx-10,y-112,cx+10,y-112,cx+7,y-130,cx-7,y-130],it&&it.on?'#ffe066':'#cfd8dc');R(cx-11,y-134,22,5,c);
+  }},
   // bought with coins earned at work
   treehouse:{n:'Treehouse',w:140,h:240,c:'#e67e22',out:true,price:100,act:'treehouse',draw(x,y,w,h,c,it,T){
     const cx=x+w/2+10, inside=it&&player.act&&player.act.it===it&&player.act.t>=1.3;
@@ -642,7 +669,7 @@ const ITEMS={
     star(x+8+Math.sin(T*2)*3,y-h-4,4,'#fff6c8');star(x+36,y-40+Math.cos(T*2)*3,3,'#fff6c8');
   }},
 };
-const CATALOG=['swing','slide','sandbox','pool','grill','picnic','flowers','tree','campfire','doghouse','birdbath','greenhouse','timemachine','treehouse','rocket',
+const CATALOG=['swing','slide','sandbox','pool','grill','picnic','flowers','tree','campfire','doghouse','birdbath','mailbox','lamppost','greenhouse','timemachine','treehouse','rocket',
   'arcade','trampoline','disco','goldtoilet','bed','crib','sofa','armchair','chair','table','desk','tv','lamp','plant','xmastree','bookshelf','fridge','stove','sink',
   'tub','toilet','piano','fireplace','rug','dresser','toybox','dog','cat','tank','window','picture','clock','shelf','mirror','chandelier'];
 
@@ -690,7 +717,9 @@ const TASKS={
 };
 const CARS=[{n:'Car',price:0},{n:'Truck',price:60},{n:'Sports car',price:90}];
 const CARC=['#e74c3c','#3498db','#f1c40f','#27ae60','#9b59b6','#e84393','#ecf0f1','#2d3436','#e67e22'];
-const CAR_X=HW+70, CAR_W=136, CAR_Y=-6, OUT_X=HW+250;   // driveway; OUT_X is how far out you can walk
+const CAR_X=HW+70, CAR_W=136, CAR_Y=-6;               // the driveway, out the front door
+const FRONT_L=HW+240, FRONT_W=520, FRONT_R=FRONT_L+FRONT_W;   // the front yard, past the driveway
+const OUT_X=FRONT_R;                                  // how far out you can walk
 const YARD_W=580, YARD_L=-YARD_W, YARD_Y=-4;   // the backyard is left of the house, through the back door
 const YARD_MAX=w=>-14-w;                       // furthest right a yard thing of width w can go
 const LOOK_OPTS=[
@@ -793,7 +822,8 @@ const STARTER=[
   ['bookshelf',1,96],['armchair',1,178],['window',1,190,80],['toybox',1,262],
   ['bed',1,340],['dresser',1,470],['window',1,470,80],['cat',1,560],['lamp',1,604],
   ['toilet',1,660],['sink',1,712],['mirror',1,730,82],['tub',1,822],['shelf',1,820,120],
-  ['tree',0,-560],['swing',0,-440],['slide',0,-300],['grill',0,-166],['flowers',0,-102]];
+  ['tree',0,-560],['swing',0,-440],['slide',0,-300],['grill',0,-166],['flowers',0,-102],
+  ['mailbox',0,HW+260],['flowers',0,HW+320,,'#e84393'],['lamppost',0,HW+430],['flowers',0,HW+480],['tree',0,HW+640]];
 function fill(it){
   const d=ITEMS[it.t];
   if(it.c==null)it.c=d.c;
@@ -816,9 +846,9 @@ let inMine=false, mine=null;                              // a trip to the mine
 let inTot=false, tot=null;                                // trick-or-treating on a fall night
 let inEra=null, era=null;                                 // time travel: which era, and what's in it
 const away=()=>inCity||inMine||inTot||!!inEra;
-const PERSONAL=['look','name','tasks','coins','day','owned','night','car','hearts','heartDay','spouse','kids','spacePups','seasonOff'];   // yours, wherever you are
+const PERSONAL=['look','name','tasks','coins','day','owned','night','car','hearts','heartDay','spouse','kids','spacePups','seasonOff','mailDay'];   // yours, wherever you are
 const myHouse=()=>visiting?{...visiting.home,...Object.fromEntries(PERSONAL.map(k=>[k,S[k]]))}:S;
-const clean=items=>items.map(({id,vx,happy,launch,land,...k})=>k);
+const clean=items=>items.map(({id,vx,happy,launch,land,trick,...k})=>k);
 function saveNow(){
   clearTimeout(saveTimer);
   const home=myHouse(), pos=visiting?visiting.pos:away()?{px:CAR_X-16,pf:0}:{px:player.x,pf:player.f};
@@ -904,7 +934,8 @@ $('mBuild').onclick=go('build');
 $('mMe').onclick=go('me');
 $('mPlay').onclick=go('play');
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
-  if((tab==='yard')!==(b.dataset.tab==='yard'))setZoom(1);   // the Backyard tab looks at the yard
+  const view=t=>t==='yard'||t==='front'?t:'house';   // the yard tabs look at their yard
+  if(view(tab)!==view(b.dataset.tab))setZoom(1);
   tab=b.dataset.tab;tool=null;buildTray();
 });
 
@@ -925,7 +956,7 @@ function buildTray(){
   tray.innerHTML='';
   const add=(el)=>{tray.appendChild(el);return el};
   const btn=(cls,html,fn,on)=>{const b=document.createElement('button');b.className=cls+(on?' on':'');b.innerHTML=html;b.onclick=fn;return add(b)};
-  if(tab==='furn'||tab==='yard'){
+  if(tab==='furn'||tab==='yard'||tab==='front'){
     for(const t of CATALOG){
       if(tab==='furn'?ITEMS[t].out:!(ITEMS[t].out||ITEMS[t].both))continue;
       const d=ITEMS[t], locked=d.price&&!S.owned.includes(t);
@@ -1022,11 +1053,12 @@ function camTarget(){
   const vh=viewBot-viewTop;
   const viewW=W<600?HW+60:HW+460;   // wide screens also show the yard and the car
   const fitS=Math.min((W-16)/viewW,vh/(botY-topY));
-  if(mode==='build'&&tab==='yard'){
-    const ys=Math.min((W-16)/(YARD_W+80),vh/320)*zoom, mx=Math.max(0,(YARD_W+80)/2-W/2/ys), my=Math.max(0,160-vh/2/ys);
+  if(mode==='build'&&(tab==='yard'||tab==='front')){
+    const yw=tab==='yard'?YARD_W:FRONT_W, cx=tab==='yard'?YARD_L/2:(FRONT_L+FRONT_R)/2;
+    const ys=Math.min((W-16)/(yw+80),vh/320)*zoom, mx=Math.max(0,(yw+80)/2-W/2/ys), my=Math.max(0,160-vh/2/ys);
     pan.x=Math.max(-mx,Math.min(mx,pan.x));pan.y=Math.max(-my,Math.min(my,pan.y));
     zoomEl.style.bottom=(H-viewBot+10)+'px';
-    return {x:YARD_L/2+pan.x,y:-120+pan.y,s:ys,vy:viewTop+vh/2};
+    return {x:cx+pan.x,y:-120+pan.y,s:ys,vy:viewTop+vh/2};
   }
   if(mode==='play'){
     const s=Math.max(fitS,Math.min(vh/(FLOOR_H*2.1),W/(ROOM_W*2)));
@@ -1047,7 +1079,9 @@ const toWorld=(sx,sy)=>[(sx-W/2)/cam.s+cam.x,(sy-cam.vy)/cam.s+cam.y];
 // ── Geometry helpers ─────────────────────────────────────────────────────────
 const floorAt=wy=>Math.max(0,Math.min(S.floors-1,Math.floor(-wy/FLOOR_H)));
 const roomAt=wx=>Math.max(0,Math.min(ROOMS-1,Math.floor(wx/ROOM_W)));
-const isOut=it=>it.f===0&&it.x<0;   // in the backyard
+const inFront=it=>it.f===0&&it.x>=FRONT_L-10;
+const isOut=it=>it.f===0&&(it.x<0||it.x>=FRONT_L-10);   // in the backyard or the front yard
+const FRONT_MAX=w=>FRONT_R-10-w;
 function box(it){
   const d=ITEMS[it.t],by=isOut(it)?YARD_Y:stand(it.f)-(d.wall?it.y:0);
   return {x:it.x,y:by-d.h,w:d.w,h:d.h+(d.rug?6:0),by};
@@ -1065,7 +1099,9 @@ function hit(wx,wy,pad=0){
 function placeAt(it,wx,wy){
   const d=ITEMS[it.t];
   it.f=floorAt(wy);
-  if(d.out||(d.both&&wx<0)){it.f=0;it.x=Math.max(YARD_L+10,Math.min(YARD_MAX(d.w),wx-d.w/2));return}
+  if(d.out||(d.both&&(wx<0||wx>=FRONT_L-20))){   // outdoor things go in whichever yard is nearer
+    it.f=0;it.x=wx>HW?Math.max(FRONT_L+10,Math.min(FRONT_MAX(d.w),wx-d.w/2)):Math.max(YARD_L+10,Math.min(YARD_MAX(d.w),wx-d.w/2));return
+  }
   if(d.wall){
     it.x=Math.max(WALL,Math.min(HW-WALL-d.w,wx-d.w/2));
     if(!d.ceil)it.y=Math.max(0,Math.min(INT_H-d.h,stand(it.f)-wy-d.h/2));
@@ -1267,7 +1303,8 @@ function meetCreature(c){
     ptero:()=>'Look, a pterodactyl! 🦅',
     dragon:()=>{emit('🔥',cx,top+30,3);tone(120,.5,'sawtooth',.06);return 'A friendly dragon! 🐉'},
     robot:()=>{[1200,900,1500].forEach((f,i)=>tone(f,.07,'square',.04,i*.09));c.say={txt:['BEEP BOOP! 🤖','Hello, human from the past!','Would you like a future snack? 🍪'][Math.random()*3|0],t:2.5};return 'Hi robot!'},
-    robodog:()=>{emit('⚡',cx,top,2);tone(1500,.06,'square',.04);tone(1100,.08,'square',.04,.08);return 'A robot puppy! 🐶'},
+    robodog:()=>{emit('⚡',cx,top,2);tone(1500,.06,'square',.04);tone(1100,.08,'square',.04,.08);
+      setTimeout(()=>choose('🤖 Robot puppy',[['🏠 Take one home — 🪙20',()=>adopt('robodog',20)]]),700);return 'A robot puppy! 🐶'},
     person:()=>{c.say={txt:c.hi[Math.random()*c.hi.length|0],t:3};return c.knight?'Hello, Sir Knight!':'Hello!'}};
   say(lines[c.t](),2.5);
 }
@@ -1563,11 +1600,12 @@ function renderSnow(){
 }
 function finishSnowman(){
   const {hat,nose,arms,buttons,scarf}=snowB, d=ITEMS.snowman;
-  const x=player.f===0&&player.x<0?player.x-d.w/2:-160-Math.random()*300;   // next to you if you're out back
-  S.items.push(fill({t:'snowman',f:0,x:Math.max(YARD_L+10,Math.min(YARD_MAX(d.w),x)),c:scarf,snow:{hat,nose,arms,buttons}}));
+  const front=player.f===0&&player.x>=FRONT_L-20, back=player.f===0&&player.x<0;   // next to you if you're in a yard
+  const x=front?Math.max(FRONT_L+10,Math.min(FRONT_MAX(d.w),player.x-d.w/2)):Math.max(YARD_L+10,Math.min(YARD_MAX(d.w),back?player.x-d.w/2:-160-Math.random()*300));
+  S.items.push(fill({t:'snowman',f:0,x,c:scarf,snow:{hat,nose,arms,buttons}}));
   $('snow').style.display='none';snowB=null;save();
   emit('❄️',player.x,player.y-110,4);[523,659,784,1047].forEach((f,i)=>tone(f,.2,'sine',.07,i*.1));
-  say(player.x<0?'Meet my snowman! ⛄':'My snowman is in the backyard! ⛄',3);taskEvent('yard');
+  say(front||back?'Meet my snowman! ⛄':'My snowman is in the backyard! ⛄',3);taskEvent('yard');
 }
 // o: {balls:[0..1 x3], hat, nose, arms, buttons, scarf, melt}; (x,y) is the bottom middle
 function drawSnowman(x,y,o,T){
@@ -1697,6 +1735,13 @@ function use(it){
       emit('✨',player.x,player.y-90,3);say('New outfit!');pop();save();break;
     }
     case 'toys':emit(['⚽','🧸','🪀','🚂','🎲','🪁'][Math.random()*6|0],cx,top,2,24);say('Play time!');break;
+    case 'robopet':{
+      const tricks=[['spin','Spin! 🌀'],['jump','Jump! 🦘'],['lights','Light show! 🌈']], [tr,line]=tricks[Math.random()*3|0];
+      it.happy=2.5;it.trick=tr;it.vx=0;emit('⚡',cx,top,2);
+      say(['BEEP BOOP woof! 🤖','Good robo puppy!',line][Math.random()*3|0]);
+      [1200,1500,1800,1500].forEach((f,i)=>tone(f,.07,'square',.04,i*.08));
+      break;
+    }
     case 'pet':
       if(it.launch||it.land||it.spaceUntil)return say(it.land?'Here comes the puppy! 🚀':'My puppy is in space! 🚀 Back soon');
       if(it.t==='dog'&&S.spacePups&&!visiting&&isHome())return choose('🐶 What should we do?',[['❤️ Pet the puppy',()=>{petIt(it);taskEvent('pet')}],['🚀 Send to space!',()=>launchPup(it)]]);
@@ -1726,6 +1771,17 @@ function use(it){
       break;
     }
     case 'timemachine':if(visiting)return say('Cool time machine!');return timeMenu();
+    case 'mail':{
+      if(visiting)return say("That's not my mail!");
+      if(S.mailDay===S.day)return say('No mail today — check tomorrow! 📭');
+      S.mailDay=S.day;
+      const from=MADE_UP[Math.random()*MADE_UP.length|0], coins=Math.random()<.5?3+(Math.random()*6|0):0;
+      const notes=['Hope you are having a great day!','Come visit me soon!','I love your house!','Thanks for being a good neighbor!'];
+      if(coins){S.coins+=coins;renderGoals()}
+      emit('💌',cx,top,1,24);tone(880,.1,'triangle',.06);tone(1175,.15,'triangle',.06,.1);
+      toast(`📬 A postcard from ${from.name} ${from.emoji}: "${notes[Math.random()*notes.length|0]}"`+(coins?`  It had 🪙${coins} inside!`:''),5000);
+      save();break;
+    }
     case 'xmastree':emit('✨',cx,top,3);say(isChristmas()?'Merry Christmas! 🎄':'Oh Christmas tree! 🎄');tone(988,.3,'sine',.05);tone(1319,.4,'sine',.05,.15);break;
     case 'snowman':
       if(season().n!=='Winter')say('It melted… 💧 See you next winter!');
@@ -1735,7 +1791,7 @@ function use(it){
       emit('🍎',cx,top+40,2,24);say('A juicy apple! 🍎');tone(600,.08,'triangle',.08);break;
     case 'birds':emit('🐦',cx,top,2);say('Tweet tweet!');tone(1800,.06,'sine',.05);tone(2100,.06,'sine',.05,.1);break;
   }
-  const EV={snowman:'yard',bath:'bath',water:'water',read:'relax',eat:'eat',cook:'cook',wash:'wash',piano:'relax',outfit:'outfit',
+  const EV={robopet:'pet',snowman:'yard',bath:'bath',water:'water',read:'relax',eat:'eat',cook:'cook',wash:'wash',piano:'relax',outfit:'outfit',
     toys:'relax',pet:'pet',fish:'relax',arcade:'relax',type:'relax',birds:'relax',apple:'eat'};
   if(EV[d.act])taskEvent(EV[d.act]);
   if(['swing','slide','swim','sand','bounce','treehouse','rocket'].includes(d.act)&&!(isOut(it)&&taskEvent('yard')))taskEvent('relax');
@@ -2099,7 +2155,7 @@ function travel(n){
       const home=visiting.home;for(const k of PERSONAL)home[k]=S[k];
       S=home;visiting=null;
     }
-    player.f=0;player.x=OUT_X-30;player.dir=-1;player.path=[];player.act=null;player.climb=null;
+    player.f=0;player.x=FRONT_L-10;player.dir=-1;player.path=[];player.act=null;player.climb=null;
     cam.init=false;showVisitUI();renderGoals();
     if(!visiting)save();
   },done(){
@@ -2121,7 +2177,7 @@ function invite(g,msg){
   nbEl.style.display='none';
   tone(784,.25,'sine',.12);tone(622,.45,'sine',.12,.25);
   const lines=[...(g.guest||[]),`Your house is so cool, ${S.name||'friend'}!`,'I love what you did with this room!','Can we play in your backyard?'];
-  guests.push({id:g.id,name:g.name,look:{...randomLook(),...g.look},x:OUT_X+80,dir:-1,walk:0,vx:0,goto:[HW-150,HW/2+20,ROOM_W-40][guests.length],
+  guests.push({id:g.id,name:g.name,look:{...randomLook(),...g.look},x:OUT_X+80,dir:-1,walk:0,vx:0,speed:150,goto:[HW-150,HW/2+20,ROOM_W-40][guests.length],
     hi:lines,greeted:true,say:{txt:'Knock knock! 🔔',t:2.5},life:150});
   let note=msg||'🔔 Ding dong! '+g.name+' is coming over!';
   if(g.guest&&(S.gifts||{})[g.id]!==S.day){   // a made-up neighbor brings a gift on their first visit each day
@@ -2271,12 +2327,12 @@ function pay(n){
   if(S.coins<n){say(`I need 🪙${n} — time to go to work!`,2.5);return false}
   S.coins-=n;renderGoals();save();tone(1300,.06,'square',.04);tone(1700,.08,'square',.04,.07);return true;
 }
-function adopt(t){
-  if(!pay(15))return;
+function adopt(t,price=15){
+  if(!pay(price))return;
   const d=ITEMS[t];
-  S.items.push(fill({t,f:0,x:MINX+Math.random()*(MAXX-d.w-MINX),c:ITEMC[Math.random()*ITEMC.length|0]}));save();
-  emit('❤️',player.x,player.y-110,3);
-  say(t==='dog'?'A puppy! 🐶 It will be waiting at home!':'A kitten! 🐱 It will be waiting at home!',3);
+  S.items.push(fill({t,f:0,x:MINX+Math.random()*(MAXX-d.w-MINX),c:t==='robodog'?d.c:ITEMC[Math.random()*ITEMC.length|0]}));save();
+  emit(t==='robodog'?'⚡':'❤️',player.x,player.y-110,3);
+  say({dog:'A puppy! 🐶',cat:'A kitten! 🐱',robodog:'A robo puppy! 🤖 BEEP BOOP!'}[t]+' It will be waiting at home!',3);
 }
 function cityAction(id){
   if(busy())return;
@@ -2285,7 +2341,7 @@ function cityAction(id){
     case 'icecream':if(pay(3)){emit('🍦',player.x,top,1,28);say('Yum! 🍦');taskEvent('eat')}break;
     case 'pizza':if(pay(5)){emit('🍕',player.x,top,1,28);say('Best pizza in town!');taskEvent(S.night?'cook':'eat')}break;
     case 'movie':if(pay(4)){movie={t:0};taskEvent('relax');goalsEl.style.display=$('visitTag').style.display='none'}break;
-    case 'pets':choose('🐾 Pet Shop',[['🐶 Adopt a puppy — 🪙15',()=>adopt('dog')],['🐱 Adopt a kitten — 🪙15',()=>adopt('cat')]]);break;
+    case 'pets':choose('🐾 Pet Shop',[['🐶 Adopt a puppy — 🪙15',()=>adopt('dog')],['🐱 Adopt a kitten — 🪙15',()=>adopt('cat')],['🤖 Robo puppy — 🪙25',()=>adopt('robodog',25)]]);break;
     case 'library':emit('📖',player.x,top,2);say('Shh… reading time 📚');taskEvent('relax');break;
     case 'clothes':say("Let's try on some clothes! 👕",1.2);setTimeout(()=>{if(inCity&&mode==='play')setMode('me')},900);break;
     case 'ferris':
@@ -2629,7 +2685,8 @@ function update(dt,T){
     else if(it.vx&&Math.random()<dt*.4)it.vx=0;
     if(it.vx){
       it.x+=it.vx*dt;it.flip=it.vx<0;
-      const out=it.x<0, lo=out?YARD_L+10:MINX, hi=out?YARD_MAX(d.w):MAXX-d.w;
+      const front=inFront(it), back=it.x<0;   // pets stay in their own yard (or the house)
+      const lo=back?YARD_L+10:front?FRONT_L+10:MINX, hi=back?YARD_MAX(d.w):front?FRONT_MAX(d.w):MAXX-d.w;
       if(it.x<lo){it.x=lo;it.vx=-it.vx}
       if(it.x>hi){it.x=hi;it.vx=-it.vx}
     }
@@ -2699,7 +2756,10 @@ function drawHouse(T){
   RR(YARD_L-6,-64,10,64,[3,3,0,0],'#e8dcc8');
   for(let i=0;i<3;i++)E(-30-i*34,-1,11,3,'#b9b9b9');
   R(OUT_X+56,-12,9,12,'#7b4a2b');seasonTree(OUT_X+60,-40,30,32);
-  R(HW,CAR_Y,OUT_X-HW+20,8,'#a4a4a4');R(HW,CAR_Y,OUT_X-HW+20,2,'#c4c4c4');   // driveway
+  R(HW,CAR_Y,FRONT_L-HW-20,8,'#a4a4a4');R(HW,CAR_Y,FRONT_L-HW-20,2,'#c4c4c4');   // driveway
+  R(FRONT_L,-40,FRONT_W,5,'#e8dcc8');R(FRONT_L,-18,FRONT_W,5,'#e8dcc8');   // front yard fence
+  for(let x=FRONT_L;x<FRONT_R;x+=17)RR(x,-54,11,54,[5,5,0,0],'#fff8ec');
+  RR(FRONT_L-6,-64,10,64,[3,3,0,0],'#e8dcc8');RR(FRONT_R-4,-64,10,64,[3,3,0,0],'#e8dcc8');
   const owner=visiting?visiting.name:S.name;
   if(owner){
     const sx=OUT_X+10;
