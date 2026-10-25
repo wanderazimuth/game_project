@@ -42,6 +42,19 @@ button{font:inherit;cursor:pointer;border:none}
 #nbBtns button{height:52px;padding:0 16px;border-radius:16px;background:rgba(40,30,70,.88);color:#fff;font-weight:800;font-size:16px}
 #visitTag{position:fixed;left:12px;bottom:28px;max-width:calc(100vw - 170px);overflow:hidden;text-overflow:ellipsis;z-index:4;background:#ffcf4a;color:#3a2a00;font-weight:800;
   font-size:14px;padding:6px 14px;border-radius:12px;display:none;white-space:nowrap}
+#farm{position:fixed;inset:0;z-index:8;background:rgba(20,40,20,.45);display:none;align-items:center;justify-content:center;padding:16px}
+#farm .modalIn{background:#f4fff0;border-radius:20px;padding:16px;width:min(420px,100%);max-height:85vh;overflow-y:auto;touch-action:pan-y}
+#farm h2{color:#2e6b34;margin-bottom:8px}
+#farmAll{display:flex;gap:8px;margin-bottom:8px}
+#farmAll .big{height:40px;font-size:13px;padding:0 12px}
+.bed{background:#e3f5dc;border-radius:12px;padding:10px;margin-bottom:8px;color:#2e6b34;font-weight:700}
+.bed .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.bed .emo{font-size:28px}
+.bed .what{flex:1;min-width:120px}
+.bed small{display:block;font-weight:600;color:#5f8f62}
+.seed{width:44px;height:44px;border-radius:10px;background:#fff;font-size:22px;border:2px solid #cfe8c7}
+.grow{height:8px;border-radius:4px;background:#cfe8c7;margin-top:6px;overflow:hidden}
+.grow i{display:block;height:100%;background:#5cb85c}
 #choose{position:fixed;inset:0;z-index:8;background:rgba(20,15,40,.6);display:none;align-items:center;justify-content:center;padding:16px}
 #choose .modalIn{background:#fff;border-radius:20px;padding:18px;width:min(360px,100%)}
 #choose h2{color:#4a2a7a;margin-bottom:12px}
@@ -116,6 +129,7 @@ button{font:inherit;cursor:pointer;border:none}
 <div id="goals"></div>
 <div id="nbBtns"><button id="nbOpen">🏘️ Neighbors</button><button id="nbHome">🏠 Go home</button></div>
 <div id="visitTag"></div>
+<div id="farm"><div class="modalIn"><h2>🌱 Greenhouse</h2><div id="farmAll"></div><div id="farmBeds"></div><button class="big" id="farmClose">Done</button></div></div>
 <div id="choose" class="modal"><div class="modalIn"><h2 id="chT"></h2><div id="chB"></div></div></div>
 <div id="nb"><div id="nbIn"><h2>🏘️ Visit a neighbor</h2><div id="nbList"></div><button class="big" id="nbClose">Close</button></div></div>
 <div id="me"><div id="meIn">
@@ -486,6 +500,29 @@ const ITEMS={
     E(x+w/2,y-36,w/2,7,c);E(x+w/2,y-38,w/2-5,3,'#7fd3ff');
     const hop=Math.abs(Math.sin(T*3))*4;E(x+w-12,y-46-hop,6,5,'#3498db');E(x+w-7,y-49-hop,3.5,3.5,'#3498db');P([x+w-4,y-49-hop,x+w+1,y-48-hop,x+w-4,y-47-hop],'#f39c12');
   }},
+  greenhouse:{n:'Greenhouse',w:260,h:170,c:'#ffffff',out:true,act:'farm',draw(x,y,w,h,c,it,T){
+    const bedW=(w-40)/4;
+    R(x,y-14,w,14,'#8d5a3b');
+    R(x+6,y-h+40,w-12,h-54,'rgba(205,240,255,.45)');P([x,y-h+42,x+w/2,y-h,x+w,y-h+42],'rgba(205,240,255,.55)');
+    for(let i=0;i<4;i++){   // the four beds, with whatever is growing in them
+      const p=it&&it.plots&&it.plots[i], bx=x+20+i*bedW, cx=bx+bedW/2-3;
+      R(bx,y-30,bedW-6,16,'#a1714b');R(bx+3,y-30,bedW-12,5,p&&p.wet?'#4e342e':'#8d6e63');
+      if(!p||!p.crop)continue;
+      const st=p.stage;
+      if(st>=1){L(cx,y-30,cx,y-38-st*10,'#3fa048',3);E(cx-7,y-40-st*6,7,3.5,'#3fa048');E(cx+7,y-44-st*6,7,3.5,'#4cb556')}
+      else E(cx,y-31,4,2.5,'#c8a165');
+      X.font='18px sans-serif';X.textAlign='center';X.textBaseline='middle';
+      if(st>=3){X.fillText(CROPS[p.crop].e,cx,y-72);X.font='12px sans-serif';X.fillText('✨',cx+12+Math.sin(T*3+i)*2,y-86)}
+      else if(!p.wet){X.font='14px sans-serif';X.fillText('💧',cx,y-62-st*8-Math.abs(Math.sin(T*3+i))*5)}
+      X.textBaseline='alphabetic';
+    }
+    X.strokeStyle=c;X.lineWidth=4;
+    X.beginPath();X.moveTo(x+6,y-14);X.lineTo(x+6,y-h+40);X.lineTo(x+w/2,y-h+2);X.lineTo(x+w-6,y-h+40);X.lineTo(x+w-6,y-14);X.stroke();
+    for(let i=1;i<6;i++)L(x+6+i*(w-12)/6,y-14,x+6+i*(w-12)/6,y-h+42,c,2);
+    L(x+6,y-h+42,x+w-6,y-h+42,c,3);
+    X.font='16px sans-serif';X.textAlign='center';
+    for(let i=0;i<2;i++)X.fillText('🦋',x+w*(.3+.4*i)+Math.sin(T*.8+i*2)*40,y-h+70+Math.sin(T*2.3+i)*14);
+  }},
   // bought with coins earned at work
   treehouse:{n:'Treehouse',w:140,h:240,c:'#e67e22',out:true,price:100,act:'treehouse',draw(x,y,w,h,c,it,T){
     const cx=x+w/2+10, inside=it&&player.act&&player.act.it===it&&player.act.t>=1.3;
@@ -542,7 +579,7 @@ const ITEMS={
     star(x+8+Math.sin(T*2)*3,y-h-4,4,'#fff6c8');star(x+36,y-40+Math.cos(T*2)*3,3,'#fff6c8');
   }},
 };
-const CATALOG=['swing','slide','sandbox','pool','grill','picnic','flowers','tree','campfire','doghouse','birdbath','treehouse','rocket',
+const CATALOG=['swing','slide','sandbox','pool','grill','picnic','flowers','tree','campfire','doghouse','birdbath','greenhouse','treehouse','rocket',
   'arcade','trampoline','disco','goldtoilet','bed','crib','sofa','armchair','chair','table','desk','tv','lamp','plant','bookshelf','fridge','stove','sink',
   'tub','toilet','piano','fireplace','rug','dresser','toybox','dog','cat','tank','window','picture','clock','shelf','mirror','chandelier'];
 
@@ -583,6 +620,7 @@ const TASKS={
   family:{txt:'Spend time with your family 💕',acts:['family'],has:[],eve:true},
   city:{txt:'Go to the city 🏙️',acts:['city'],has:[],eve:true},
   mine:{txt:'Explore the mine ⛏️',acts:['mine'],has:[],eve:true},
+  farm:{txt:'Tend your greenhouse 🌱',acts:['farm'],has:['greenhouse'],need:'a greenhouse in the backyard',eve:true},
   sleep:{txt:'Go to bed',acts:['sleep'],has:['bed'],need:'a bed',eve:true},
 };
 const CARS=[{n:'Car',price:0},{n:'Truck',price:60},{n:'Sports car',price:90}];
@@ -717,7 +755,7 @@ const clean=items=>items.map(({id,vx,happy,...k})=>k);
 function saveNow(){
   clearTimeout(saveTimer);
   const home=myHouse(), pos=visiting?visiting.pos:away()?{px:CAR_X-16,pf:0}:{px:player.x,pf:player.f};
-  try{localStorage.setItem(SAVE_KEY,JSON.stringify({...home,items:clean(home.items),...pos}))}catch(e){}
+  try{localStorage.setItem(SAVE_KEY,JSON.stringify({...home,items:clean(home.items),...pos,farmT:Date.now()}))}catch(e){}
   if(!visiting)share();
 }
 // Each device shares its house on the arcade server so the family can visit it.
@@ -1077,6 +1115,7 @@ function use(it){
   const nm=S.name||'you';
   player.dir=1;
   switch(d.act){
+    case 'farm':if(visiting)say('What a pretty greenhouse!');else openFarm(it);break;
     case 'crib':{
       const babies=S.kids.filter(k=>S.day-k.born<2);
       if(visiting)say('What a cute crib!');
@@ -1156,9 +1195,70 @@ const hasFor=id=>{const h=myHouse();return !TASKS[id].has.length||h.items.some(i
 function newTasks(){
   // prefer tasks the house has furniture for; the rest tell you what to build
   const pick=(ids,n)=>{const sh=ids.sort(()=>Math.random()-.5);return [...sh.filter(hasFor),...sh.filter(id=>!hasFor(id))].slice(0,n)};
-  return ['breakfast',...pick(['wash','dress'],1),'work',...pick(['pet','plant','relax','dinner','bath','lights','yard','visit','host','city','mine',...(S.spouse?['family']:[])],2),'sleep'].map(id=>({id,done:false}));
+  return ['breakfast',...pick(['wash','dress'],1),'work',...pick(['pet','plant','relax','dinner','bath','lights','yard','visit','host','city','mine','farm',...(S.spouse?['family']:[])],2),'sleep'].map(id=>({id,done:false}));
 }
 if(!S.tasks)S.tasks=newTasks();
+
+// ── Greenhouse farming ───────────────────────────────────────────────────────
+// Each stage of growing needs one watering; plants never wilt, they just wait for water.
+const CROPS={
+  carrot:{e:'🥕',n:'Carrot',min:2,coins:3},sunflower:{e:'🌻',n:'Sunflower',min:3,coins:4},tomato:{e:'🍅',n:'Tomato',min:4,coins:5},
+  strawberry:{e:'🍓',n:'Strawberry',min:6,coins:8},pumpkin:{e:'🎃',n:'Pumpkin',min:10,coins:15}};
+const stageMs=p=>CROPS[p.crop].min*60000/3;
+const plotsOf=it=>it.plots=it.plots||[{},{},{},{}];
+function growPlots(ms){
+  let changed=false;
+  for(const it of myHouse().items)if(it.t==='greenhouse')for(const p of plotsOf(it)){
+    if(!p.crop||!p.wet||p.stage>=3)continue;
+    p.prog=(p.prog||0)+ms;
+    if(p.prog>=stageMs(p)){p.stage++;p.prog=0;p.wet=false;changed=true}
+  }
+  return changed;
+}
+if(S.farmT)growPlots(Math.max(0,Date.now()-S.farmT));   // the time the game was closed
+let farmIt=null, farmTimer=0;
+const chime=()=>[784,988,1175,1568].forEach((f,i)=>tone(f,.5,'sine',.045,i*.09));
+function openFarm(it){farmIt=it;plotsOf(it);renderFarm();$('farm').style.display='flex';clearInterval(farmTimer);farmTimer=setInterval(renderFarm,1000)}
+$('farmClose').onclick=()=>{$('farm').style.display='none';clearInterval(farmTimer);farmIt=null};
+function plant(p,crop){Object.assign(p,{crop,stage:0,prog:0,wet:false});tone(330,.12,'triangle',.06);save();renderFarm()}
+function water(p){if(!p.crop||p.wet||p.stage>=3)return false;p.wet=true;return true}
+function harvest(p){
+  if(!p.crop||p.stage<3)return 0;
+  const c=CROPS[p.crop];S.coins+=c.coins;emit(c.e,player.x,player.y-110,1,26);
+  Object.assign(p,{crop:null,stage:0,prog:0,wet:false});return c.coins;
+}
+function farmDid(msg){taskEvent('farm');save();renderGoals();renderFarm();say(msg,2.5)}
+function renderFarm(){
+  if(!farmIt)return;
+  const plots=plotsOf(farmIt), all=$('farmAll'), beds=$('farmBeds');
+  all.innerHTML='';beds.innerHTML='';
+  const btn=(parent,label,cls,fn)=>{const b=document.createElement('button');b.className=cls;b.textContent=label;b.onclick=fn;parent.appendChild(b);return b};
+  if(plots.some(p=>p.crop&&!p.wet&&p.stage<3))btn(all,'💧 Water all','big',()=>{plots.forEach(water);chime();emit('💧',player.x,player.y-110,3);farmDid('Drink up, little plants 💧')});
+  if(plots.some(p=>p.crop&&p.stage>=3))btn(all,'🧺 Harvest all','big alt',()=>{let c=0;plots.forEach(p=>c+=harvest(p));chime();farmDid(`What a harvest! +🪙${c}`)});
+  plots.forEach((p,i)=>{
+    const d=document.createElement('div');d.className='bed';
+    const row=document.createElement('div');row.className='row';d.appendChild(row);
+    const c=p.crop&&CROPS[p.crop];
+    const what=document.createElement('span');what.className='what';
+    if(!c){
+      what.append('Bed '+(i+1)+' is empty',Object.assign(document.createElement('small'),{textContent:'Pick a seed to plant'}));
+      row.append(Object.assign(document.createElement('span'),{className:'emo',textContent:'🟫'}),what);
+      const seeds=document.createElement('div');seeds.className='row';seeds.style.marginTop='6px';
+      for(const [k,cr] of Object.entries(CROPS))btn(seeds,cr.e,'seed',()=>plant(p,k)).title=`${cr.n} — ${cr.min} min, 🪙${cr.coins}`;
+      d.appendChild(seeds);
+    }else{
+      const stage=['Seed','Sprout','Growing','Ready!'][p.stage];
+      const sub=p.stage>=3?`Ready to pick — 🪙${c.coins}`:p.wet?'Growing nicely…':'Thirsty! Needs water 💧';
+      what.append(`${c.n} · ${stage}`,Object.assign(document.createElement('small'),{textContent:sub}));
+      row.append(Object.assign(document.createElement('span'),{className:'emo',textContent:p.stage>=3?c.e:p.stage?'🌱':'🫘'}),what);
+      if(p.stage>=3)btn(row,'🧺 Pick','big alt',()=>{const n=harvest(p);chime();farmDid(`Fresh ${c.e}! +🪙${n}`)});
+      else if(!p.wet)btn(row,'💧 Water','big',()=>{water(p);chime();emit('💧',player.x,player.y-110,2);farmDid('Splash! 💧')});
+      if(p.stage<3){const g=document.createElement('div');g.className='grow';const bar=document.createElement('i');
+        bar.style.width=Math.round((p.stage+(p.prog||0)/stageMs(p))/3*100)+'%';g.appendChild(bar);d.appendChild(g)}
+    }
+    beds.appendChild(d);
+  });
+}
 const workDone=()=>S.tasks.some(t=>t.id==='work'&&t.done);
 function taskEvent(kind){
   const t=S.tasks.find(t=>!t.done&&t.id!=='sleep'&&TASKS[t.id].acts.includes(kind)&&(!TASKS[t.id].eve||workDone()));
@@ -1865,6 +1965,7 @@ function drawMineHud(){
 const SPEED=170;
 function update(dt,T){
   updateTrip(dt);updateWedding(dt);updateCity(dt);updateMine(dt);
+  if(growPlots(dt*1000)){save();renderFarm()}
   const st=away()?0:player.f!==0?stand(player.f):player.x>HW-WALL?CAR_Y:player.x<WALL?YARD_Y:stand(0);   // a step down outside
   if(!player.climb)player.y=st;
   player.moving=false;
