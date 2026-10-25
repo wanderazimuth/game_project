@@ -575,6 +575,17 @@ const ITEMS={
     RR(x,y-24,w,24,3,c);R(x+w/2-3,y-24,6,24,'#f1c40f');RR(x-2,y-28,w+4,7,2,shade(c,-20));R(x+w/2-3,y-28,6,7,'#f1c40f');
     E(x+w/2-6,y-31,6,4,'#f1c40f');E(x+w/2+6,y-31,6,4,'#f1c40f');
   }},
+  timemachine:{n:'Time machine',w:90,h:140,c:'#7e57c2',out:true,act:'timemachine',draw(x,y,w,h,c,it,T){
+    const cx=x+w/2;
+    R(x,y-10,w,10,'#7f8c8d');R(x+4,y-14,w-8,4,'#95a5a6');
+    glow(cx,y-80,70,.25+.1*Math.sin(T*3));
+    RR(x+10,y-132,70,120,[32,32,6,6],c);R(x+10,y-60,70,6,shade(c,-30));
+    E(cx,y-92,22,24,'#bfe6ff');E(cx,y-92,18,20,'#fff');
+    for(let i=0;i<12;i++){const a=i*Math.PI/6;E(cx+Math.cos(a)*15,y-92+Math.sin(a)*16,1.2,1.2,'#555')}
+    L(cx,y-92,cx+Math.sin(T*6)*12,y-92-Math.cos(T*6)*12,'#222',2);L(cx,y-92,cx+Math.sin(T*.5)*8,y-92-Math.cos(T*.5)*8,'#222',3);
+    for(let i=0;i<3;i++)E(x+26+i*19,y-38,5,5,['#e74c3c','#f1c40f','#2ecc71'][(i+(T*3|0))%3]);
+    R(cx-2,y-150,4,20,'#999');E(cx,y-152,5,5,(T*4|0)%2?'#5ef2ff':'#fff');
+  }},
   // bought with coins earned at work
   treehouse:{n:'Treehouse',w:140,h:240,c:'#e67e22',out:true,price:100,act:'treehouse',draw(x,y,w,h,c,it,T){
     const cx=x+w/2+10, inside=it&&player.act&&player.act.it===it&&player.act.t>=1.3;
@@ -631,7 +642,7 @@ const ITEMS={
     star(x+8+Math.sin(T*2)*3,y-h-4,4,'#fff6c8');star(x+36,y-40+Math.cos(T*2)*3,3,'#fff6c8');
   }},
 };
-const CATALOG=['swing','slide','sandbox','pool','grill','picnic','flowers','tree','campfire','doghouse','birdbath','greenhouse','treehouse','rocket',
+const CATALOG=['swing','slide','sandbox','pool','grill','picnic','flowers','tree','campfire','doghouse','birdbath','greenhouse','timemachine','treehouse','rocket',
   'arcade','trampoline','disco','goldtoilet','bed','crib','sofa','armchair','chair','table','desk','tv','lamp','plant','xmastree','bookshelf','fridge','stove','sink',
   'tub','toilet','piano','fireplace','rug','dresser','toybox','dog','cat','tank','window','picture','clock','shelf','mirror','chandelier'];
 
@@ -671,6 +682,7 @@ const TASKS={
   host:{txt:'Have a friend over 🔔',acts:['host'],has:[],eve:true},
   family:{txt:'Spend time with your family 💕',acts:['family'],has:[],eve:true},
   tot:{txt:'Go trick-or-treating 🎃',acts:['tot'],has:[],eve:true},
+  time:{txt:'Travel through time ⏳',acts:['time'],has:['timemachine'],need:'a time machine in the backyard',eve:true},
   city:{txt:'Go to the city 🏙️',acts:['city'],has:[],eve:true},
   mine:{txt:'Explore the mine ⛏️',acts:['mine'],has:[],eve:true},
   farm:{txt:'Tend your greenhouse 🌱',acts:['farm'],has:['greenhouse'],need:'a greenhouse in the backyard',eve:true},
@@ -802,7 +814,8 @@ let visiting=null;   // {id,name,home,pos,npc} while you're at someone else's ho
 let inCity=false, townsfolk=[], ride=null, movie=null;   // a trip to the city
 let inMine=false, mine=null;                              // a trip to the mine
 let inTot=false, tot=null;                                // trick-or-treating on a fall night
-const away=()=>inCity||inMine||inTot;
+let inEra=null, era=null;                                 // time travel: which era, and what's in it
+const away=()=>inCity||inMine||inTot||!!inEra;
 const PERSONAL=['look','name','tasks','coins','day','owned','night','car','hearts','heartDay','spouse','kids','spacePups','seasonOff'];   // yours, wherever you are
 const myHouse=()=>visiting?{...visiting.home,...Object.fromEntries(PERSONAL.map(k=>[k,S[k]]))}:S;
 const clean=items=>items.map(({id,vx,happy,launch,land,...k})=>k);
@@ -872,7 +885,7 @@ function setMode(m){
   bar.style.display=m==='build'?'block':'none';
   zoomEl.style.display=m==='build'?'flex':'none';
   meEl.style.display=m==='me'?'block':'none';
-  goalsEl.style.display=m==='play'&&!inMine&&!inTot?'block':'none';
+  goalsEl.style.display=m==='play'&&!inMine&&!inTot&&!inEra?'block':'none';
   showVisitUI();
   toastEl.style.top=m==='build'?'62px':'auto';toastEl.style.bottom=m==='build'?'auto':'84px';
   if(m!=='build'){selected=null;tool=null;drag=null}
@@ -1018,7 +1031,7 @@ function camTarget(){
   if(mode==='play'){
     const s=Math.max(fitS,Math.min(vh/(FLOOR_H*2.1),W/(ROOM_W*2)));
     let x=drive?carX()+CAR_W/2:player.x, y=(drive?(away()?0:CAR_Y):player.y)-INT_H/2+10;
-    const L0=inTot?-100:inMine?-260:inCity?-60:YARD_L-40, R0=inTot?TOT_W+60:inMine?MINE_W+60:inCity?CITY_W+60:OUT_X+90;
+    const L0=inEra?-80:inTot?-100:inMine?-260:inCity?-60:YARD_L-40, R0=inEra?ERA_W+60:inTot?TOT_W+60:inMine?MINE_W+60:inCity?CITY_W+60:OUT_X+90;
     const halfW=W/2/s;
     if(!drive)x=R0-L0<=halfW*2?(L0+R0)/2:Math.max(L0+halfW,Math.min(R0-halfW,x));
     return {x,y,s,vy:viewTop+vh/2};
@@ -1123,6 +1136,7 @@ addEventListener('keydown',e=>{
     if(player.f===0&&Math.abs(player.x-(carX()+CAR_W/2))<CAR_W/2+20)return carTapped();
     if(inMine){mineSpace();return}
     if(inTot){totSpace();return}
+    if(inEra){eraSpace();return}
     if(inCity){const sh=CITY_SPOTS().find(c=>Math.abs(player.x-c.door)<60);if(sh)cityAction(sh.id);else say('Walk up to a shop!');return}
     let best=null,bd=60;
     for(const it of S.items){
@@ -1144,11 +1158,12 @@ function routeTo(f,x,item){
   if(item)path.push({use:item});
   standUp();player.path=path;
 }
-const maxX=f=>inTot?TOT_W-20:inMine?MINE_W-20:inCity?CITY_W-20:f===0?OUT_X:HW-WALL-16;   // only the ground floor has doors: front door to the car
+const maxX=f=>inEra?ERA_W-20:inTot?TOT_W-20:inMine?MINE_W-20:inCity?CITY_W-20:f===0?OUT_X:HW-WALL-16;   // only the ground floor has doors: front door to the car
 const minX=f=>inMine?(mine&&mine.floor===1?-60:20):away()?20:f===0?YARD_L+20:WALL+16;  // and back door to the backyard
 function playTap(wx,wy){
   if(player.climb||busy())return;
   if(inTot)return totTap(wx,wy);
+  if(inEra)return eraTap(wx,wy);
   if(inMine)return mineTap(wx,wy);
   if(inCity)return cityTap(wx,wy);
   if(wy>40||wy<-S.floors*FLOOR_H)return;
@@ -1172,6 +1187,202 @@ function petIt(it){
   const b=box(it),cx=b.x+b.w/2;it.happy=2.5;emit('❤️',cx,b.y,3);
   if(it.t==='dog'){say(it.helmet?'Good space dog! 🧑‍🚀':'Good dog!');tone(420,.08,'square',.05);tone(380,.1,'square',.05,.12)}else say('Purrrr…');
 }
+// ── Time travel ──────────────────────────────────────────────────────────────
+const ERA_W=2200, TM_X=40;   // the time machine waits at the left of each era
+const ERAS={
+  dino:{n:'Dinosaur times',e:'🦕',tint:'rgba(255,150,60,.16)',treasure:'🥚',treasureName:'dino eggs',coins:5,
+    found:['A baby dino! 🐣','It hatched! 🐣','Peep peep! 🐣'],
+    make:()=>[{t:'rex',x:700,vx:0},{t:'longneck',x:1180,vx:0},{t:'trike',x:1650,vx:0},{t:'ptero',x:500,vx:70,fly:1},{t:'ptero',x:1500,vx:-60,fly:1}]},
+  castle:{n:'Knights & castles',e:'🏰',tint:'rgba(120,160,255,.08)',treasure:'💰',treasureName:'treasure chests',coins:8,
+    found:['Treasure! 💰','Gold coins! 💰','A royal treasure! 👑'],
+    make:()=>[{t:'dragon',x:900,vx:50,fly:1},{t:'person',name:'King Arthur',look:{skin:1,hair:0,hairC:7,eyeC:1,top:4,topC:7,bottom:0,bottomC:7,shoeC:11,hat:3,hatC:2,glasses:0},x:1250,vx:0,
+      hi:['Welcome to my castle, traveler!','Have you met our dragon? He is friendly!']},
+      {t:'person',name:'Princess Pea',look:{skin:3,hair:1,hairC:3,eyeC:2,top:2,topC:9,bottom:2,bottomC:9,shoeC:9,hat:3,hatC:2,glasses:0},x:1450,vx:0,
+      hi:['What a funny outfit! Are you from the future?','I can ride the dragon! 🐉']},
+      {t:'person',name:'Sir Lance',knight:1,look:{skin:2,hair:0,hairC:1,eyeC:0,top:4,topC:12,bottom:0,bottomC:12,shoeC:12,hat:0,hatC:0,glasses:0},x:600,vx:0,
+      hi:['Hail, traveler! ⚔️','I guard the castle. And the cookies.']}]},
+  future:{n:'The far future',e:'🤖',tint:'rgba(140,80,255,.14)',treasure:'⚡',treasureName:'energy cells',coins:6,
+    found:['Future power! ⚡','Fully charged! ⚡','Zap! ⚡'],
+    make:()=>[{t:'robot',x:600,vx:40,c:'#90caf9'},{t:'robot',x:1300,vx:-30,c:'#ffcc80'},{t:'robodog',x:950,vx:60}]},
+};
+function timeMenu(){
+  if(busy())return;
+  const opts=Object.entries(ERAS).filter(([k])=>k!==inEra).map(([k,e])=>[e.e+' '+e.n,()=>timeTravel(k)]);
+  if(inEra)opts.unshift(['🏠 Back home',()=>timeTravel(null)]);
+  choose('⏳ Where to?',opts);
+}
+function timeTravel(to){
+  player.path=[];player.act=null;
+  [880,660,990,550,1320].forEach((f,i)=>tone(f,.25,'sine',.06,i*.12));
+  fade={t:0,dur:2.4,warp:true,mid(){
+    inEra=to;guests.length=0;
+    if(to){
+      era={found:new Set(),creatures:ERAS[to].make().map(c=>({dir:1,walk:0,ph:Math.random()*6,...c})),
+        treasures:[480,980,1400,1880].map((x,i)=>({x:x+(i*37)%60,got:false}))};
+      player.f=0;player.x=TM_X+120;
+    }else{   // home, out back by the time machine
+      era=null;const tm=S.items.find(i=>i.t==='timemachine');
+      player.f=0;player.x=tm?Math.min(-20,tm.x+ITEMS.timemachine.w+20):-200;
+    }
+    player.dir=1;cam.init=false;showVisitUI();
+  },done(){
+    if(to){say(`Whoa! ${ERAS[to].e} ${ERAS[to].n}!`,3);taskEvent('time')}else say('Back home! 🏠',2);
+  }};
+}
+function eraTap(wx,wy){
+  if(wx<TM_X+100&&wy>-160&&wy<10)return routeTo(0,TM_X+110,'tm');
+  for(const c of era.creatures){const b=creatureBox(c);if(wx>b.x0&&wx<b.x1&&wy>b.y0&&wy<b.y1)return meetCreature(c)}
+  const t=era.treasures.find(t=>!t.got&&Math.abs(wx-t.x)<34&&wy>-60&&wy<10);
+  if(t)return routeTo(0,t.x,'t'+era.treasures.indexOf(t));
+  routeTo(0,Math.max(20,Math.min(ERA_W-20,wx)));
+}
+function eraSpace(){
+  if(player.x<TM_X+150)return timeMenu();
+  const t=era.treasures.find(t=>!t.got&&Math.abs(player.x-t.x)<50);
+  if(t)return eraAction('t'+era.treasures.indexOf(t));
+  const c=era.creatures.find(c=>Math.abs(c.x-player.x)<140);
+  if(c)meetCreature(c);else say('Let\'s explore!');
+}
+function eraAction(id){
+  if(id==='tm')return timeMenu();
+  const t=era.treasures[+id.slice(1)];
+  if(!t||t.got)return;
+  const E_=ERAS[inEra];t.got=true;era.found.add(id);S.coins+=E_.coins;renderGoals();save();
+  emit(E_.treasure,t.x,-50,1,26);emit('+'+E_.coins+' 🪙',t.x,-80,1,16);if(inEra==='dino')emit('🐣',t.x,-30,1,24);
+  say(E_.found[Math.random()*E_.found.length|0],2.5);[659,784,988].forEach((f,i)=>tone(f,.15,'triangle',.07,i*.08));
+}
+function creatureBox(c){
+  const y=creatureY(c);
+  const size={rex:[110,150],longneck:[130,250],trike:[90,90],ptero:[60,40],dragon:[120,70],person:[30,100],robot:[40,90],robodog:[40,40]}[c.t];
+  return {x0:c.x-size[0]/2,x1:c.x+size[0]/2,y0:y-size[1],y1:y+10};
+}
+const creatureY=c=>c.fly?(c.t==='dragon'?-215:-235)+Math.sin(c.ph*1.3)*22:0;   // low enough to see under the top bar
+function meetCreature(c){
+  player.dir=c.x>player.x?1:-1;c.vx=0;c.happy=2;
+  const b=creatureBox(c), cx=c.x, top=b.y0;
+  const lines={
+    rex:()=>{tone(80,.6,'sawtooth',.09);tone(60,.8,'sawtooth',.08,.2);return 'ROAR! 🦖 …it just wanted to say hi!'},
+    longneck:()=>{emit('💚',cx,top+40,3);return 'It likes you! 💚'},
+    trike:()=>{emit('💛',cx,top,2);return 'The triceratops says hi!'},
+    ptero:()=>'Look, a pterodactyl! 🦅',
+    dragon:()=>{emit('🔥',cx,top+30,3);tone(120,.5,'sawtooth',.06);return 'A friendly dragon! 🐉'},
+    robot:()=>{[1200,900,1500].forEach((f,i)=>tone(f,.07,'square',.04,i*.09));c.say={txt:['BEEP BOOP! 🤖','Hello, human from the past!','Would you like a future snack? 🍪'][Math.random()*3|0],t:2.5};return 'Hi robot!'},
+    robodog:()=>{emit('⚡',cx,top,2);tone(1500,.06,'square',.04);tone(1100,.08,'square',.04,.08);return 'A robot puppy! 🐶'},
+    person:()=>{c.say={txt:c.hi[Math.random()*c.hi.length|0],t:3};return c.knight?'Hello, Sir Knight!':'Hello!'}};
+  say(lines[c.t](),2.5);
+}
+function updateEra(dt){
+  if(!inEra||!era)return;
+  for(const c of era.creatures){
+    c.ph+=dt;if(c.say&&(c.say.t-=dt)<=0)c.say=null;
+    if(c.happy>0){c.happy-=dt;continue}
+    if(!c.fly&&Math.random()<dt*.3)c.vx=Math.random()<.4?0:(Math.random()<.5?-1:1)*(c.t==='robodog'?70:c.t==='person'?40:30);
+    c.x+=(c.vx||0)*dt;if(c.vx)c.dir=Math.sign(c.vx),c.walk+=dt*8;
+    if(c.x<320){c.x=320;c.vx=Math.abs(c.vx||0)}if(c.x>ERA_W-120){c.x=ERA_W-120;c.vx=-Math.abs(c.vx||0)}
+  }
+}
+function drawCreature(c,T){
+  const y=creatureY(c);
+  if(c.t==='person'){
+    if(c.knight)drawCostume(c.x,y,'knight',c.dir,'back');
+    drawPlayer(c.look,c.x,y,{dir:c.dir,walk:c.vx?c.walk:0,T});
+    if(c.knight)drawCostume(c.x,y,'knight',c.dir,'front');
+    return;
+  }
+  X.save();X.translate(c.x,y);X.scale(c.dir||1,1);
+  const step=c.vx?Math.sin(c.walk*2)*6:0, g='#4caf50';
+  if(c.t==='rex'){
+    P([-40,-78,-115,-40,-36,-58],g);R(-24,-50,18,50+step*0,shade(g,-15));R(8,-50,18,50,shade(g,-15));
+    E(0,-74,50,32,g);E(-6,-60,36,16,'#a5d6a7');
+    RR(26,-138,62,42,16,g);R(36,-102,48,10,g);for(let i=0;i<5;i++)P([42+i*9,-102,46+i*9,-95,50+i*9,-102],'#fff');
+    E(66,-126,4.5,4.5,'#222');L(36,-74,52,-62,shade(g,-15),6);
+  }
+  if(c.t==='longneck'){
+    const lc='#8bc34a';
+    for(const lx of [-48,-20,22,48])R(lx-8,-60,16,60,shade(lc,-15));
+    P([-60,-90,-150,-60,-58,-70],lc);E(0,-90,72,40,lc);
+    X.strokeStyle=lc;X.lineWidth=20;X.lineCap='round';X.beginPath();X.moveTo(50,-110);X.quadraticCurveTo(100,-160,92+Math.sin(c.ph)*6,-232);X.stroke();X.lineCap='butt';
+    E(104+Math.sin(c.ph)*6,-238,22,13,lc);E(114+Math.sin(c.ph)*6,-242,3,3,'#222');
+  }
+  if(c.t==='trike'){
+    const tc='#ff9800';
+    for(const lx of [-30,-10,14,32])R(lx-6,-30,12,30,shade(tc,-15));
+    P([-46,-48,-90,-30,-44,-36],tc);E(0,-48,50,28,tc);E(44,-66,22,28,'#ffb74d');E(56,-48,24,17,tc);
+    P([60,-58,92,-66,64,-50],'#fff3e0');P([60,-44,92,-48,64,-38],'#fff3e0');P([76,-44,92,-40,78,-38],'#fff3e0');E(62,-54,3,3,'#222');
+  }
+  if(c.t==='ptero'){const f=Math.sin(T*8+c.ph)*14;P([0,0,-42,-10-f,-16,4],'#8d6e63');P([0,0,42,-10-f,16,4],'#8d6e63');E(0,0,12,7,'#a1887f');P([10,-4,30,0,10,2],'#ffcc80')}
+  if(c.t==='dragon'){
+    const f=Math.sin(T*6+c.ph)*16, dc='#e53935';
+    P([-10,-6,-60,-50-f,-30,-4],shade(dc,-25));P([10,-6,60,-50-f,30,-4],shade(dc,-25));
+    E(0,0,44,18,dc);P([-40,0,-90,10,-42,8],dc);E(46,-14,18,13,dc);P([56,-24,64,-38,62,-20],'#ffcc80');E(52,-18,3,3,'#222');
+    if((T*2+c.ph|0)%5===0)for(let i=0;i<3;i++)E(70+i*12,-10+Math.sin(T*20+i)*3,7-i,5-i,['#ffeb3b','#ff9800','#f44336'][i]);
+  }
+  if(c.t==='robot'){
+    const rc=c.c||'#90caf9';
+    R(-14,-22,10,22,'#607d8b');R(4,-22,10,22,'#607d8b');RR(-20,-62,40,42,6,rc);R(-12,-52,24,16,'#263238');
+    E(-6,-44,3,3,'#5ef2ff');E(6,-44,3,3,'#5ef2ff');RR(-16,-90,32,26,6,shade(rc,-15));E(-7,-78,4,4,'#5ef2ff');E(7,-78,4,4,'#5ef2ff');
+    L(0,-90,0,-102,'#455a64',2);E(0,-104,4,4,(T*3|0)%2?'#ff5252':'#ffeb3b');
+  }
+  if(c.t==='robodog'){
+    R(-16,-14,6,14,'#607d8b');R(10,-14,6,14,'#607d8b');RR(-22,-30,44,18,6,'#b0bec5');RR(16,-42,22,18,5,'#cfd8dc');
+    E(30,-34,2.5,2.5,'#5ef2ff');L(-22,-24,-34,-34-Math.abs(Math.sin(T*10))*6,'#90a4ae',3);P([18,-42,22,-52,26,-42],'#90a4ae');
+  }
+  X.restore();
+}
+function drawEra(T){
+  const E_=ERAS[inEra];
+  R(-600,-800,ERA_W+1200,800,E_.tint);
+  if(inEra==='dino'){
+    P([-300,0,200,-260,700,0],'#8d7a6a');P([400,0,900,-200,1400,0],'#a1887f');
+    P([1300,0,1650,-340,1720,-340,2050,0],'#5d4037');E(1685,-340,36,8,'#ff5722');glow(1685,-345,80,.5);
+    for(let i=0;i<4;i++){const k=(T*.15+i/4)%1;E(1685+Math.sin(T+i)*20,-370-k*260,20+k*40,14+k*26,`rgba(110,110,110,${.55-k*.5})`)}
+    R(-600,0,ERA_W+1200,900,'#7a6a3a');R(-600,0,ERA_W+1200,12,'#6d8b3a');
+    for(let x=150;x<ERA_W;x+=330){R(x,-160,12,160,'#8d6e63');for(let i=0;i<5;i++){X.save();X.translate(x+6,-160);X.rotate(-1.6+i*.8);E(30,0,34,8,'#43a047');X.restore()}}
+    for(let x=60;x<ERA_W;x+=190)for(let i=0;i<4;i++){X.save();X.translate(x,0);X.rotate(-2.2+i*.5);E(0,-22,6,24,'#2e7d32');X.restore()}
+  }
+  if(inEra==='castle'){
+    E(300,40,700,180,'#7cb342');E(1700,60,800,200,'#8bc34a');
+    R(950,-260,560,260,'#9e9e9e');for(let x=950;x<1510;x+=40)R(x,-280,24,22,'#9e9e9e');
+    for(const tx of [900,1460]){R(tx,-340,100,340,'#bdbdbd');P([tx-10,-340,tx+110,-340,tx+50,-430],'#3f51b5');
+      L(tx+50,-430,tx+50,-470,'#555',2);P([tx+50,-470,tx+50+30+Math.sin(T*4)*6,-462,tx+50,-454],'#e53935')}
+    RR(1180,-140,100,140,[50,50,0,0],'#5d4037');for(let x=1192;x<1280;x+=14)R(x,-130,4,130,'#3e2723');
+    for(const wx of [1020,1380])RR(wx,-200,30,46,[15,15,0,0],'#37474f');
+    R(-600,0,ERA_W+1200,900,'#6d6d6d');R(-600,0,ERA_W+1200,12,'#9e9e9e');
+    for(let x=-20;x<ERA_W;x+=46)RR(x,2,40,8,3,'#8a8a8a');
+  }
+  if(inEra==='future'){
+    for(let i=0;i<16;i++){const bx=-200+i*160, bh=260+((i*131)%5)*70;R(bx,-bh,120,bh,i%2?'#283593':'#311b92');
+      for(let y=-bh+20;y<-30;y+=36)for(let x=bx+14;x<bx+110;x+=28)R(x,y,14,18,(x+y+(T*.5|0))%4?'#4dd0e1':'#e1bee7')}
+    for(let i=0;i<5;i++){const fx=((T*(120+i*40)*(i%2?1:-1)+i*600)%(ERA_W+800)+ERA_W+800)%(ERA_W+800)-400, fy=-420+i*45;
+      RR(fx-30,fy-10,60,20,10,['#ff4081','#ffd740','#69f0ae','#40c4ff','#e040fb'][i]);RR(fx-14,fy-18,28,12,6,'rgba(200,240,255,.8)');glow(fx,fy+8,30,.4)}
+    R(-600,0,ERA_W+1200,900,'#1a237e');R(-600,0,ERA_W+1200,10,'#5c6bc0');
+    for(let x=0;x<ERA_W;x+=120)R(x+(T*80)%120,12,60,3,'#80deea');
+  }
+  ITEMS.timemachine.draw(TM_X-45,0,90,140,ITEMS.timemachine.c,{},T);
+  for(const t of era.treasures){
+    if(t.got)continue;
+    if(inEra==='dino'){E(t.x,-16,13,16,'#fff8e1');E(t.x-4,-20,3,3,'#a1887f');E(t.x+5,-10,2.5,2.5,'#a1887f')}
+    if(inEra==='castle'){RR(t.x-20,-28,40,28,3,'#8d5a3b');R(t.x-20,-24,40,4,'#f1c40f');R(t.x-3,-20,6,8,'#f1c40f');RR(t.x-21,-36,42,12,[8,8,0,0],'#a1714b')}
+    if(inEra==='future'){glow(t.x,-18,34,.5);RR(t.x-9,-34,18,30,4,'#5ef2ff');R(t.x-4,-38,8,4,'#b0bec5');P([t.x+2,-30,t.x-5,-17,t.x,-17,t.x-3,-8,t.x+6,-22,t.x+1,-22],'#fff')}
+  }
+  for(const c of era.creatures)drawCreature(c,T);
+  drawPlayerAt(T);
+}
+function drawEraHud(){
+  const E_=ERAS[inEra];
+  RR(8,58,Math.min(W-16,300),44,12,'rgba(40,30,70,.85)');
+  X.font='bold 14px system-ui';X.fillStyle='#fff';X.textAlign='left';X.textBaseline='middle';
+  X.fillText(`${E_.e} ${E_.n}  ·  ${E_.treasure} ${era.found.size}/${era.treasures.length}`,18,80);X.textBaseline='alphabetic';
+  for(const c of era.creatures)if(c.say){const [x,y]=toScreen(c.x,creatureY(c)-110);drawBubble(c.say.txt,x,y)}
+}
+function drawWarp(a,T){   // the swirl of time travel
+  X.globalAlpha=a;R(0,0,W,H,'#120a2a');
+  const cx=W/2, cy=H/2;
+  for(let i=0;i<14;i++){X.strokeStyle=`hsl(${(i*26+T*120)%360},90%,60%)`;X.lineWidth=6;X.beginPath();X.arc(cx,cy,30+i*28,T*3+i*.5,T*3+i*.5+Math.PI*1.3);X.stroke()}
+  X.save();X.translate(cx,cy);X.rotate(T*4);X.font='54px sans-serif';X.textAlign='center';X.textBaseline='middle';X.fillText('⏳',0,0);X.restore();
+  X.textBaseline='alphabetic';X.globalAlpha=1;
+}
+
 // ── Trick-or-treating (fall nights) ─────────────────────────────────────────
 const TOT_W=2400;
 const COSTUMES=[{id:'ghost',e:'👻',n:'Ghost'},{id:'witch',e:'🧙',n:'Witch'},{id:'pumpkin',e:'🎃',n:'Pumpkin'},
@@ -1256,6 +1467,10 @@ function drawCostume(x,y,id,dir,layer){
     if(id==='hero')P([x-12,ty+2,x+12,ty+2,x+20,y-6,x-20,y-6],'#e74c3c');
     if(id==='vampire'){P([x-12,ty+2,x-24,y-4,x-6,y-10],'#2d2d2d');P([x+12,ty+2,x+24,y-4,x+6,y-10],'#2d2d2d')}
     return;
+  }
+  if(id==='knight'){
+    RR(x-13,ty,26,26,6,'#b0bec5');R(x-13,ty+10,26,3,'#90a4ae');
+    RR(x-18,hy-18,36,34,[16,16,6,6],'#cfd8dc');R(x-12+dir*2,hy-2,24,5,'#37474f');E(x,hy-19,4,10,'#e74c3c');
   }
   if(id==='ghost'){
     RR(x-22,hy-21,44,y-4-(hy-21),[22,22,4,4],'#fdfdfd');for(let i=0;i<4;i++)E(x-16+i*10.7,y-4,6,5,'#fdfdfd');
@@ -1510,6 +1725,7 @@ function use(it){
       if(S.kids.some(k=>S.day-k.born>=2))for(const n of homePeople())if(n.scale)n.say={txt:['Presents! 🎁','Merry Christmas! 🎄','Is that for me?'][Math.random()*3|0],t:2.5};
       break;
     }
+    case 'timemachine':if(visiting)return say('Cool time machine!');return timeMenu();
     case 'xmastree':emit('✨',cx,top,3);say(isChristmas()?'Merry Christmas! 🎄':'Oh Christmas tree! 🎄');tone(988,.3,'sine',.05);tone(1319,.4,'sine',.05,.15);break;
     case 'snowman':
       if(season().n!=='Winter')say('It melted… 💧 See you next winter!');
@@ -1534,7 +1750,7 @@ const hasFor=id=>{const h=myHouse();return !TASKS[id].has.length||h.items.some(i
 function newTasks(){
   // prefer tasks the house has furniture for; the rest tell you what to build
   const pick=(ids,n)=>{const sh=ids.sort(()=>Math.random()-.5);return [...sh.filter(hasFor),...sh.filter(id=>!hasFor(id))].slice(0,n)};
-  return ['breakfast',...pick(['wash','dress'],1),'work',...pick(['pet','plant','relax','dinner','bath','lights','yard','visit','host','city','mine','farm',...(S.spouse?['family']:[]),...(season().n==='Fall'?['tot']:[])],2),'sleep'].map(id=>({id,done:false}));
+  return ['breakfast',...pick(['wash','dress'],1),'work',...pick(['pet','plant','relax','dinner','bath','lights','yard','visit','host','city','mine','farm','time',...(S.spouse?['family']:[]),...(season().n==='Fall'?['tot']:[])],2),'sleep'].map(id=>({id,done:false}));
 }
 if(!S.tasks)S.tasks=newTasks();
 
@@ -1822,8 +2038,8 @@ function showVisitUI(){
   $('totBtn').style.display=!visiting&&!away()&&season().n==='Fall'&&S.night?'inline-block':'none';
   $('nbHome').style.display=visiting?'inline-block':'none';
   const tag=$('visitTag');tag.style.display=(visiting||away())&&mode==='play'?'block':'none';
-  goalsEl.style.display=mode==='play'&&!inMine&&!inTot?'block':'none';
-  tag.textContent=visiting?'Visiting '+visiting.name:inTot?'🎃 Trick-or-treating — tap 🏠 Home to go back':inMine?'⛏️ The mine — floor '+(mine?mine.floor:1):inCity?'🏙️ In the city — tap your car to go home':'';
+  goalsEl.style.display=mode==='play'&&!inMine&&!inTot&&!inEra?'block':'none';
+  tag.textContent=visiting?'Visiting '+visiting.name:inEra?ERAS[inEra].e+' '+ERAS[inEra].n+' — tap the time machine to go home':inTot?'🎃 Trick-or-treating — tap 🏠 Home to go back':inMine?'⛏️ The mine — floor '+(mine?mine.floor:1):inCity?'🏙️ In the city — tap your car to go home':'';
 }
 $('nbClose').onclick=()=>{nbEl.style.display='none'};
 $('nbHome').onclick=()=>{if(!busy())travel(null)};
@@ -2342,7 +2558,7 @@ function drawMineHud(){
 // ── Update ───────────────────────────────────────────────────────────────────
 const SPEED=170;
 function update(dt,T){
-  updateTrip(dt);updateWedding(dt);updateCity(dt);updateMine(dt);updateTot(dt);
+  updateTrip(dt);updateWedding(dt);updateCity(dt);updateMine(dt);updateTot(dt);updateEra(dt);
   if(growPlots(dt*1000)){save();renderFarm()}
   updatePups(dt);
   const st=away()?0:player.f!==0?stand(player.f):player.x>HW-WALL?CAR_Y:player.x<WALL?YARD_Y:stand(0);   // a step down outside
@@ -2367,7 +2583,7 @@ function update(dt,T){
         player.path.shift();
         const up=s.climb>0, f1=player.f+s.climb;
         player.climb={t:0,x0:player.x,y0:stand(player.f),x1:up?MINX+8:WALL+16,y1:stand(f1),f1};
-      }else if(s.use){player.path.shift();if(s.use==='car')carTapped();else if(typeof s.use==='string')(inTot?totAction:inMine?mineAction:cityAction)(s.use);else if(S.items.includes(s.use))use(s.use)}
+      }else if(s.use){player.path.shift();if(s.use==='car')carTapped();else if(typeof s.use==='string')(inEra?eraAction:inTot?totAction:inMine?mineAction:cityAction)(s.use);else if(S.items.includes(s.use))use(s.use)}
       if(!player.path.length)save();
     }
   }
@@ -2695,7 +2911,8 @@ function draw(T){
   drawSky(T);
   X.save();
   X.translate(W/2,cam.vy);X.scale(cam.s,cam.s);X.translate(-cam.x,-cam.y);
-  if(inTot)drawTot(T);
+  if(inEra)drawEra(T);
+  else if(inTot)drawTot(T);
   else if(inMine)drawMine(T);
   else if(inCity)drawCity(T);
   else{
@@ -2727,7 +2944,7 @@ function draw(T){
   for(const p of parts){X.globalAlpha=Math.min(1,p.life);X.font=p.size+'px sans-serif';X.textAlign='center';X.fillText(p.txt,p.x,p.y)}
   X.globalAlpha=1;
   X.restore();
-  if(!inMine)drawSeasonFx(T);
+  if(!inMine&&!inEra)drawSeasonFx(T);
   // name tag + speech in screen space so they stay readable when zoomed out
   const [sx,sy]=drive?toScreen(carX()+CAR_W/2,(away()?0:CAR_Y)-80):toScreen(player.x,player.y-(player.act&&player.act.kind==='sleep'?40:(player.act&&player.act.kind!=='stand'?80:100)));
   if(!drive&&player.act&&player.act.kind!=='stand'&&!player.act.noSeat){
@@ -2750,13 +2967,14 @@ function draw(T){
   }else selEl.style.display='none';
   if(fade){
     const h=fade.dur/2, a=fade.t<h?fade.t/h:1-(fade.t-h)/h;
-    R(0,0,W,H,`rgba(8,8,24,${Math.min(.95,a)})`);
+    if(fade.warp)drawWarp(Math.min(1,a*1.2),T);else R(0,0,W,H,`rgba(8,8,24,${Math.min(.95,a)})`);
   }
   if(rocketing()&&player.act.t>5&&player.act.t<8.5)drawMoon(player.act.t,T);
   if(wedding)drawWedding(wedding.t,T);
   if(movie)drawMovie(movie.t,T);
   if(inMine&&mine)drawMineHud();
   if(inTot&&tot)drawTotHud();
+  if(inEra&&era)drawEraHud();
 }
 function drawWedding(t,T){
   X.globalAlpha=Math.max(0,Math.min(1,t/.5,(6.5-t)/.5));
