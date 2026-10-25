@@ -195,7 +195,8 @@ const SEASONS=[
   {n:'Fall',e:'🍂',grass:'#c2b450',tuft:'#a89a3a',leaf:'#e67e22',fx:'leaf'},
   {n:'Winter',e:'❄️',grass:'#f2f6fb',tuft:'#dfe8f2',leaf:'#eef3f8',fx:'snow'}];
 const SEASON_DAYS=3;
-const seasonOf=day=>SEASONS[Math.floor(((day||1)-1)/SEASON_DAYS)%4];
+// seasonOff shifts the calendar when you pick a season in Build mode; it carries on from there
+const seasonOf=day=>SEASONS[(Math.floor(((day||1)-1)/SEASON_DAYS)+(S.seasonOff||0))%4];
 const season=()=>seasonOf(S.day);
 // a tree's leaves for the season: blossoms in spring, apples in summer and fall, snow in winter
 function seasonTree(x,y,rx,ry){
@@ -790,7 +791,7 @@ let inCity=false, townsfolk=[], ride=null, movie=null;   // a trip to the city
 let inMine=false, mine=null;                              // a trip to the mine
 let inTot=false, tot=null;                                // trick-or-treating on a fall night
 const away=()=>inCity||inMine||inTot;
-const PERSONAL=['look','name','tasks','coins','day','owned','night','car','hearts','heartDay','spouse','kids','spacePups'];   // yours, wherever you are
+const PERSONAL=['look','name','tasks','coins','day','owned','night','car','hearts','heartDay','spouse','kids','spacePups','seasonOff'];   // yours, wherever you are
 const myHouse=()=>visiting?{...visiting.home,...Object.fromEntries(PERSONAL.map(k=>[k,S[k]]))}:S;
 const clean=items=>items.map(({id,vx,happy,launch,land,...k})=>k);
 function saveNow(){
@@ -920,6 +921,12 @@ function buildTray(){
       b.style.background=f.k==='check'?'repeating-conic-gradient(#222 0 25%,#f5f5f5 0 50%) 0 0/16px 16px':f.c;b.title=f.n;
     });
   }else{
+    add(Object.assign(document.createElement('span'),{className:'lbl',textContent:'Season'}));
+    SEASONS.forEach((se,i)=>btn('pat',se.e+' '+se.n,()=>{
+      const block=Math.floor((S.day-1)/SEASON_DAYS);
+      S.seasonOff=((i-block)%4+4)%4;save();renderGoals();buildTray();
+      toast(`${se.e} It's ${se.n.toLowerCase()} now!`+(se.n==='Winter'?' Build a snowman ⛄':se.n==='Fall'?' Pumpkins can grow 🎃':''),3000);
+    },season()===se));
     add(Object.assign(document.createElement('span'),{className:'lbl',textContent:'Roof'}));
     for(const c of ROOFC){const b=btn('sw','',()=>{S.roof=c;save();buildTray()},S.roof===c);b.style.background=c}
     add(Object.assign(document.createElement('span'),{className:'lbl',textContent:'Outside'}));
