@@ -115,14 +115,34 @@ def get_house(house_id):
         entry = _load_houses().get(house_id)
         return entry and entry["house"]
 
+def _save_houses(data):
+    tmp = HOUSES_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f)
+    os.replace(tmp, HOUSES_FILE)
+
 def save_house(house_id, name, day, house):
     with HOUSES_LOCK:
         data = _load_houses()
-        data[house_id] = {"name": name, "day": day, "house": house, "updated": int(time.time())}
-        tmp = HOUSES_FILE + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(data, f)
-        os.replace(tmp, HOUSES_FILE)
+        visits = data.get(house_id, {}).get("visits", [])
+        data[house_id] = {"name": name, "day": day, "house": house, "updated": int(time.time()), "visits": visits}
+        _save_houses(data)
+
+# When someone visits a family member's house, the owner's game sees it and their character drops by.
+def add_visit(house_id, name, look):
+    with HOUSES_LOCK:
+        data = _load_houses()
+        if house_id not in data:
+            return False
+        visits = data[house_id].setdefault("visits", [])
+        visits.append({"name": name, "look": look, "time": int(time.time())})
+        del visits[:-20]
+        _save_houses(data)
+        return True
+
+def get_visits(house_id):
+    with HOUSES_LOCK:
+        return _load_houses().get(house_id, {}).get("visits", [])
 
 LANDING_PAGE_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
@@ -459,6 +479,9 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
         if self.path == "/houses":
             self.send_json(list_houses())
             return
+        if self.path.startswith("/houses/") and self.path.endswith("/visits"):
+            self.send_json(get_visits(self.path[8:-7]))
+            return
         if self.path.startswith("/houses/"):
             house = get_house(self.path[8:].strip("/"))
             if house is None:
@@ -503,6 +526,24 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(resp)
+            except (ValueError, KeyError, TypeError):
+                self.send_error(400)
+            return
+        if self.path.startswith("/houses/") and self.path.endswith("/visit"):
+            length = int(self.headers.get("Content-Length", 0))
+            if length > 20_000:
+                self.send_error(413)
+                return
+            try:
+                body = json.loads(self.rfile.read(length))
+                look = body.get("look", {})
+                if not isinstance(look, dict):
+                    raise TypeError
+                name = str(body.get("name", "")).strip()[:16] or "Neighbor"
+                if add_visit(self.path[8:-6], name, look):
+                    self.send_json({"ok": True})
+                else:
+                    self.send_error(404)
             except (ValueError, KeyError, TypeError):
                 self.send_error(400)
             return

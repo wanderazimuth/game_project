@@ -48,6 +48,9 @@ button{font:inherit;cursor:pointer;border:none}
 .nbRow{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:#f3ecff;margin-bottom:8px}
 .nbRow .who{flex:1;color:#4a2a7a;font-weight:800}
 .nbRow .who small{display:block;font-weight:600;color:#7a6a9a}
+.nbBtns2{display:flex;flex-direction:column;gap:6px}
+.nbBtns2 .big{height:40px;padding:0 14px}
+.big.alt{background:#cbbff0;color:#2a1a50}
 .nbNote{color:#7a6a9a;font-size:13px;margin:4px 2px 10px}
 #goals{position:fixed;left:8px;top:58px;z-index:4;background:rgba(40,30,70,.85);color:#fff;border-radius:12px;padding:8px 11px;
   font-size:13px;width:min(290px,calc(100vw - 16px));display:none;cursor:pointer}
@@ -555,6 +558,7 @@ const TASKS={
   lights:{txt:'Turn on a light',acts:['light'],has:['lamp','chandelier','disco','fireplace'],need:'a lamp or ceiling light',eve:true},
   yard:{txt:'Play in the backyard',acts:['yard'],has:['swing','slide','sandbox','pool','treehouse','rocket'],need:'a swing, slide or pool in the backyard',eve:true},
   visit:{txt:'Visit a neighbor 🏘️',acts:['visit'],has:[],eve:true},
+  host:{txt:'Have a friend over 🔔',acts:['host'],has:[],eve:true},
   sleep:{txt:'Go to bed',acts:['sleep'],has:['bed'],need:'a bed',eve:true},
 };
 const CARS=[{n:'Car',price:0},{n:'Truck',price:60},{n:'Sports car',price:90}];
@@ -1014,8 +1018,8 @@ function playTap(wx,wy){
   if(player.climb||drive||fade||rocketing())return;
   if(wy>40||wy<-S.floors*FLOOR_H)return;
   if(wx>=CAR_X-6&&wx<=CAR_X+CAR_W+6&&wy>=CAR_Y-80&&wy<=10)return routeTo(0,CAR_X+60,'car');
-  const n=visiting&&visiting.npc;
-  if(n&&Math.abs(wx-n.x)<24&&wy>stand(0)-100&&wy<stand(0)+10){talkTo(n);return routeTo(0,n.x+(player.x<n.x?-44:44))}
+  for(const n of people())
+    if(Math.abs(wx-n.x)<24&&wy>npcY(n)-100&&wy<npcY(n)+10){talkTo(n);return routeTo(0,n.x+(player.x<n.x?-44:44))}
   const it=hit(wx,wy,6);
   if(it&&ITEMS[it.t].act){
     const d=ITEMS[it.t];
@@ -1109,7 +1113,7 @@ const hasFor=id=>{const h=myHouse();return !TASKS[id].has.length||h.items.some(i
 function newTasks(){
   // prefer tasks the house has furniture for; the rest tell you what to build
   const pick=(ids,n)=>{const sh=ids.sort(()=>Math.random()-.5);return [...sh.filter(hasFor),...sh.filter(id=>!hasFor(id))].slice(0,n)};
-  return ['breakfast',...pick(['wash','dress'],1),'work',...pick(['pet','plant','relax','dinner','bath','lights','yard','visit'],2),'sleep'].map(id=>({id,done:false}));
+  return ['breakfast',...pick(['wash','dress'],1),'work',...pick(['pet','plant','relax','dinner','bath','lights','yard','visit','host'],2),'sleep'].map(id=>({id,done:false}));
 }
 if(!S.tasks)S.tasks=newTasks();
 const workDone=()=>S.tasks.some(t=>t.id==='work'&&t.done);
@@ -1159,7 +1163,7 @@ function startWork(){
   if(drive||work)return;
   if(visiting)return say('I should go home before I drive to work');
   if(workDone())return say('Work is done for today — have fun at home!');
-  standUp();player.path=[];player.f=0;player.x=CAR_X+60;
+  standUp();player.path=[];player.f=0;player.x=CAR_X+60;guests.length=0;
   drive={dir:1,t:0,x:0};say('Off to work!',1.5);
   tone(110,.5,'sawtooth',.05);tone(165,.4,'sawtooth',.04,.3);
 }
@@ -1231,6 +1235,7 @@ const RW=(w,p,fl)=>({w,p,fl});
 const MADE_UP=[
   {id:'rose',name:'Grandma Rose',emoji:'👵',blurb:'Cozy house with a piano and a garden',
    hi:['Hello dear! Would you like a cookie? 🍪','My cat Whiskers loves visitors.','Try my piano!'],
+   guest:['I baked you some cookies! 🍪','What a lovely home, dear.'],
    look:{skin:1,hair:5,hairC:7,eyeC:1,top:2,topC:7,bottom:2,bottomC:7,shoeC:13,hat:7,hatC:8,glasses:1,job:0},
    floors:2,roof:'#7f4f24',side:'#f2c6c2',
    rooms:[RW('#ffd1dc',5,6),RW('#fde2b5',4,9),RW('#ffe9a8',0,3),RW('#e2d4ff',2,0),RW('#ffd1dc',1,9),RW('#c6ecff',0,4),RW('#fff',0,0),RW('#fff',0,0),RW('#fff',0,0)],
@@ -1241,6 +1246,7 @@ const MADE_UP=[
      ['tree',0,-560],['flowers',0,-440],['flowers',0,-345,,'#9b59b6'],['picnic',0,-250],['birdbath',0,-110]]},
   {id:'max',name:'Captain Max',emoji:'🚀',blurb:'Space fan with a rocket, a pool and an arcade',
    hi:['Welcome aboard! 🚀','Have you tried my rocket? It goes to the moon!','Last one in the pool is a space potato!'],
+   guest:['Your house needs a rocket! 🚀','Cool house! Is that an arcade?'],
    look:{skin:3,hair:4,hairC:9,eyeC:2,top:1,topC:5,bottom:0,bottomC:11,shoeC:10,hat:1,hatC:0,glasses:2,job:5},
    floors:2,roof:'#2c3e50',side:'#5e6472',
    rooms:[RW('#3d3d5c',2,7),RW('#9ec9ff',1,4),RW('#ffffff',0,5),RW('#c9a0ff',2,7),RW('#3d3d5c',2,7),RW('#c6ecff',0,4),RW('#fff',0,0),RW('#fff',0,0),RW('#fff',0,0)],
@@ -1251,6 +1257,7 @@ const MADE_UP=[
      ['rocket',0,-560],['pool',0,-460],['trampoline',0,-280],['campfire',0,-150]]},
   {id:'lily',name:'Auntie Lily',emoji:'🐾',blurb:'The vet next door — her house is full of pets',
    hi:['Hi! Meet my pets — I have six! 🐶🐱','Pet the dogs, they love it!','Can you find all three of my cats? 🐱','Biscuit, no jumping on the sofa!'],
+   guest:['Where are your pets? 🐾','I left my dogs at home — they say hi!'],
    look:{skin:2,hair:2,hairC:1,eyeC:2,top:0,topC:4,bottom:0,bottomC:6,shoeC:11,hat:0,hatC:0,glasses:0,job:3},
    floors:2,roof:'#16a085',side:'#cfe8c0',
    rooms:[RW('#d4f5c4',3,0),RW('#ffe9a8',1,8),RW('#a8e6cf',0,3),RW('#c6ecff',2,7),RW('#d4f5c4',5,8),RW('#ffffff',0,4),RW('#fff',0,0),RW('#fff',0,0),RW('#fff',0,0)],
@@ -1263,6 +1270,7 @@ const MADE_UP=[
      ['treehouse',0,-570,,'#27ae60'],['doghouse',0,-410,,'#3498db'],['dog',0,-320,,'#ecf0f1'],['sandbox',0,-250],['birdbath',0,-146]]},
   {id:'kai',name:'Coach Kai',emoji:'⚽',blurb:'Sporty neighbor with trampolines, a slide and a pool',
    hi:['Hey champ! Ready to play? 💪','Race you to the trampoline!','Try my slide — it is super fast!','Drink some water and keep moving! 🥤'],
+   guest:['Race you around the house! 🏃','Nice place! Got a trampoline?'],
    look:{skin:2,hair:0,hairC:0,eyeC:0,top:0,topC:0,bottom:1,bottomC:11,shoeC:10,hat:1,hatC:5,glasses:0,job:4},
    floors:2,roof:'#2e86de',side:'#ffffff',
    rooms:[RW('#c6ecff',1,4),RW('#d4f5c4',1,8),RW('#ffffff',0,3),RW('#ffe9a8',2,7),RW('#c6ecff',1,4),RW('#ffffff',0,4),RW('#fff',0,0),RW('#fff',0,0),RW('#fff',0,0)],
@@ -1286,29 +1294,38 @@ $('nbHome').onclick=()=>{if(!(drive||fade||rocketing()))travel(null)};
 $('nbOpen').onclick=async()=>{
   if(drive||fade||rocketing())return;
   nbEl.style.display='flex';
-  const row=(emoji,name,sub,go)=>{
+  const row=(emoji,name,sub,go,ask)=>{
     const d=document.createElement('div');d.className='nbRow';
     d.innerHTML=`<span style="font-size:30px">${emoji}</span><span class="who"></span>`;
     d.querySelector('.who').append(name,Object.assign(document.createElement('small'),{textContent:sub}));
-    const b=document.createElement('button');b.className='big';b.textContent='Visit';b.onclick=go;d.appendChild(b);
-    nbList.appendChild(d);
+    const btns=document.createElement('div');btns.className='nbBtns2';
+    for(const [label,fn] of [['Visit',go],['Invite',ask]]){
+      if(label==='Invite'&&visiting)continue;   // guests come to your own house
+      const b=document.createElement('button');b.className='big'+(label==='Invite'?' alt':'');b.textContent=label;b.onclick=fn;btns.appendChild(b);
+    }
+    d.appendChild(btns);nbList.appendChild(d);
   };
   nbList.innerHTML='';
-  for(const n of MADE_UP)row(n.emoji,n.name,n.blurb,()=>travel(n));
+  for(const n of MADE_UP)row(n.emoji,n.name,n.blurb,()=>travel(n),()=>invite(n));
   const note=Object.assign(document.createElement('div'),{className:'nbNote',textContent:'Looking for family houses…'});
   nbList.appendChild(note);
   try{
     const list=(await (await fetch('/houses',{cache:'no-store'})).json()).filter(h=>h.id!==MY_ID).sort((a,b)=>b.updated-a.updated);
     note.textContent=list.length?'Family houses':'No family houses yet — everyone who plays Dream House shows up here.';
+    const getHouse=async h=>(await fetch('/houses/'+h.id,{cache:'no-store'})).json();
+    const oops=()=>toast("Couldn't reach that house — are you connected to the arcade?",3000);
     for(const h of list)row('🏠',h.name+"'s house",'Day '+h.day,async()=>{
-      try{const house=await (await fetch('/houses/'+h.id,{cache:'no-store'})).json();travel({...house,id:h.id,name:h.name})}
-      catch(e){toast("Couldn't reach that house — are you connected to the arcade?",3000)}
-    });
+      try{
+        const house=await getHouse(h);travel({...house,id:h.id,name:h.name});
+        // tell them you came by: their game shows you dropping in
+        fetch('/houses/'+h.id+'/visit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:S.name,look:S.look})}).catch(()=>{});
+      }catch(e){oops()}
+    },async()=>{try{const house=await getHouse(h);invite({id:'fam-'+h.id,name:h.name,look:house.look})}catch(e){oops()}});
   }catch(e){note.textContent='Family houses show up when you’re connected to the arcade.'}
 };
 // Go to a neighbor's house (n), or home (null). The screen fades while the houses swap.
 function travel(n){
-  nbEl.style.display='none';
+  nbEl.style.display='none';guests.length=0;
   fade={t:0,dur:1.6,mid(){
     if(n){
       const home=visiting?visiting.home:S, pos=visiting?visiting.pos:{px:player.x,pf:player.f};
@@ -1333,12 +1350,54 @@ function travel(n){
   }};
 }
 function newRoomFallback(){return {w:WALLC[0],p:0,fl:0}}
+// Guests at your house: invited, dropping by, or family who visited your house on their phone.
+const guests=[];
+const people=()=>visiting?[visiting.npc]:guests;
+const npcY=n=>n.x>HW-WALL?CAR_Y:stand(0);
+let homeTime=0;
+function invite(g,msg){
+  if(visiting)return toast('Go home first to have guests over');
+  if(drive||work||fade||rocketing())return;
+  if(guests.length>=3)return toast('Your house is full of guests!');
+  if(guests.some(x=>x.id===g.id))return toast(g.name+' is already here!');
+  nbEl.style.display='none';
+  tone(784,.25,'sine',.12);tone(622,.45,'sine',.12,.25);
+  const lines=[...(g.guest||[]),`Your house is so cool, ${S.name||'friend'}!`,'I love what you did with this room!','Can we play in your backyard?'];
+  guests.push({id:g.id,name:g.name,look:{...randomLook(),...g.look},x:OUT_X+80,dir:-1,walk:0,vx:0,goto:[HW-150,HW/2+20,ROOM_W-40][guests.length],
+    hi:lines,greeted:true,say:{txt:'Knock knock! 🔔',t:2.5},life:150});
+  let note=msg||'🔔 Ding dong! '+g.name+' is coming over!';
+  if(g.guest&&(S.gifts||{})[g.id]!==S.day){   // a made-up neighbor brings a gift on their first visit each day
+    S.gifts={...S.gifts,[g.id]:S.day};S.coins+=5;note+='  They brought you 🪙5!';renderGoals();save();
+  }
+  toast(note,3500);
+  setTimeout(()=>taskEvent('host'),3800);
+}
+// Family who visited your house on their own phone come by on yours.
+async function checkVisits(){
+  if(!MY_ID||visiting||mode!=='play'||drive||work||fade)return;
+  try{
+    const v=await (await fetch('/houses/'+MY_ID+'/visits',{cache:'no-store'})).json();
+    const fresh=v.filter(x=>x.time>(S.visitsSeen||0));
+    if(!fresh.length)return;
+    S.visitsSeen=Math.max(...v.map(x=>x.time));save();
+    const byName=new Map(fresh.map(x=>[x.name,x]));
+    for(const x of [...byName.values()].slice(-3))invite({id:'fam-'+x.name,name:x.name,look:x.look},'🔔 '+x.name+' came to visit your house!');
+  }catch(e){}
+}
+setInterval(checkVisits,20000);setTimeout(checkVisits,4000);
 function talkTo(n){
   n.say={txt:n.hi[Math.random()*n.hi.length|0],t:3};n.vx=0;n.dir=player.x<n.x?-1:1;
   tone(660,.08,'triangle',.07);tone(880,.1,'triangle',.07,.08);
 }
 function updateNpc(n,dt){
   if(n.say&&(n.say.t-=dt)<=0)n.say=null;
+  if(n.life!=null&&!n.leaving&&(n.life-=dt)<=0){n.leaving=true;n.goto=OUT_X+80;n.say={txt:'Bye! Thanks for having me! 👋',t:3}}
+  if(n.goto!=null){   // walking in the front door, or out to leave
+    const dx=n.goto-n.x;
+    if(Math.abs(dx)<3){n.goto=null;n.walk=0;if(n.leaving)n.gone=true}
+    else{n.x+=Math.sign(dx)*Math.min(Math.abs(dx),90*dt);n.dir=Math.sign(dx);n.walk+=dt*12}
+    return;
+  }
   const near=player.f===0&&Math.abs(player.x-n.x)<110;
   if(near&&!n.greeted&&player.x<HW){n.greeted=true;n.say={txt:`Hi ${S.name||'there'}! Come on in!`,t:3}}
   if(near||n.say){n.vx=0;n.dir=player.x<n.x?-1:1}
@@ -1406,7 +1465,12 @@ function update(dt,T){
   }
   if(player.act&&player.act.kind==='swim'&&Math.random()<dt*2){const b=box(player.act.it);emit('💦',player.x,b.y,1,16)}
   if(player.act&&player.act.kind==='bath'&&Math.random()<dt*3){const b=box(player.act.it);emit('🫧',b.x+b.w/2,b.y+10,1,16)}
-  if(visiting&&visiting.npc)updateNpc(visiting.npc,dt);
+  for(const n of people())updateNpc(n,dt);
+  for(let i=guests.length-1;i>=0;i--)if(guests[i].gone)guests.splice(i,1);
+  if(mode==='play'&&!visiting&&!drive&&!work&&!fade&&!guests.length){   // once a day a neighbor may drop by
+    homeTime+=dt;
+    if(homeTime>75&&S.dropIn!==S.day){S.dropIn=S.day;const n=MADE_UP[Math.random()*MADE_UP.length|0];invite(n,'🔔 Surprise! '+n.name+' dropped by!')}
+  }
   // pets wander while you play
   for(const it of S.items){
     const d=ITEMS[it.t];
@@ -1676,7 +1740,7 @@ function draw(T){
   for(const it of vis)if(ITEMS[it.t].rug)drawItem(it,T);
   for(const it of vis)if(ITEMS[it.t].wall)drawItem(it,T);
   for(const it of vis)if(!ITEMS[it.t].wall&&!ITEMS[it.t].rug&&!(inPlayer(it)&&/bath|swim/.test(player.act.kind)))drawItem(it,T);
-  if(visiting&&visiting.npc)drawPlayer(visiting.npc.look,visiting.npc.x,stand(0),{dir:visiting.npc.dir,walk:visiting.npc.walk,T});
+  for(const n of people())drawPlayer(n.look,n.x,npcY(n),{dir:n.dir,walk:n.walk,T});
   drawPlayerAt(T);
   nightShade(T);
   drawCar(carX(),CAR_Y,T,!!drive);
@@ -1705,8 +1769,8 @@ function draw(T){
     if(player.say)drawBubble(player.say.txt,bx,by);
   }else if(player.say)drawBubble(player.say.txt,sx,sy);
   else if(mode==='play'&&S.name)nameTag(S.name,sx,sy);
-  if(visiting&&visiting.npc&&mode==='play'){
-    const n=visiting.npc,[nx,ny]=toScreen(n.x,stand(0)-100);
+  if(mode==='play')for(const n of people()){
+    const [nx,ny]=toScreen(n.x,npcY(n)-100);
     if(n.say)drawBubble(n.say.txt,nx,ny);else nameTag(n.name,nx,ny);
   }
   // selected-item toolbar

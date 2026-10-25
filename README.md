@@ -22,7 +22,7 @@ server uses only the Python standard library.
 | **Dungeon Runner** | Grab the key and escape all 10 rooms before time runs out — dodge skeletons, bats and spike traps, then defeat the Bone King in the final room | Arrow keys / WASD to move, Space to dash |
 | **TD** | Tower defense — build and upgrade arrow, cannon, frost, storm, ballista, venom and gold mine towers to stop 20 waves of monsters. After wave 9 the land freezes and the monsters take a new path. **2-player co-op** | Pick a tower, then tap/click grass to build; tap a tower to upgrade or sell. Keys 1–7, Space for next wave, U/S |
 | **Fish Off** | 2 players, 2 phones — catch the most fish in 90 seconds. Keep the line tension in the green or it snaps | Drag in the water (or arrow keys / WASD) to move the hook; hold (or Space) to reel |
-| **Dream House** | Make your player, then build and decorate a dollhouse: furniture, pets, wall paint and floors on up to 3 floors, plus a backyard out the back door with a swing set, slide, pool, BBQ, campfire and more. Then live in it with a daily to-do list — breakfast, drive to work for a tapping game (chef, doctor, firefighter, vet, builder or astronaut), then evening chores and bed. Work earns coins for special items (like a treehouse, and a rocket ship that flies you to the moon) and new cars. Visit made-up neighbors, or the houses your family built on their own phones (🏘️ Neighbors). Each phone keeps its own house | **Build:** pick something (Backyard tab for outdoor things), tap the house to place it, drag to move, tap it for color/flip/remove; + / − to zoom. **Play:** tap to walk and use things, or arrow keys / WASD, Up/Down on the stairs, Space to use |
+| **Dream House** | Make your player, then build and decorate a dollhouse: furniture, pets, wall paint and floors on up to 3 floors, plus a backyard out the back door with a swing set, slide, pool, BBQ, campfire and more. Then live in it with a daily to-do list — breakfast, drive to work for a tapping game (chef, doctor, firefighter, vet, builder or astronaut), then evening chores and bed. Work earns coins for special items (like a treehouse, and a rocket ship that flies you to the moon) and new cars. Visit made-up neighbors or the houses your family built on their own phones, or invite them over (🏘️ Neighbors) — family who visit your house show up at yours too. Each phone keeps its own house | **Build:** pick something (Backyard tab for outdoor things), tap the house to place it, drag to move, tap it for color/flip/remove; + / − to zoom. **Play:** tap to walk and use things, or arrow keys / WASD, Up/Down on the stairs, Space to use |
 
 Every game also has on-screen touch controls for phones and tablets, and
 posts to the shared high-score board when a game ends (except Dream House,
@@ -117,6 +117,8 @@ houses are kept in `game-server/houses.json` (not in git):
 - `GET /houses/<id>` — one house (rooms, furniture, and its owner's look)
 - `POST /houses/<id>` with `{"name", "day", "house": {...}}` — shares or updates a
   house. The id is a random one each device makes for itself; houses are capped at 200 KB.
+- `POST /houses/<id>/visit` with `{"name", "look"}` — records that someone visited that house
+- `GET /houses/<id>/visits` — the last 20 visits; the owner's game has each visitor drop by
 
 ## Two-player co-op
 
