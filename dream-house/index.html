@@ -354,12 +354,15 @@ const ITEMS={
     star(x+w/2,y-h/2+6,8,'#fff');
   }},
   dog:{n:'Dog',w:56,h:42,c:'#c68642',act:'pet',pet:true,both:true,draw(x,y,w,h,c,it,T){
+    if(it&&(it.launch||it.land)){const t=(it.launch||it.land).t;drawPupRocket(x+w/2,y+pupDy(it),T,c,!!it.helmet,it.launch?t>.9:t<2.3);return}
+    if(it&&it.spaceUntil){RR(x+2,y-22,w-4,20,8,'rgba(40,30,70,.75)');X.font='bold 10px system-ui';X.textAlign='center';X.fillStyle='#fff';X.fillText('🚀 in space',x+w/2,y-8);return}
     const mv=it&&it.vx?Math.sin(T*14)*4:0, d=shade(c,-35);
     R(x+10+mv,y-14,5,14,d);R(x+18-mv,y-14,5,14,c);R(x+32+mv,y-14,5,14,d);R(x+40-mv,y-14,5,14,c);
     X.save();X.translate(x+8,y-24);X.rotate(-0.8+Math.sin(T*(it&&it.happy?18:5))*0.35);R(-2,-14,4,14,c);X.restore();
     E(x+26,y-22,19,10,c);
     E(x+44,y-32,11,10,c);E(x+53,y-28,6,5,shade(c,25));E(x+57,y-30,2.5,2.5,'#222');
     E(x+46,y-35,2,2,'#222');E(x+39,y-32,4,9,d);
+    if(it&&it.helmet){E(x+47,y-31,17,16,'rgba(200,240,255,.3)');X.strokeStyle='#fff';X.lineWidth=2;X.beginPath();X.ellipse(x+47,y-31,17,16,0,0,Math.PI*2);X.stroke();R(x+32,y-17,30,4,'#bdc3c7')}
   }},
   cat:{n:'Cat',w:44,h:34,c:'#7f8c8d',act:'pet',pet:true,both:true,draw(x,y,w,h,c,it,T){
     const mv=it&&it.vx?Math.sin(T*14)*3:0, d=shade(c,-30);
@@ -749,9 +752,9 @@ let visiting=null;   // {id,name,home,pos,npc} while you're at someone else's ho
 let inCity=false, townsfolk=[], ride=null, movie=null;   // a trip to the city
 let inMine=false, mine=null;                              // a trip to the mine
 const away=()=>inCity||inMine;
-const PERSONAL=['look','name','tasks','coins','day','owned','night','car','hearts','heartDay','spouse','kids'];   // yours, wherever you are
+const PERSONAL=['look','name','tasks','coins','day','owned','night','car','hearts','heartDay','spouse','kids','spacePups'];   // yours, wherever you are
 const myHouse=()=>visiting?{...visiting.home,...Object.fromEntries(PERSONAL.map(k=>[k,S[k]]))}:S;
-const clean=items=>items.map(({id,vx,happy,...k})=>k);
+const clean=items=>items.map(({id,vx,happy,launch,land,...k})=>k);
 function saveNow(){
   clearTimeout(saveTimer);
   const home=myHouse(), pos=visiting?visiting.pos:away()?{px:CAR_X-16,pf:0}:{px:player.x,pf:player.f};
@@ -1104,6 +1107,44 @@ function playTap(wx,wy){
 // ── Using furniture ──────────────────────────────────────────────────────────
 const FOODS=['🍎','🍕','🍦','🍌','🍪','🥕','🧃','🍩'];
 const rocketing=()=>player.act&&player.act.kind==='rocket';
+const isHome=()=>!away();
+function petIt(it){
+  const b=box(it),cx=b.x+b.w/2;it.happy=2.5;emit('❤️',cx,b.y,3);
+  if(it.t==='dog'){say(it.helmet?'Good space dog! 🧑‍🚀':'Good dog!');tone(420,.08,'square',.05);tone(380,.1,'square',.05,.12)}else say('Purrrr…');
+}
+// ── Puppy space program: unlocked by watching Space Puppies ─────────────────
+const SOUVENIRS=[['🌙','a moon rock'],['⭐','a little star'],['🪐','a tiny planet'],['☄️','a comet crumb']];
+function launchPup(it){
+  it.launch={t:0};it.vx=0;
+  [[0,'3…'],[600,'2…'],[1200,'1…']].forEach(([ms,n])=>setTimeout(()=>{say(n,.6);tone(440,.12,'square',.05)},ms));
+  setTimeout(()=>{say('Blast off, puppy! 🚀',2);tone(110,1,'sawtooth',.05)},1500);
+}
+function pupDy(it){   // how far up the puppy rocket is
+  if(it.launch){const t=Math.max(0,it.launch.t-1.6);return -t*t*700}
+  const k=Math.min(1,it.land.t/2.4);return -1400*(1-k)*(1-k);
+}
+function updatePups(dt){
+  for(const it of myHouse().items){
+    if(it.t!=='dog')continue;
+    if(it.launch&&(it.launch.t+=dt)>=3.2){delete it.launch;it.spaceUntil=Date.now()+30000;save()}
+    if(it.spaceUntil&&!it.land&&Date.now()>=it.spaceUntil&&mode==='play'&&!visiting&&isHome()&&!busy()){it.land={t:0};tone(140,1.2,'sawtooth',.04)}
+    if(it.land&&(it.land.t+=dt)>=2.6){
+      delete it.land;delete it.spaceUntil;it.helmet=true;it.happy=3;
+      const [e,what]=SOUVENIRS[Math.random()*SOUVENIRS.length|0], b=box(it);
+      S.coins+=10;emit(e,b.x+b.w/2,b.y-10,1,28);emit('⭐',b.x+b.w/2,b.y,3);renderGoals();save();
+      toast(`🐶 Your puppy is back from space with ${what} ${e}! +🪙10`,4500);
+      [523,659,784,1047].forEach((f,i)=>tone(f,.25,'triangle',.07,i*.12));
+    }
+  }
+}
+function drawPupRocket(cx,by,T,c,helmet,flame){
+  if(flame){const f=1+Math.sin(T*30)*.15;E(cx,by+10*f,8,16*f,'#ff7a1a');E(cx,by+6*f,4.5,9*f,'#ffd23f')}
+  P([cx-14,by-6,cx-24,by,cx-14,by-28],'#e74c3c');P([cx+14,by-6,cx+24,by,cx+14,by-28],'#e74c3c');
+  RR(cx-14,by-62,28,58,[6,6,4,4],'#ecf0f1');P([cx-14,by-60,cx+14,by-60,cx,by-84],'#e74c3c');R(cx-14,by-18,28,5,'#e74c3c');
+  E(cx,by-42,10,10,'#95a5a6');E(cx,by-42,8,8,'#bfe6ff');
+  E(cx,by-41,5.5,5,c);E(cx-5,by-44,2,4,shade(c,-35));E(cx+5,by-44,2,4,shade(c,-35));E(cx-2,by-42,1,1,'#222');E(cx+2,by-42,1,1,'#222');E(cx,by-39,1.5,1,'#222');
+  if(helmet){X.strokeStyle='#fff';X.lineWidth=1;X.beginPath();X.arc(cx,by-42,7,0,Math.PI*2);X.stroke()}
+}
 function standUp(){
   if(player.act){
     if(player.act.it.t==='desk')player.act.it.on=false;
@@ -1161,7 +1202,10 @@ function use(it){
       emit('✨',player.x,player.y-90,3);say('New outfit!');pop();save();break;
     }
     case 'toys':emit(['⚽','🧸','🪀','🚂','🎲','🪁'][Math.random()*6|0],cx,top,2,24);say('Play time!');break;
-    case 'pet':it.happy=2.5;emit('❤️',cx,top,3);if(it.t==='dog'){say('Good dog!');tone(420,.08,'square',.05);tone(380,.1,'square',.05,.12)}else{say('Purrrr…')};break;
+    case 'pet':
+      if(it.launch||it.land||it.spaceUntil)return say(it.land?'Here comes the puppy! 🚀':'My puppy is in space! 🚀 Back soon');
+      if(it.t==='dog'&&S.spacePups&&!visiting&&isHome())return choose('🐶 What should we do?',[['❤️ Pet the puppy',()=>{petIt(it);taskEvent('pet')}],['🚀 Send to space!',()=>launchPup(it)]]);
+      petIt(it);break;
     case 'fish':emit('🫧',cx,top,3);say('Hello fishies 🐟');break;
     case 'sky':S.night=!S.night;say(S.night?'Night time 🌙 — turn on some lights!':'Good morning ☀️');save();break;
     case 'mirror':emit('✨',player.x,player.y-90,2);say('Looking good, '+nm+'!');break;
@@ -1710,7 +1754,11 @@ function cityAction(id){
 function updateCity(dt){
   wheelA+=dt*(ride?.6:.25);
   if(ride&&(ride.turned+=dt*.6)>=Math.PI*2){ride=null;say('What a view! 🎡',2.5);taskEvent('relax')}
-  if(movie&&(movie.t+=dt)>=6){movie=null;say('What a great movie! 🍿',2.5);goalsEl.style.display='block';showVisitUI()}
+  if(movie&&(movie.t+=dt)>=6){
+    movie=null;say('What a great movie! 🍿',2.5);goalsEl.style.display='block';showVisitUI();
+    if(!S.spacePups){S.spacePups=true;save();setTimeout(()=>toast(myHouse().items.some(i=>i.t==='dog')?'🚀 Space Puppies inspired you! Now you can send your puppies to space — tap a dog at home'
+      :'🚀 Space Puppies inspired you! Adopt a puppy at the Pet Shop, then tap it at home to send it to space',5500),2600)}
+  }
 }
 function drawShop(sh,T,lit){
   const {x,w,h,c}=sh, cx=x+w/2;
@@ -1966,6 +2014,7 @@ const SPEED=170;
 function update(dt,T){
   updateTrip(dt);updateWedding(dt);updateCity(dt);updateMine(dt);
   if(growPlots(dt*1000)){save();renderFarm()}
+  updatePups(dt);
   const st=away()?0:player.f!==0?stand(player.f):player.x>HW-WALL?CAR_Y:player.x<WALL?YARD_Y:stand(0);   // a step down outside
   if(!player.climb)player.y=st;
   player.moving=false;
@@ -2028,6 +2077,7 @@ function update(dt,T){
     const d=ITEMS[it.t];
     if(!d.pet)continue;
     if(it.happy>0){it.happy-=dt;it.vx=0;continue}
+    if(it.launch||it.land||it.spaceUntil){it.vx=0;continue}
     if(mode!=='play'||(player.act&&player.act.it===it)){it.vx=0;continue}
     if(!it.vx&&Math.random()<dt*.3)it.vx=(Math.random()<.5?-1:1)*(it.t==='dog'?70:45);
     else if(it.vx&&Math.random()<dt*.4)it.vx=0;
