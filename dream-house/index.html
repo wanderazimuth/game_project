@@ -38,6 +38,16 @@ button{font:inherit;cursor:pointer;border:none}
 .big.red{background:#ff7b7b;color:#400}
 #sel{position:fixed;display:none;z-index:6;gap:4px;background:rgba(40,30,70,.92);padding:5px;border-radius:12px}
 #sel button{width:42px;height:42px;border-radius:9px;background:rgba(255,255,255,.15);font-size:20px;color:#fff}
+#goals{position:fixed;left:8px;top:58px;z-index:4;background:rgba(40,30,70,.85);color:#fff;border-radius:12px;padding:8px 11px;
+  font-size:13px;width:min(290px,calc(100vw - 16px));display:none;cursor:pointer}
+#goals .hd{font-weight:800;font-size:14px;display:flex;gap:10px;align-items:center}
+#goals ul{list-style:none;margin-top:6px}
+#goals li{padding:2px 0}
+#goals li.done{opacity:.55;text-decoration:line-through}
+#goals li.later{opacity:.5}
+#goals .hint{display:block;margin-left:22px;font-size:11px;color:#ffcf4a}
+.cat .price{font-size:11px;color:#b07a00}
+.cat.locked canvas{opacity:.4}
 #toast{position:fixed;left:50%;top:62px;transform:translateX(-50%);background:rgba(40,30,70,.9);color:#fff;
   padding:9px 16px;border-radius:12px;font-weight:700;font-size:14px;z-index:7;pointer-events:none;opacity:0;transition:opacity .3s;
   text-align:center;max-width:90vw}
@@ -83,6 +93,7 @@ button{font:inherit;cursor:pointer;border:none}
 </div>
 <div id="zoom"><button id="zIn" title="Zoom in">+</button><button id="zOut" title="Zoom out">−</button></div>
 <div id="toast"></div>
+<div id="goals"></div>
 <div id="me"><div id="meIn">
   <canvas id="preview"></canvas>
   <div id="opts">
@@ -357,8 +368,31 @@ const ITEMS={
     E(cx,y-h+18,6,5,c);
     for(const bx of [x+6,cx,x+w-6]){R(bx-2,bx===cx?y-12:y-22,4,8,'#fff');E(bx,bx===cx?y-15:y-25,3,4,it&&it.on?'#ffe066':'#bbb')}
   }},
+  // bought with coins earned at work
+  arcade:{n:'Arcade',w:52,h:104,c:'#8e44ad',price:60,act:'arcade',draw(x,y,w,h,c,it,T){
+    P([x,y,x+w,y,x+w,y-h+8,x+w-6,y-h,x+6,y-h,x,y-h+8],c);
+    R(x+4,y-h+4,w-8,14,'#222');X.fillStyle='#ffcf4a';X.font='bold 9px sans-serif';X.textAlign='center';X.fillText('ARCADE',x+w/2,y-h+14);
+    R(x+6,y-h+22,w-12,34,'#111');
+    for(let i=0;i<4;i++)R(x+10+((T*30+i*13)%(w-24)),y-h+28+i*7,4,4,['#ff4fa3','#4fd1ff','#ffe066','#7cfc00'][i]);
+    R(x+2,y-44,w-4,12,shade(c,-30));R(x+15,y-50,2,8,'#333');E(x+16,y-50,3,3,'#e74c3c');E(x+30,y-38,3,3,'#f1c40f');E(x+39,y-38,3,3,'#3498db');
+  }},
+  trampoline:{n:'Trampoline',w:104,h:34,c:'#3498db',price:40,act:'bounce',draw(x,y,w,h,c){
+    for(const lx of [x+10,x+w/2-3,x+w-16])R(lx,y-24,6,24,'#555');
+    E(x+w/2,y-26,w/2,8,c);E(x+w/2,y-26,w/2-8,5,'#222');
+  }},
+  disco:{n:'Disco ball',w:44,h:56,c:'#c0c0c0',price:50,wall:true,ceil:true,act:'toggle',light:true,draw(x,y,w,h,c,it,T){
+    const cx=x+w/2, cy=y-18;
+    R(cx-1,y-h,2,h-36,'#888');
+    if(it&&it.on)for(let i=0;i<6;i++){const a=T*1.5+i*Math.PI/3;X.fillStyle=`hsla(${i*60},90%,60%,.35)`;X.beginPath();X.moveTo(cx,cy);X.arc(cx,cy,150,a,a+.18);X.fill()}
+    E(cx,cy,17,17,c);
+    for(let i=-2;i<=2;i++)for(let j=-2;j<=2;j++)if(i*i+j*j<6)R(cx+i*6-2,cy+j*6-2,5,5,(i+j+(T*4|0))%2?'#fff':shade(c,-40));
+  }},
+  goldtoilet:{n:'Gold toilet',w:44,h:58,c:'#f4c430',price:100,act:'sit',seat:30,draw(x,y,w,h,c,it,T){
+    ITEMS.toilet.draw(x,y,w,h,c);
+    star(x+8+Math.sin(T*2)*3,y-h-4,4,'#fff6c8');star(x+36,y-40+Math.cos(T*2)*3,3,'#fff6c8');
+  }},
 };
-const CATALOG=['bed','sofa','armchair','chair','table','desk','tv','lamp','plant','bookshelf','fridge','stove','sink',
+const CATALOG=['arcade','trampoline','disco','goldtoilet','bed','sofa','armchair','chair','table','desk','tv','lamp','plant','bookshelf','fridge','stove','sink',
   'tub','toilet','piano','fireplace','rug','dresser','toybox','dog','cat','tank','window','picture','clock','shelf','mirror','chandelier'];
 
 // ── The player ───────────────────────────────────────────────────────────────
@@ -371,10 +405,37 @@ const TOPS=['T-shirt','Hoodie','Dress','Tank top','Suit'];
 const BOTTOMS=['Pants','Shorts','Skirt'];
 const HATS=['None','Cap','Beanie','Crown','Bow','Top hat','Cowboy','Flower','Bunny ears'];
 const GLASSES=['None','Round','Sunglasses','Stars'];
+// Work is a tapping game: tap each thing before it disappears.
+const JOBS=[
+  {n:'Chef',icon:'🧑‍🍳',say:'Cook the orders!',items:['🍕','🍔','🌮','🥞','🍝','🍩'],done:'✅',bg:['#ffe0b2','#ffab91']},
+  {n:'Doctor',icon:'🩺',say:'Help the patients feel better!',items:['🤒','🤕','🤧','🥶'],done:'😊',bg:['#e0f7fa','#9fdde8']},
+  {n:'Firefighter',icon:'🚒',say:'Put out the fires!',items:['🔥'],done:'💨',bg:['#ffcdd2','#ef9a9a']},
+  {n:'Vet',icon:'🐾',say:'Give the animals a check-up!',items:['🐶','🐱','🐰','🐹','🐢','🦜'],done:'❤️',bg:['#dcedc8','#aed581']},
+  {n:'Builder',icon:'🏗️',say:'Grab the building supplies!',items:['🧱','🪵','🔩','🪚'],done:'✅',bg:['#fff9c4','#ffd54f']},
+  {n:'Astronaut',icon:'🚀',say:'Collect the stars and planets!',items:['🪐','☄️','🌙','🛰️'],done:'✨',bg:['#1a237e','#4a148c']},
+];
+// Daily objectives. eve: only after work. has: furniture that lets you do it.
+const TASKS={
+  breakfast:{txt:'Eat breakfast',acts:['eat','cook'],has:['fridge','stove'],need:'a fridge or stove'},
+  wash:{txt:'Wash up',acts:['wash','bath'],has:['sink','tub'],need:'a sink or bathtub'},
+  dress:{txt:'Get dressed at the dresser',acts:['outfit'],has:['dresser'],need:'a dresser'},
+  work:{txt:'Drive to work 🚗',acts:['work'],has:[]},
+  pet:{txt:'Pet your dog or cat',acts:['pet'],has:['dog','cat'],need:'a dog or cat',eve:true},
+  plant:{txt:'Water a plant',acts:['water'],has:['plant'],need:'a plant',eve:true},
+  relax:{txt:'Relax: TV, music, a book or games',acts:['relax'],has:['tv','piano','bookshelf','toybox','tank','desk','arcade','trampoline','fireplace'],need:'a TV, piano or bookshelf',eve:true},
+  dinner:{txt:'Cook dinner',acts:['cook'],has:['stove'],need:'a stove',eve:true},
+  bath:{txt:'Take a bath',acts:['bath'],has:['tub'],need:'a bathtub',eve:true},
+  lights:{txt:'Turn on a light',acts:['light'],has:['lamp','chandelier','disco','fireplace'],need:'a lamp or ceiling light',eve:true},
+  sleep:{txt:'Go to bed',acts:['sleep'],has:['bed'],need:'a bed',eve:true},
+};
+const CARS=[{n:'Car',price:0},{n:'Truck',price:60},{n:'Sports car',price:90}];
+const CARC=['#e74c3c','#3498db','#f1c40f','#27ae60','#9b59b6','#e84393','#ecf0f1','#2d3436','#e67e22'];
+const CAR_X=HW+70, CAR_W=136, CAR_Y=-6, OUT_X=HW+250;   // driveway; OUT_X is how far out you can walk
 const LOOK_OPTS=[
   ['Skin','skin',SKINS],['Hair','hair',HAIRS],['Hair color','hairC',HAIRC],['Eyes','eyeC',EYEC],
   ['Top','top',TOPS],['Top color','topC',CLOTHC],['Bottom','bottom',BOTTOMS],['Bottom color','bottomC',CLOTHC],
-  ['Shoes','shoeC',CLOTHC],['Hat','hat',HATS],['Hat color','hatC',CLOTHC],['Glasses','glasses',GLASSES]];
+  ['Shoes','shoeC',CLOTHC],['Hat','hat',HATS],['Hat color','hatC',CLOTHC],['Glasses','glasses',GLASSES],
+  ['Job','job',JOBS.map(j=>j.icon+' '+j.n)]];
 
 // o: {dir, walk (leg phase), pose:'stand'|'sit'|'sleep', T}
 function drawPlayer(L_,x,y,o){
@@ -495,6 +556,8 @@ function save(){
 const loaded=load();
 let S=loaded||newHome();
 S.items.forEach(fill);
+// older saves are from before the daily routine
+S.look.job=S.look.job||0;S.coins=S.coins||0;S.day=S.day||1;S.owned=S.owned||[];S.car=S.car||{m:0,c:CARC[0]};
 
 const player={f:S.pf||0,x:S.px||500,y:0,dir:1,walk:0,moving:false,path:[],act:null,say:null,climb:null};
 if(player.f>=S.floors)player.f=0;
@@ -534,17 +597,20 @@ function setMode(m){
   bar.style.display=m==='build'?'block':'none';
   zoomEl.style.display=m==='build'?'flex':'none';
   meEl.style.display=m==='me'?'block':'none';
+  goalsEl.style.display=m==='play'?'block':'none';
+  toastEl.style.top=m==='build'?'62px':'auto';toastEl.style.bottom=m==='build'?'auto':'24px';
   if(m!=='build'){selected=null;tool=null;drag=null}
   if(m==='me')openMe();
   if(m==='play'){
-    player.path=[];player.act=null;
+    player.path=[];player.act=null;renderGoals();
     toast(matchMedia('(pointer:coarse)').matches?'Tap to walk · tap furniture to use it':'Arrows/WASD to walk · Up/Down on the stairs · Space to use things · or click');
   }
   if(m==='build')buildTray();
 }
-$('mBuild').onclick=()=>setMode('build');
-$('mMe').onclick=()=>setMode('me');
-$('mPlay').onclick=()=>setMode('play');
+const go=m=>()=>{if(drive||work)return toast('Finish your work day first!');setMode(m)};
+$('mBuild').onclick=go('build');
+$('mMe').onclick=go('me');
+$('mPlay').onclick=go('play');
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;tool=null;buildTray()});
 
 function thumb(type){
@@ -566,8 +632,12 @@ function buildTray(){
   const btn=(cls,html,fn,on)=>{const b=document.createElement('button');b.className=cls+(on?' on':'');b.innerHTML=html;b.onclick=fn;return add(b)};
   if(tab==='furn'){
     for(const t of CATALOG){
-      const b=btn('cat','',()=>{tool={kind:'place',t};selected=null;buildTray();toast('Tap your house to put the '+ITEMS[t].n.toLowerCase()+' there')},tool&&tool.t===t);
-      b.appendChild(thumbs[t]=thumbs[t]||thumb(t));b.appendChild(document.createTextNode(ITEMS[t].n));
+      const d=ITEMS[t], locked=d.price&&!S.owned.includes(t);
+      const pick=()=>{tool={kind:'place',t};selected=null;buildTray();toast('Tap your house to put the '+d.n.toLowerCase()+' there')};
+      const b=btn('cat'+(locked?' locked':''),'',locked?()=>buy(t,d.price,d.n,pick):pick,tool&&tool.t===t);
+      b.appendChild(thumbs[t]=thumbs[t]||thumb(t));
+      if(locked)b.insertAdjacentHTML('beforeend',`<span class="price">🔒 🪙${d.price}</span>`);
+      else b.appendChild(document.createTextNode(d.n));
     }
   }else if(tab==='walls'){
     add(Object.assign(document.createElement('span'),{className:'lbl',textContent:'Paint'}));
@@ -584,6 +654,13 @@ function buildTray(){
     for(const c of ROOFC){const b=btn('sw','',()=>{S.roof=c;save();buildTray()},S.roof===c);b.style.background=c}
     add(Object.assign(document.createElement('span'),{className:'lbl',textContent:'Outside'}));
     for(const c of SIDEC){const b=btn('sw','',()=>{S.side=c;save();buildTray()},S.side===c);b.style.background=c}
+    add(Object.assign(document.createElement('span'),{className:'lbl',textContent:'Car'}));
+    CARS.forEach((car,i)=>{
+      const own=!car.price||S.owned.includes('car'+i), set=()=>{S.car.m=i;save();buildTray()};
+      btn('pat',car.n+(own?'':' 🔒🪙'+car.price),own?set:()=>buy('car'+i,car.price,car.n,set),S.car.m===i);
+    });
+    const cb=btn('sw','',()=>{S.car.c=CARC[(CARC.indexOf(S.car.c)+1)%CARC.length];save();buildTray()});
+    cb.style.background=S.car.c;cb.title='Car color';
     btn('big','+ Floor',()=>{if(S.floors<MAX_FLOORS){S.floors++;save();toast('New floor added!')}else toast('3 floors is the most')});
     btn('big','− Floor',()=>{
       if(S.floors<=1)return toast('You need at least one floor');
@@ -620,7 +697,7 @@ function buildRows(){
   }
 }
 $('name').oninput=e=>{S.name=e.target.value.trim();save()};
-$('meRand').onclick=()=>{S.look=randomLook();save();buildRows()};
+$('meRand').onclick=()=>{S.look={...randomLook(),job:S.look.job};save();buildRows()};
 $('meDone').onclick=()=>{setMode(S.items.length>6?'play':'build');if(mode==='build')toast('Now build your house! Pick something below, then tap a room',3500)};
 function drawPreview(T){
   const dp=devicePixelRatio||1,w=prevC.clientWidth,h=prevC.clientHeight;
@@ -640,19 +717,19 @@ function camTarget(){
   const topY=-S.floors*FLOOR_H-160, botY=50;
   const viewTop=50, viewBot=H-(mode==='build'?bar.offsetHeight:0);
   const vh=viewBot-viewTop;
-  const viewW=W<600?HW+60:HW+300;   // wide screens also show the trees and the sign
+  const viewW=W<600?HW+60:HW+460;   // wide screens also show the yard and the car
   const fitS=Math.min((W-16)/viewW,vh/(botY-topY));
   if(mode==='play'){
     const s=Math.max(fitS,Math.min(vh/(FLOOR_H*2.1),W/(ROOM_W*2)));
-    let x=player.x, y=player.y-INT_H/2+10;
+    let x=drive?carX()+CAR_W/2:player.x, y=(drive?CAR_Y:player.y)-INT_H/2+10;
     const halfW=W/2/s;
-    if(HW+80<=halfW*2)x=HW/2;else x=Math.max(-40+halfW,Math.min(HW+40-halfW,x));
+    if(!drive)x=HW+380<=halfW*2?HW/2+150:Math.max(-40+halfW,Math.min(OUT_X+90-halfW,x));
     return {x,y,s,vy:viewTop+vh/2};
   }
-  const s=fitS*zoom, mx=Math.max(0,(HW+300)/2-W/2/s), my=Math.max(0,(botY-topY)/2-vh/2/s);
+  const s=fitS*zoom, cx=W<600?HW/2:HW/2+100, mx=Math.max(0,(HW+460)/2-W/2/s), my=Math.max(0,(botY-topY)/2-vh/2/s);
   pan.x=Math.max(-mx,Math.min(mx,pan.x));pan.y=Math.max(-my,Math.min(my,pan.y));
   zoomEl.style.bottom=(H-viewBot+10)+'px';
-  return {x:HW/2+20+pan.x,y:(topY+botY)/2+pan.y,s,vy:viewTop+vh/2};
+  return {x:cx+pan.x,y:(topY+botY)/2+pan.y,s,vy:viewTop+vh/2};
 }
 const toScreen=(wx,wy)=>[(wx-cam.x)*cam.s+W/2,(wy-cam.y)*cam.s+cam.vy];
 const toWorld=(sx,sy)=>[(sx-W/2)/cam.s+cam.x,(sy-cam.vy)/cam.s+cam.y];
@@ -710,6 +787,7 @@ cv.addEventListener('pointerdown',e=>{
     return;
   }
   if(mode==='play')playTap(wx,wy);
+  if(mode==='work'&&work)workTap(e.clientX,e.clientY);
 });
 cv.addEventListener('pointermove',e=>{
   if(!drag)return;
@@ -734,7 +812,7 @@ addEventListener('keydown',e=>{
   if(mode==='build'&&e.code==='Escape'){selected=null;tool=null;buildTray()}
   if(mode!=='play')return;
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();
-  if(player.climb)return;
+  if(player.climb||drive||fade)return;
   if(e.code==='ArrowUp'||e.code==='KeyW'){
     if(player.f<S.floors-1&&player.x<MINX+40){standUp();player.path=[{walk:WALL+16},{climb:1}]}
   }
@@ -743,6 +821,7 @@ addEventListener('keydown',e=>{
   }
   if(e.code==='Space'||e.code==='KeyE'||e.code==='Enter'){
     if(player.act){standUp();return}
+    if(player.f===0&&Math.abs(player.x-(CAR_X+CAR_W/2))<CAR_W/2+20)return startWork();
     let best=null,bd=60;
     for(const it of S.items){
       if(it.f!==player.f)continue;
@@ -763,16 +842,18 @@ function routeTo(f,x,item){
   if(item)path.push({use:item});
   standUp();player.path=path;
 }
+const maxX=f=>f===0?OUT_X:HW-WALL-16;   // only the ground floor has a front door
 function playTap(wx,wy){
-  if(player.climb)return;
+  if(player.climb||drive||fade)return;
   if(wy>40||wy<-S.floors*FLOOR_H)return;
+  if(wx>=CAR_X-6&&wx<=CAR_X+CAR_W+6&&wy>=CAR_Y-80&&wy<=10)return routeTo(0,CAR_X+60,'car');
   const it=hit(wx,wy,6);
   if(it&&ITEMS[it.t].act){
     const d=ITEMS[it.t];
     routeTo(it.f,it.x+d.w/2,it);return;
   }
   const f=floorAt(wy);
-  routeTo(f,Math.max(WALL+16,Math.min(HW-WALL-16,wx)));
+  routeTo(f,Math.max(WALL+16,Math.min(maxX(f),wx)));
 }
 
 // ── Using furniture ──────────────────────────────────────────────────────────
@@ -788,8 +869,15 @@ function use(it){
   const nm=S.name||'you';
   player.dir=1;
   switch(d.act){
-    case 'sleep':player.act={kind:'sleep',it};say('Good night!');break;
-    case 'sit':player.act={kind:'sit',it};if(it.t==='toilet')emit('🧻',cx,top);break;
+    case 'sleep':{
+      player.act={kind:'sleep',it};
+      const rest=S.tasks.filter(t=>!t.done&&t.id!=='sleep');
+      if(!workDone())say("It's daytime! Just a little nap 😴");
+      else if(rest.length)say('Not sleepy yet! Still to do: '+TASKS[rest[0].id].txt,3);
+      else{say('Good night!');endDay()}
+      break;
+    }
+    case 'sit':player.act={kind:'sit',it};if(/toilet/.test(it.t))emit('🧻',cx,top);break;
     case 'bath':player.act={kind:'bath',it};say('Splish splash!');break;
     case 'type':player.act={kind:'sit',it,noSeat:true};it.on=true;say(['Making a game…','Typing… tap tap','Watching cat videos'][Math.random()*3|0]);break;
     case 'toggle':
@@ -804,7 +892,7 @@ function use(it){
       say(it.g>=4?'It bloomed! 🌸':'Grow, little plant!');save();break;
     case 'read':emit('📖',cx,top);say('Reading a good book…');break;
     case 'eat':{const f=FOODS[Math.random()*FOODS.length|0];emit(f,player.x,player.y-110,1,26);say('Yum! '+f);tone(500,.08,'triangle',.08);tone(700,.1,'triangle',.08,.1);break}
-    case 'cook':it.on=true;emit('♨️',cx,top,2);say('Cooking 🍳');setTimeout(()=>{it.on=false;emit('🥞',cx,top,1,26);say('Pancakes are ready!')},2200);break;
+    case 'cook':it.on=true;emit('♨️',cx,top,2);say('Cooking 🍳');{const meal=S.night?['🍝','Dinner is ready!']:['🥞','Pancakes are ready!'];setTimeout(()=>{it.on=false;emit(meal[0],cx,top,1,26);say(meal[1])},2200)}break;
     case 'wash':emit('💧',cx,top,4);emit('🫧',cx,top,2);say('Squeaky clean hands');break;
     case 'piano':{
       player.act={kind:'stand',it};
@@ -822,19 +910,151 @@ function use(it){
     case 'sky':S.night=!S.night;say(S.night?'Night time 🌙 — turn on some lights!':'Good morning ☀️');save();break;
     case 'mirror':emit('✨',player.x,player.y-90,2);say('Looking good, '+nm+'!');break;
     case 'time':{const t=new Date();say("It's "+t.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}));break}
+    case 'arcade':
+      player.act={kind:'stand',it};emit('👾',cx,top,2);
+      [523,659,784,1047].forEach((n,i)=>tone(n,.09,'square',.05,i*.09));
+      say(['High score!','Level up!','One more game…'][Math.random()*3|0]);break;
+    case 'bounce':player.act={kind:'bounce',it};say('Boing! Boing!');break;
+  }
+  const EV={bath:'bath',water:'water',read:'relax',eat:'eat',cook:'cook',wash:'wash',piano:'relax',outfit:'outfit',
+    toys:'relax',pet:'pet',fish:'relax',arcade:'relax',bounce:'relax',type:'relax'};
+  if(EV[d.act])taskEvent(EV[d.act]);
+  if(d.act==='toggle'&&it.on){
+    if(!d.light)taskEvent('relax');
+    else if(!taskEvent('light')&&it.t==='fireplace')taskEvent('relax');
+  }
+}
+
+// ── Daily routine: tasks, work, coins ────────────────────────────────────────
+const hasFor=id=>!TASKS[id].has.length||S.items.some(i=>i.f<S.floors&&TASKS[id].has.includes(i.t));
+function newTasks(){
+  // prefer tasks the house has furniture for; the rest tell you what to build
+  const pick=(ids,n)=>{const sh=ids.sort(()=>Math.random()-.5);return [...sh.filter(hasFor),...sh.filter(id=>!hasFor(id))].slice(0,n)};
+  return ['breakfast',...pick(['wash','dress'],1),'work',...pick(['pet','plant','relax','dinner','bath','lights'],2),'sleep'].map(id=>({id,done:false}));
+}
+if(!S.tasks)S.tasks=newTasks();
+const workDone=()=>S.tasks.some(t=>t.id==='work'&&t.done);
+function taskEvent(kind){
+  const t=S.tasks.find(t=>!t.done&&t.id!=='sleep'&&TASKS[t.id].acts.includes(kind)&&(!TASKS[t.id].eve||workDone()));
+  if(!t)return false;
+  t.done=true;S.coins+=2;
+  tone(784,.1,'triangle',.1);tone(1047,.15,'triangle',.1,.1);
+  toast('✔ '+TASKS[t.id].txt+'   +🪙2');
+  const left=S.tasks.filter(t=>!t.done);
+  if(!workDone()&&left.every(t=>t.id==='work'||TASKS[t.id].eve))setTimeout(()=>say('Time for work! My car is outside 🚗',3),1500);
+  else if(left.length===1&&left[0].id==='sleep')setTimeout(()=>say('What a day! Time for bed 🛏️',3),1500);
+  renderGoals();save();
+  return true;
+}
+const goalsEl=$('goals');
+let goalsOpen=innerWidth>600;
+goalsEl.onclick=()=>{goalsOpen=!goalsOpen;renderGoals()};
+function renderGoals(){
+  const wd=workDone(), n=S.tasks.filter(t=>t.done).length;
+  const next=S.tasks.find(t=>!t.done&&(!TASKS[t.id].eve||wd));
+  let h=`<div class="hd">${S.night?'🌙':'☀️'} Day ${S.day}<span>🪙 ${S.coins}</span><span style="margin-left:auto">${n}/${S.tasks.length} ${goalsOpen?'▴':'▾'}</span></div>`;
+  if(goalsOpen)h+='<ul>'+S.tasks.map(t=>{
+    const d=TASKS[t.id], later=d.eve&&!wd&&!t.done;
+    return `<li class="${t.done?'done':later?'later':''}">${t.done?'✅':later?'🌙':'⬜'} ${d.txt}`+
+      (!t.done&&!hasFor(t.id)?`<span class="hint">Build ${d.need} first</span>`:'')+'</li>';
+  }).join('')+'</ul>';
+  else if(next)h+=`<div style="margin-top:4px">➡ ${TASKS[next.id].txt}</div>`;
+  goalsEl.innerHTML=h;
+}
+let fade=null;   // fade to black and back: mid() runs while the screen is dark
+function endDay(){
+  S.tasks.find(t=>t.id==='sleep').done=true;renderGoals();
+  fade={t:0,dur:3.2,mid(){S.day++;S.night=false;S.coins+=10;S.tasks=newTasks();renderGoals();save()},
+    done(){toast('☀️ Good morning! Day '+S.day+'   +🪙10 for finishing yesterday',3500)}};
+}
+function buy(key,price,name,then){
+  if(S.coins<price)return toast(`${name} costs 🪙${price} — you have 🪙${S.coins}. Go to work to earn more!`,3200);
+  if(!confirm(`Buy the ${name.toLowerCase()} for 🪙${price}?`))return;
+  S.coins-=price;S.owned.push(key);pop();save();renderGoals();then();
+}
+
+// The car drives off the right of the screen to work, and back.
+let drive=null, work=null;
+const carX=()=>CAR_X+(drive?drive.x:0);
+function startWork(){
+  if(drive||work)return;
+  if(workDone())return say('Work is done for today — have fun at home!');
+  standUp();player.path=[];player.f=0;player.x=CAR_X+60;
+  drive={dir:1,t:0,x:0};say('Off to work!',1.5);
+  tone(110,.5,'sawtooth',.05);tone(165,.4,'sawtooth',.04,.3);
+}
+function startJob(){
+  const job=JOBS[S.look.job]||JOBS[0];
+  work={job,t:0,dur:30,next:.8,targets:[],earned:0,over:false,fx:[]};
+  setMode('work');
+}
+function goHome(){
+  work=null;setMode('play');
+  drive={dir:-1,t:0,x:1600};
+}
+function workTap(x,y){
+  if(work.over){const b=work.btn;if(b&&x>=b.x&&x<=b.x+b.w&&y>=b.y&&y<=b.y+b.h)goHome();return}
+  let best=null,bd=52;
+  for(const g of work.targets){if(g.hit)continue;const d=Math.hypot(g.x-x,g.y-y);if(d<bd){bd=d;best=g}}
+  if(!best)return;
+  best.hit=.001;const v=best.star?3:1;work.earned+=v;
+  work.fx.push({x:best.x,y:best.y-34,txt:'+'+v,life:1});
+  tone(best.star?1200:600+Math.random()*300,.08,'triangle',.09);
+}
+function updateTrip(dt){
+  if(drive){
+    drive.t+=dt;
+    if(drive.dir>0){
+      drive.x=360*drive.t*drive.t;
+      if(drive.t>=2.3){drive=null;startJob()}
+    }else{
+      const k=Math.min(1,drive.t/2.4);
+      drive.x=1600*(1-k)*(1-k);
+      if(k>=1){
+        drive=null;player.f=0;player.x=CAR_X-16;player.dir=-1;S.night=true;
+        taskEvent('work');renderGoals();
+        say('Home again! Evening time 🌙',3);
+      }
+    }
+  }
+  if(mode==='work'&&work&&!work.over){
+    work.t+=dt;work.next-=dt;
+    const lvl=Math.min(10,S.day-1);   // a little faster each day
+    if(work.next<=0){
+      work.next=Math.max(.3,.8-lvl*.045)*(.7+Math.random()*.6);
+      const star=Math.random()<.1;
+      work.targets.push({x:60+Math.random()*(W-120),y:150+Math.random()*Math.max(60,H-330),
+        e:star?'⭐':work.job.items[Math.random()*work.job.items.length|0],star,life:0,max:Math.max(1.1,2-lvl*.08),hit:0});
+    }
+    if(work.t>=work.dur){
+      work.over=true;work.targets=[];S.coins+=work.earned;save();
+      tone(523,.15,'triangle',.1);tone(659,.15,'triangle',.1,.15);tone(784,.3,'triangle',.1,.3);
+    }
+  }
+  if(work){
+    for(const g of work.targets){g.life+=dt;if(g.hit)g.hit+=dt}
+    work.targets=work.targets.filter(g=>g.hit?g.hit<.6:g.life<g.max);
+    for(const f of work.fx){f.life-=dt;f.y-=40*dt}
+    work.fx=work.fx.filter(f=>f.life>0);
+  }
+  if(fade){
+    fade.t+=dt;
+    if(!fade.midDone&&fade.t>=fade.dur/2){fade.midDone=true;fade.mid()}
+    if(fade.t>=fade.dur){const f=fade;fade=null;f.done()}
   }
 }
 
 // ── Update ───────────────────────────────────────────────────────────────────
 const SPEED=170;
 function update(dt,T){
-  const st=stand(player.f);
+  updateTrip(dt);
+  const st=player.f===0&&player.x>HW-WALL?CAR_Y:stand(player.f);   // the driveway is a step down
   if(!player.climb)player.y=st;
   player.moving=false;
-  if(mode==='play'){
+  if(mode==='play'&&!drive&&!fade){
     let kx=(keys.ArrowRight||keys.KeyD?1:0)-(keys.ArrowLeft||keys.KeyA?1:0);
     if(kx&&!player.climb){player.path=[];standUp();
-      player.x=Math.max(WALL+16,Math.min(HW-WALL-16,player.x+kx*SPEED*dt));player.dir=kx;player.moving=true}
+      player.x=Math.max(WALL+16,Math.min(maxX(player.f),player.x+kx*SPEED*dt));player.dir=kx;player.moving=true}
     if(player.climb){
       const c=player.climb;c.t+=dt/1.1;
       const k=Math.min(1,c.t);
@@ -850,7 +1070,7 @@ function update(dt,T){
         player.path.shift();
         const up=s.climb>0, f1=player.f+s.climb;
         player.climb={t:0,x0:player.x,y0:stand(player.f),x1:up?MINX+8:WALL+16,y1:stand(f1),f1};
-      }else if(s.use){player.path.shift();if(S.items.includes(s.use))use(s.use)}
+      }else if(s.use){player.path.shift();if(s.use==='car')startWork();else if(S.items.includes(s.use))use(s.use)}
       if(!player.path.length)save();
     }
   }
@@ -930,12 +1150,15 @@ function drawHouse(T){
   R(-3000,0,HW+6000,900,'#7ec850');R(-3000,0,HW+6000,6,'#5fae3a');
   for(let i=-30;i<HW+40;i+=26)P([i,2,i+5,-8,i+10,2],'#5fae3a');
   E(-70,-60,40,46,'#3fa048');R(-76,-20,12,20,'#7b4a2b');E(-82,-80,26,26,'#4cb556');
-  E(HW+70,-40,30,32,'#3fa048');R(HW+66,-12,9,12,'#7b4a2b');
+  E(OUT_X+60,-40,30,32,'#3fa048');R(OUT_X+56,-12,9,12,'#7b4a2b');
+  R(HW,CAR_Y,OUT_X-HW+20,8,'#a4a4a4');R(HW,CAR_Y,OUT_X-HW+20,2,'#c4c4c4');   // driveway
   if(S.name){
-    R(HW+130,-44,5,44,'#7b4a2b');RR(HW+108,-78,50,34,4,'#fff3d6');
+    const sx=OUT_X+10;
+    R(sx-3,-44,5,44,'#7b4a2b');RR(sx-25,-78,50,34,4,'#fff3d6');
     X.fillStyle='#5a3418';X.font='bold 11px system-ui';X.textAlign='center';
-    X.fillText(S.name.slice(0,12)+"'s",HW+133,-63);X.fillText('House',HW+133,-50);
+    X.fillText(S.name.slice(0,12)+"'s",sx,-63);X.fillText('House',sx,-50);
   }
+  if(S.night)R(-3000,0,HW+6000,900,'rgba(12,14,48,.5)');
   // roof + chimney
   R(HW*.72,top-150,34,90,shade(S.roof,-30));R(HW*.72-4,top-156,42,10,shade(S.roof,-45));
   if(S.items.some(i=>i.t==='fireplace'&&i.on))for(let i=0;i<3;i++){const s=(T*.5+i/3)%1;E(HW*.72+17+Math.sin(T+i)*8,top-170-s*80,8+s*14,6+s*10,`rgba(220,220,220,${.6-s*.6})`)}
@@ -971,12 +1194,53 @@ function drawHouse(T){
   // outer walls
   R(0,top,WALL,-top,S.side);R(HW-WALL,top,WALL,-top,S.side);
   R(0,top,WALL,-top,'rgba(0,0,0,.1)');R(HW-WALL,top,WALL,-top,'rgba(0,0,0,.1)');
+  // front door, open whenever you're near it
+  const near=player.f===0&&Math.abs(player.x-HW)<50;
+  RR(HW-WALL-3,-SLAB-124,WALL+6,124,[5,5,0,0],'#6d4c41');
+  if(near)R(HW-WALL,-SLAB-118,WALL,118,'rgba(255,240,200,.85)');
+  else{R(HW-WALL,-SLAB-118,WALL,118,'#a1714b');E(HW-WALL/2,-SLAB-58,2.5,2.5,'#f1c40f')}
   R(-8,top-6,HW+16,8,shade(S.side,-25));
   R(-6,-6,HW+12,8,'#8e8e8e');
 }
 function inPlayer(it){return player.act&&player.act.it===it}
+// the car's front window, where you can see the driver
+function carWin(m,x,y){
+  if(m===1)return [x+CAR_W-52,y-68,x+CAR_W-16,y-68,x+CAR_W-16,y-46,x+CAR_W-52,y-46];
+  if(m===2)return [x+74,y-56,x+102,y-56,x+116,y-42,x+62,y-44];
+  return [x+72,y-42,x+72,y-61,x+96,y-61,x+108,y-42];
+}
+function drawCar(x,y,T,driver){
+  const m=S.car.m,c=S.car.c,moving=!!drive;
+  if(S.night){X.fillStyle='rgba(255,240,170,.25)';X.beginPath();X.moveTo(x+CAR_W,y-34);X.lineTo(x+CAR_W+170,y-70);X.lineTo(x+CAR_W+170,y+4);X.fill()}
+  if(m===1){
+    RR(x,y-46,CAR_W,30,5,c);RR(x+CAR_W-60,y-76,54,34,[10,14,0,0],c);R(x+4,y-52,CAR_W-68,7,shade(c,-25));
+  }else if(m===2){
+    P([x,y-18,x+6,y-38,x+52,y-44,x+70,y-60,x+104,y-60,x+CAR_W,y-36,x+CAR_W,y-18],c);
+    R(x-2,y-50,18,5,shade(c,-35));R(x+5,y-46,4,9,shade(c,-35));R(x+12,y-30,CAR_W-24,4,'rgba(255,255,255,.75)');
+  }else{
+    P([x+22,y-40,x+40,y-66,x+100,y-66,x+118,y-40],c);
+    P([x+30,y-42,x+44,y-61,x+68,y-61,x+68,y-42],'#bfe6ff');
+    RR(x,y-44,CAR_W,28,9,c);
+  }
+  const w=carWin(m,x,y);
+  P(w,'#bfe6ff');
+  if(driver){
+    X.save();X.beginPath();X.moveTo(w[0],w[1]);for(let i=2;i<w.length;i+=2)X.lineTo(w[i],w[i+1]);X.closePath();X.clip();
+    const cx=(Math.min(w[0],w[6])+Math.max(w[2],w[4]))/2;
+    X.translate(cx-2,(w[1]+w[5])/2+4);X.scale(.8,.8);drawPlayer(S.look,0,71,{dir:1,T});
+    X.restore();
+  }
+  L(w[2]-4,w[3]+3,w[4]-10,w[5]-3,'rgba(255,255,255,.6)',2);
+  E(x+CAR_W-3,y-32,4,5,'#fff6a0');R(x,y-36,4,8,'#e74c3c');
+  for(const wx of [x+28,x+CAR_W-30]){
+    E(wx,y-12,12,12,'#222');E(wx,y-12,6,6,'#bbb');
+    X.save();X.translate(wx,y-12);X.rotate(moving?T*16:0);R(-1,-6,2,12,'#777');X.restore();
+  }
+}
 function drawPlayerAt(T){
   const a=player.act, o={dir:player.dir,walk:player.walk,T,pose:'stand'};
+  if(drive)return;   // you're in the car
+  if(a&&a.kind==='bounce'){const b=box(a.it);drawPlayer(S.look,b.x+b.w/2,b.by-26-Math.abs(Math.sin(T*4))*70,{...o,dir:1});return}
   if(a&&a.kind==='sleep'){
     const it=a.it,d=ITEMS[it.t],b=box(it);
     X.save();
@@ -991,7 +1255,7 @@ function drawPlayerAt(T){
   }
   if(a&&(a.kind==='sit'||a.kind==='bath')&&!a.noSeat){
     const d=ITEMS[a.it.t],b=box(a.it);
-    const sx=b.x+d.w/2+(a.it.t==='toilet'?(a.it.flip?-6:6):0);
+    const sx=b.x+d.w/2+(/toilet/.test(a.it.t)?(a.it.flip?-6:6):0);
     drawPlayer(S.look,sx,b.by-d.seat+16,{...o,pose:'sit',dir:1});
     if(a.kind==='bath'){drawItem(a.it,T);for(let i=0;i<6;i++)E(b.x+16+i*16,b.by-d.h+8+Math.sin(T*3+i)*2,10,7,'rgba(255,255,255,.95)')}
     return;
@@ -1017,6 +1281,7 @@ function draw(T){
   const dp=devicePixelRatio||1;
   ctx.setTransform(dp,0,0,dp,0,0);
   X=ctx;
+  if(mode==='work'&&work){drawWork(T);return}
   drawSky(T);
   X.save();
   X.translate(W/2,cam.vy);X.scale(cam.s,cam.s);X.translate(-cam.x,-cam.y);
@@ -1027,6 +1292,7 @@ function draw(T){
   for(const it of vis)if(!ITEMS[it.t].wall&&!ITEMS[it.t].rug&&!(inPlayer(it)&&player.act.kind==='bath'))drawItem(it,T);
   drawPlayerAt(T);
   nightShade(T);
+  drawCar(carX(),CAR_Y,T,!!drive);
   // selection outline
   if(mode==='build'&&selected){
     const b=box(selected);
@@ -1045,8 +1311,8 @@ function draw(T){
   X.globalAlpha=1;
   X.restore();
   // name tag + speech in screen space so they stay readable when zoomed out
-  const [sx,sy]=toScreen(player.x,player.y-(player.act&&player.act.kind==='sleep'?40:(player.act&&player.act.kind!=='stand'?80:100)));
-  if(player.act&&player.act.kind!=='stand'&&!player.act.noSeat){
+  const [sx,sy]=drive?toScreen(carX()+CAR_W/2,CAR_Y-80):toScreen(player.x,player.y-(player.act&&player.act.kind==='sleep'?40:(player.act&&player.act.kind!=='stand'?80:100)));
+  if(!drive&&player.act&&player.act.kind!=='stand'&&!player.act.noSeat){
     const b=box(player.act.it);const [bx,by]=toScreen(b.x+b.w/2,b.y-24);
     if(player.say)drawBubble(player.say.txt,bx,by);
   }else if(player.say)drawBubble(player.say.txt,sx,sy);
@@ -1062,6 +1328,49 @@ function draw(T){
     selEl.style.left=Math.max(6,Math.min(W-w-6,tx-w/2))+'px';
     selEl.style.top=Math.max(56,ty-56)+'px';
   }else selEl.style.display='none';
+  if(fade){
+    const h=fade.dur/2, a=fade.t<h?fade.t/h:1-(fade.t-h)/h;
+    R(0,0,W,H,`rgba(8,8,24,${Math.min(.95,a)})`);
+  }
+}
+function txt(t,x,y,size,c='#fff'){
+  X.font=`800 ${size}px system-ui`;X.textAlign='center';X.textBaseline='middle';
+  X.lineWidth=Math.max(3,size/6);X.strokeStyle='rgba(40,30,70,.6)';X.strokeText(t,x,y);X.fillStyle=c;X.fillText(t,x,y);
+  X.textBaseline='alphabetic';
+}
+function drawWork(T){
+  const j=work.job, g=X.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,j.bg[0]);g.addColorStop(1,j.bg[1]);X.fillStyle=g;X.fillRect(0,0,W,H);
+  X.globalAlpha=.1;X.font='38px sans-serif';X.textAlign='center';X.textBaseline='middle';
+  for(let y=110,r=0;y<H;y+=90,r++)for(let x=(r%2)*60+30;x<W;x+=120)X.fillText(j.icon,x,y);
+  X.globalAlpha=1;X.textBaseline='alphabetic';
+  X.save();X.translate(60,H-24);X.scale(1.4,1.4);E(0,0,22,5,'rgba(0,0,0,.15)');drawPlayer(S.look,0,0,{dir:1,T});X.restore();
+  txt(j.icon+' '+(S.name||'You')+' the '+j.n,W/2,72,20);
+  const left=Math.max(0,work.dur-work.t), bw=Math.min(300,W-40);
+  RR(W/2-bw/2,90,bw,14,7,'rgba(0,0,0,.2)');
+  if(left>0)RR(W/2-bw/2,90,bw*left/work.dur,14,7,left<6?'#e74c3c':'#2ecc71');
+  txt('🪙 '+work.earned,W/2,126,22,'#ffe066');
+  for(const t of work.targets){
+    const pop=Math.min(1,t.life*6), s=t.hit?1+t.hit:pop;
+    X.globalAlpha=t.hit?Math.max(0,1-t.hit/.6):1;
+    if(!t.hit){X.strokeStyle='rgba(255,255,255,.85)';X.lineWidth=4;X.beginPath();X.arc(t.x,t.y,40,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-t.life/t.max));X.stroke()}
+    X.font=`${56*s|0}px sans-serif`;X.textAlign='center';X.textBaseline='middle';
+    X.fillText(t.hit?(t.star?'✨':j.done):t.e,t.x,t.y);
+    X.globalAlpha=1;X.textBaseline='alphabetic';
+  }
+  for(const f of work.fx){X.globalAlpha=Math.max(0,f.life);txt(f.txt,f.x,f.y,22,'#ffe066')}
+  X.globalAlpha=1;
+  if(work.t<2.5&&!work.over)txt(j.say,W/2,H/2,Math.min(30,W/14));
+  if(work.over){
+    const pw=Math.min(340,W-30), ph=220, px=W/2-pw/2, py=H/2-ph/2;
+    RR(px,py,pw,ph,18,'rgba(40,30,70,.92)');
+    txt("Work's over!",W/2,py+40,26);
+    txt('You earned 🪙 '+work.earned,W/2,py+82,22,'#ffe066');
+    txt('Total: 🪙 '+S.coins,W/2,py+114,16,'#cbbff0');
+    work.btn={x:W/2-110,y:py+142,w:220,h:54};
+    RR(work.btn.x,work.btn.y,work.btn.w,work.btn.h,14,'#ffcf4a');
+    X.font='800 20px system-ui';X.textAlign='center';X.textBaseline='middle';X.fillStyle='#3a2a00';X.fillText('🚗 Drive home',W/2,py+169);X.textBaseline='alphabetic';
+  }
 }
 
 let last=performance.now();
