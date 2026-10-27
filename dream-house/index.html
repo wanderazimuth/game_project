@@ -847,6 +847,7 @@ let inMine=false, mine=null;                              // a trip to the mine
 let inTot=false, tot=null;                                // trick-or-treating on a fall night
 let inEra=null, era=null;                                 // time travel: which era, and what's in it
 let inBeach=false, beach=null;                            // a day at the beach
+let rampageArmed=false;                                   // Build mode's 👵 Rampage! button was pressed
 const away=()=>inCity||inMine||inTot||inBeach||!!inEra;
 const PERSONAL=['look','name','tasks','coins','day','owned','night','car','hearts','heartDay','spouse','kids','spacePups','seasonOff','mailDay'];   // yours, wherever you are
 const myHouse=()=>visiting?{...visiting.home,...Object.fromEntries(PERSONAL.map(k=>[k,S[k]]))}:S;
@@ -926,6 +927,7 @@ function setMode(m){
   if(m==='play'){
     player.path=[];player.act=null;renderGoals();
     toast(matchMedia('(pointer:coarse)').matches?'Tap to walk · tap furniture to use it':'Arrows/WASD to walk · Up/Down on the stairs · Space to use things · or click');
+    if(rampageArmed&&!visiting&&!away()){rampageArmed=false;summonGrandma(5)}
   }
   if(m==='build')buildTray();
 }
@@ -987,6 +989,12 @@ function buildTray(){
       christmasPresents();
       toast(`${se.e} It's ${se.n.toLowerCase()} now!`+(se.n==='Winter'?' Build a snowman ⛄':se.n==='Fall'?' Pumpkins can grow 🎃':''),3000);
     },season()===se));
+    add(Object.assign(document.createElement('span'),{className:'lbl',textContent:'Grandma'}));
+    btn('pat','👵 Rampage!',()=>{
+      if(visiting||away())return toast('Go home first!');
+      rampageArmed=!rampageArmed;buildTray();
+      toast(rampageArmed?'👵 Press ▶ Play — Grandma will start rampaging after 5 seconds!':'👵 OK, no rampage',3000);
+    },rampageArmed);
     add(Object.assign(document.createElement('span'),{className:'lbl',textContent:'Roof'}));
     for(const c of ROOFC){const b=btn('sw','',()=>{S.roof=c;save();buildTray()},S.roof===c);b.style.background=c}
     add(Object.assign(document.createElement('span'),{className:'lbl',textContent:'Outside'}));
@@ -2322,11 +2330,22 @@ function tidyUp(){   // everything stands back up
   S.grannyBack=false;save();
   setTimeout(()=>{if(!visiting){for(const it of S.items)it.tip=0;save()}},1500);
 }
+const newGrandma=()=>({id:'grandma',name:'Grandma',look:{...GRANDMA.look},family:true,hi:GRANDMA.hi,greeted:true,life:150,
+  x:MINX+40+Math.random()*(HW-WALL-MINX-80),dir:1,walk:0,vx:0});
+// The 👵 Rampage! button in Build mode: Grandma's already inside, and goes wild 5 seconds into Play.
+function summonGrandma(sec){
+  S.grannyMet=S.grannyBack=true;save();
+  let g=guests.find(x=>x.id==='grandma');
+  if(g&&g.rampage>0)return;
+  if(!g)guests.push(g=newGrandma());
+  g.goto=null;g.leaving=false;g.rampT=sec;g.life=150;
+  g.say={txt:'Ooh, is that a cookie jar? 🍪',t:3};
+  setTimeout(()=>toast("👵 Grandma's here… and she's eyeing the cookie jar 🍪",3000),50);
+}
 // You went out while Grandma was over: she trashed the place and she's still going.
 function grandmaStillHere(){
   for(const it of S.items)if(canTip(it)&&!it.tip&&Math.random()<.75)it.tip=(Math.random()<.5?-1:1)*(.4+Math.random()*.9);
-  const g={id:'grandma',name:'Grandma',look:{...GRANDMA.look},family:true,hi:GRANDMA.hi,greeted:true,life:150,
-    x:MINX+40+Math.random()*(HW-WALL-MINX-80),dir:1,walk:0,vx:0};
+  const g=newGrandma();
   guests.push(g);save();
   startRampage(g,"😱 While you were out, Grandma trashed your house — and she's STILL rampaging! Tap her to calm her down!");
 }
