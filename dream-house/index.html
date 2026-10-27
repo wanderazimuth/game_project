@@ -711,6 +711,7 @@ const TASKS={
   tot:{txt:'Go trick-or-treating 🎃',acts:['tot'],has:[],eve:true},
   time:{txt:'Travel through time ⏳',acts:['time'],has:['timemachine'],need:'a time machine in the backyard',eve:true},
   city:{txt:'Go to the city 🏙️',acts:['city'],has:[],eve:true},
+  beach:{txt:'Go swimming at the beach 🏖️',acts:['beach'],has:[],eve:true},
   mine:{txt:'Explore the mine ⛏️',acts:['mine'],has:[],eve:true},
   farm:{txt:'Tend your greenhouse 🌱',acts:['farm'],has:['greenhouse'],need:'a greenhouse in the backyard',eve:true},
   sleep:{txt:'Go to bed',acts:['sleep'],has:['bed'],need:'a bed',eve:true},
@@ -845,7 +846,8 @@ let inCity=false, townsfolk=[], ride=null, movie=null;   // a trip to the city
 let inMine=false, mine=null;                              // a trip to the mine
 let inTot=false, tot=null;                                // trick-or-treating on a fall night
 let inEra=null, era=null;                                 // time travel: which era, and what's in it
-const away=()=>inCity||inMine||inTot||!!inEra;
+let inBeach=false, beach=null;                            // a day at the beach
+const away=()=>inCity||inMine||inTot||inBeach||!!inEra;
 const PERSONAL=['look','name','tasks','coins','day','owned','night','car','hearts','heartDay','spouse','kids','spacePups','seasonOff','mailDay'];   // yours, wherever you are
 const myHouse=()=>visiting?{...visiting.home,...Object.fromEntries(PERSONAL.map(k=>[k,S[k]]))}:S;
 const clean=items=>items.map(({id,vx,happy,launch,land,trick,...k})=>k);
@@ -1063,7 +1065,7 @@ function camTarget(){
   if(mode==='play'){
     const s=Math.max(fitS,Math.min(vh/(FLOOR_H*2.1),W/(ROOM_W*2)));
     let x=drive?carX()+CAR_W/2:player.x, y=(drive?(away()?0:CAR_Y):player.y)-INT_H/2+10;
-    const L0=inEra?-80:inTot?-100:inMine?-260:inCity?-60:YARD_L-40, R0=inEra?ERA_W+60:inTot?TOT_W+60:inMine?MINE_W+60:inCity?CITY_W+60:OUT_X+90;
+    const L0=inEra?-80:inTot?-100:inMine?-260:inCity||inBeach?-60:YARD_L-40, R0=inEra?ERA_W+60:inTot?TOT_W+60:inMine?MINE_W+60:inCity?CITY_W+60:inBeach?BEACH_W+60:OUT_X+90;
     const halfW=W/2/s;
     if(!drive)x=R0-L0<=halfW*2?(L0+R0)/2:Math.max(L0+halfW,Math.min(R0-halfW,x));
     return {x,y,s,vy:viewTop+vh/2};
@@ -1173,6 +1175,7 @@ addEventListener('keydown',e=>{
     if(inMine){mineSpace();return}
     if(inTot){totSpace();return}
     if(inEra){eraSpace();return}
+    if(inBeach){beachSpace();return}
     if(inCity){const sh=CITY_SPOTS().find(c=>Math.abs(player.x-c.door)<60);if(sh)cityAction(sh.id);else say('Walk up to a shop!');return}
     let best=null,bd=60;
     for(const it of S.items){
@@ -1194,7 +1197,7 @@ function routeTo(f,x,item){
   if(item)path.push({use:item});
   standUp();player.path=path;
 }
-const maxX=f=>inEra?ERA_W-20:inTot?TOT_W-20:inMine?MINE_W-20:inCity?CITY_W-20:f===0?OUT_X:HW-WALL-16;   // only the ground floor has doors: front door to the car
+const maxX=f=>inBeach?BEACH_W-20:inEra?ERA_W-20:inTot?TOT_W-20:inMine?MINE_W-20:inCity?CITY_W-20:f===0?OUT_X:HW-WALL-16;   // only the ground floor has doors: front door to the car
 const minX=f=>inMine?(mine&&mine.floor===1?-60:20):away()?20:f===0?YARD_L+20:WALL+16;  // and back door to the backyard
 function playTap(wx,wy){
   if(player.climb||busy())return;
@@ -1202,6 +1205,7 @@ function playTap(wx,wy){
   if(inEra)return eraTap(wx,wy);
   if(inMine)return mineTap(wx,wy);
   if(inCity)return cityTap(wx,wy);
+  if(inBeach)return beachTap(wx,wy);
   if(wy>40||wy<-S.floors*FLOOR_H)return;
   if(wx>=CAR_X-6&&wx<=CAR_X+CAR_W+6&&wy>=CAR_Y-80&&wy<=10)return routeTo(0,CAR_X+60,'car');
   for(const n of people())
@@ -1806,7 +1810,7 @@ const hasFor=id=>{const h=myHouse();return !TASKS[id].has.length||h.items.some(i
 function newTasks(){
   // prefer tasks the house has furniture for; the rest tell you what to build
   const pick=(ids,n)=>{const sh=ids.sort(()=>Math.random()-.5);return [...sh.filter(hasFor),...sh.filter(id=>!hasFor(id))].slice(0,n)};
-  return ['breakfast',...pick(['wash','dress'],1),'work',...pick(['pet','plant','relax','dinner','bath','lights','yard','visit','host','city','mine','farm','time',...(S.spouse?['family']:[]),...(season().n==='Fall'?['tot']:[])],2),'sleep'].map(id=>({id,done:false}));
+  return ['breakfast',...pick(['wash','dress'],1),'work',...pick(['pet','plant','relax','dinner','bath','lights','yard','visit','host','city','beach','mine','farm','time',...(S.spouse?['family']:[]),...(season().n==='Fall'?['tot']:[])],2),'sleep'].map(id=>({id,done:false}));
 }
 if(!S.tasks)S.tasks=newTasks();
 
@@ -1945,7 +1949,7 @@ function buy(key,price,name,then){
 
 // The car drives off the right of the screen to work, and back.
 let drive=null, work=null;
-const carX=()=>(inMine?MINE_CAR:inCity?CITY_CAR:CAR_X)+(drive?drive.x:0);
+const carX=()=>(inMine?MINE_CAR:inCity?CITY_CAR:inBeach?BEACH_CAR:CAR_X)+(drive?drive.x:0);
 function startWork(){
   if(drive||work)return;
   if(visiting)return say('I should go home before I drive to work');
@@ -1961,13 +1965,14 @@ function carTapped(){
   const opts=[];
   if(!workDone())opts.push(['🏢 Go to work',startWork]);
   opts.push(['🏙️ Drive to the city',()=>startDrive('city')]);
+  opts.push(['🏖️ Drive to the beach',()=>startDrive('beach')]);
   opts.push(['⛏️ Drive to the mine',()=>startDrive('mine')]);
   choose('🚗 Where to?',opts);
 }
 function startDrive(dest){
   if(busy())return;
   standUp();player.path=[];player.f=0;player.x=carX()+60;guests.length=0;
-  drive={dir:1,t:0,x:0,dest};say(dest==='city'?'To the city! 🏙️':'Heading home!',1.5);
+  drive={dir:1,t:0,x:0,dest};say(dest==='city'?'To the city! 🏙️':dest==='beach'?'To the beach! 🏖️':'Heading home!',1.5);
   tone(110,.5,'sawtooth',.05);tone(165,.4,'sawtooth',.04,.3);
 }
 function startJob(){
@@ -1994,7 +1999,7 @@ function updateTrip(dt){
     drive.t+=dt;
     if(drive.dir>0){
       drive.x=360*drive.t*drive.t;
-      if(drive.t>=2.3){const d=drive.dest;drive=null;if(d==='city')enterCity();else if(d==='mine')enterMine();else if(d==='home')leaveAway();else startJob()}
+      if(drive.t>=2.3){const d=drive.dest;drive=null;if(d==='city')enterCity();else if(d==='mine')enterMine();else if(d==='beach')enterBeach();else if(d==='home')leaveAway();else startJob()}
     }else{
       const k=Math.min(1,drive.t/2.4);
       drive.x=1600*(1-k)*(1-k);
@@ -2095,7 +2100,7 @@ function showVisitUI(){
   $('nbHome').style.display=visiting?'inline-block':'none';
   const tag=$('visitTag');tag.style.display=(visiting||away())&&mode==='play'?'block':'none';
   goalsEl.style.display=mode==='play'&&!inMine&&!inTot&&!inEra?'block':'none';
-  tag.textContent=visiting?'Visiting '+visiting.name:inEra?ERAS[inEra].e+' '+ERAS[inEra].n+' — tap the time machine to go home':inTot?'🎃 Trick-or-treating — tap 🏠 Home to go back':inMine?'⛏️ The mine — floor '+(mine?mine.floor:1):inCity?'🏙️ In the city — tap your car to go home':'';
+  tag.textContent=visiting?'Visiting '+visiting.name:inEra?ERAS[inEra].e+' '+ERAS[inEra].n+' — tap the time machine to go home':inTot?'🎃 Trick-or-treating — tap 🏠 Home to go back':inMine?'⛏️ The mine — floor '+(mine?mine.floor:1):inCity?'🏙️ In the city — tap your car to go home':inBeach?'🏖️ At the beach — tap your car to go home':'';
 }
 $('nbClose').onclick=()=>{nbEl.style.display='none'};
 $('nbHome').onclick=()=>{if(!busy())travel(null)};
@@ -2165,7 +2170,7 @@ function travel(n){
 function newRoomFallback(){return {w:WALLC[0],p:0,fl:0}}
 // Guests at your house: invited, dropping by, or family who visited your house on their phone.
 const guests=[];
-const people=()=>visiting?[visiting.npc]:inTot?tot.kids:inMine?[]:inCity?townsfolk:[...homePeople(),...guests];
+const people=()=>visiting?[visiting.npc]:inTot?tot.kids:inMine?[]:inCity?townsfolk:inBeach?beach.folk:[...homePeople(),...guests];
 const npcY=n=>away()?0:n.x>HW-WALL?CAR_Y:stand(0);
 let homeTime=0;
 function invite(g,msg){
@@ -2312,7 +2317,7 @@ function enterCity(){
   },done(){say('Welcome to the city! 🏙️',2.5);taskEvent('city')}};
 }
 function leaveAway(){   // drive home from the city or the mine
-  fade={t:0,dur:1,mid(){inCity=inMine=false;townsfolk=[];mine=null;drive={dir:-1,t:0,x:1600,from:'away'};cam.init=false;showVisitUI()},done(){}};
+  fade={t:0,dur:1,mid(){inCity=inMine=inBeach=false;townsfolk=[];mine=null;beach=null;drive={dir:-1,t:0,x:1600,from:'away'};cam.init=false;showVisitUI()},done(){}};
 }
 function cityTap(wx,wy){
   if(wx>=carX()-6&&wx<=carX()+CAR_W+6&&wy>=-80&&wy<=10)return routeTo(0,CITY_CAR+60,'car');
@@ -2434,6 +2439,142 @@ function drawMovie(t,T){
   X.font='40px sans-serif';X.textAlign='center';X.fillText('🍿',W-50,H-80);
   txt('🎬 Space Puppies',W/2,sy+sh+40,Math.min(24,W/14));
   X.globalAlpha=1;
+}
+
+// ── The beach ────────────────────────────────────────────────────────────────
+// Sand on the left, the sea on the right. Walk out into the water to go swimming.
+const BEACH_W=2400, BEACH_CAR=40, SHORE=1150, TOWEL_X=360, CASTLE_X=660, TOWER_X=1010;
+const seaDepth=x=>Math.max(0,Math.min(46,(x-SHORE)*.25));   // the sea floor slopes down from the shore
+const swimming=()=>inBeach&&player.x>SHORE+60;
+const BEACH_LINES=['Surf\'s up! 🏄','The water is so nice!','Watch out for crabs! 🦀','I found a shell! 🐚','Did you see the dolphin? 🐬','Sandcastle contest? 🏰'];
+function enterBeach(){
+  fade={t:0,dur:1.2,mid(){
+    inBeach=true;player.f=0;player.x=BEACH_CAR+CAR_W+40;player.dir=1;player.path=[];cam.init=false;
+    const r=Math.random, folk=[...TOWN_NAMES].sort(()=>r()-.5).slice(0,2).map((name,i)=>({id:'town-'+name,name,look:randomLook(),
+      x:480+i*380,dir:1,walk:0,vx:0,greeted:true,minX:80,maxX:SHORE-40,hi:BEACH_LINES}));
+    for(const p of homePeople())folk.push({...p,x:300+r()*600,vx:0,minX:80,maxX:SHORE-40});   // the family comes too
+    beach={folk,castle:0,sun:0,swam:false,shells:[...Array(5)].map((_,i)=>({x:280+i*170+r()*80,got:false})),
+      ball:{x:1700,vx:0,spin:0},crab:{x:900,vx:30},dol:{t:0,x:1900}};
+    showVisitUI();
+  },done(){say('The beach! 🏖️ Walk into the water to swim',3);}};
+}
+function beachTap(wx,wy){
+  if(wx>=carX()-6&&wx<=carX()+CAR_W+6&&wy>=-80&&wy<=10)return routeTo(0,BEACH_CAR+60,'car');
+  for(const n of beach.folk)if(Math.abs(wx-n.x)<24&&wy>-100&&wy<10){talkTo(n);return routeTo(0,n.x+(player.x<n.x?-44:44))}
+  const i=beach.shells.findIndex(s=>!s.got&&Math.abs(wx-s.x)<30&&wy>-40&&wy<10);
+  if(i>=0)return routeTo(0,beach.shells[i].x,'s'+i);
+  if(Math.abs(wx-beach.crab.x)<30&&wy>-40&&wy<10)return routeTo(0,beach.crab.x-30,'crab');
+  if(Math.abs(wx-TOWEL_X)<90&&wy>-170&&wy<10)return routeTo(0,TOWEL_X,'towel');
+  if(Math.abs(wx-CASTLE_X)<70&&wy>-120&&wy<10)return routeTo(0,CASTLE_X-50,'castle');
+  routeTo(0,Math.max(20,Math.min(BEACH_W-20,wx)));   // the beach ball gets pushed when you swim into it
+}
+function beachSpace(){
+  const i=beach.shells.findIndex(s=>!s.got&&Math.abs(player.x-s.x)<40);
+  if(i>=0)return beachAction('s'+i);
+  if(Math.abs(player.x-beach.crab.x)<50)return beachAction('crab');
+  if(Math.abs(player.x-TOWEL_X)<70)return beachAction('towel');
+  if(Math.abs(player.x-CASTLE_X)<90)return beachAction('castle');
+  if(swimming()){emit('💦',player.x,-30,3);say('Splash! 💦',1.5)}else say("Let's go swimming! 🌊 The water is that way →");
+}
+function beachAction(id){
+  if(busy())return;
+  if(id==='towel'){
+    player.x=TOWEL_X;beach.sun=5;taskEvent('relax');
+    return say(S.night?'Look at all the stars ✨':'Ahh, sunshine ☀️😎',3);
+  }
+  if(id==='crab'){beach.crab.vx=(player.x<beach.crab.x?1:-1)*90;tone(1500,.05,'square',.04);tone(1200,.05,'square',.04,.08);return say('Snip snip! 🦀',2)}
+  if(id==='castle'){
+    player.dir=1;
+    if(beach.castle>=4)return say('My sandcastle is the best! 🏰',2);
+    beach.castle++;emit('✨',CASTLE_X,-60,2);tone(500+beach.castle*120,.12,'triangle',.07);
+    if(beach.castle<4)return say(['Pat pat pat…','Now some towers!','Almost done!'][beach.castle-1],2);
+    S.coins+=3;renderGoals();save();emit('+3 🪙',CASTLE_X,-120,1,16);[659,784,988,1319].forEach((f,i)=>tone(f,.15,'triangle',.07,i*.1));
+    return say('My sandcastle is done! 🏰',2.5);
+  }
+  const s=beach.shells[+id.slice(1)];
+  if(!s||s.got)return;
+  s.got=true;S.coins+=1;renderGoals();save();
+  emit('🐚',s.x,-40,1,24);emit('+1 🪙',s.x,-70,1,16);tone(1200,.08,'triangle',.07);tone(1600,.1,'triangle',.07,.08);
+  const left=beach.shells.filter(s=>!s.got).length;
+  say(left?`A seashell! 🐚 ${left} more to find`:'I found every shell! 🐚',2.2);
+}
+function updateBeach(dt){
+  if(!inBeach||!beach)return;
+  for(const n of beach.folk)updateNpc(n,dt);
+  if(beach.sun>0&&(beach.sun-=dt,player.moving||player.path.length||Math.abs(player.x-TOWEL_X)>4))beach.sun=0;
+  if(swimming()&&!beach.swam){
+    beach.swam=true;taskEvent('beach');tone(300,.3,'sine',.06);tone(600,.3,'sine',.05,.1);
+    say(season().n==='Winter'?'Brrr! 🥶 The water is freezing!':'Splash! The water is great! 🌊',2.5);
+  }
+  if(swimming()&&player.moving&&Math.random()<dt*3)emit('💦',player.x+player.dir*20,-20,1,14);
+  const b=beach.ball;   // swim into the beach ball to push it
+  if(swimming()&&player.moving&&Math.abs(player.x-b.x)<30&&Math.sign(b.x-player.x)===player.dir){b.vx=player.dir*260;tone(400,.06,'sine',.06)}
+  b.x+=b.vx*dt;b.spin+=b.vx*dt/14;b.vx*=Math.pow(.4,dt);
+  if(b.x<SHORE+120){b.x=SHORE+120;b.vx=Math.abs(b.vx)}if(b.x>BEACH_W-60){b.x=BEACH_W-60;b.vx=-Math.abs(b.vx)}
+  const c=beach.crab;c.x+=c.vx*dt;c.vx+=(Math.sign(c.vx)*30-c.vx)*dt;   // scuttle, then settle down
+  if(c.x<760||c.x>SHORE-30){c.x=Math.max(760,Math.min(SHORE-30,c.x));c.vx=-c.vx}
+  if((beach.dol.t+=dt)>8){beach.dol.t=0;beach.dol.x=SHORE+400+Math.random()*(BEACH_W-SHORE-700)}
+}
+function drawPalm(x,h,T){
+  for(let i=0;i<8;i++)RR(x-7+i*2,-h*(i+1)/8,14,h/8+2,4,i%2?'#a0703c':'#8b5e34');
+  for(let i=0;i<6;i++){X.save();X.translate(x+16,-h);X.rotate(-3+i*.72+Math.sin(T*1.5+i)*.05);E(36,0,38,9,i%2?'#2e9e4a':'#3cb55a');X.restore()}
+  E(x+10,-h+8,6,6,'#6d4c2f');E(x+21,-h+6,6,6,'#6d4c2f');
+}
+function drawBeach(T){
+  const night=S.night, sand='#f3d9a4', wc=night?'rgba(20,60,120,.78)':'rgba(30,140,215,.72)';
+  // the ocean out to the horizon, and dunes with palm trees behind the sand
+  R(-600,-120,BEACH_W+1200,120,night?'#1d3a6b':'#2f9ee0');
+  for(let i=0;i<30;i++){const sx=((i*173+T*8)%(BEACH_W+1200))-600;R(sx,-110+(i*37)%100,40,2,night?'rgba(255,255,255,.15)':'rgba(255,255,255,.45)')}
+  E(100,6,520,60,'#e8c98a');E(820,8,380,46,'#e8c98a');
+  drawPalm(140,230,T);drawPalm(560,190,T);drawPalm(930,250,T);
+  P([-600,0,SHORE,0,SHORE+184,46,BEACH_W+600,46,BEACH_W+600,900,-600,900],sand);
+  for(let i=0;i<60;i++)E(-400+i*41,8+(i*29)%30,2,1.5,'#e0c088');
+  R(0,-6,220,6,'#c9b48a');for(let i=10;i<210;i+=50)R(i,-6,3,6,'#fff');   // parking spots
+  // a striped umbrella and towel, a lifeguard tower, the sandcastle
+  L(TOWEL_X+50,0,TOWEL_X+50,-150,'#eee',4);
+  for(let k=0;k<6;k++){X.fillStyle=k%2?'#fff':'#e74c3c';X.beginPath();X.moveTo(TOWEL_X+50,-150);X.arc(TOWEL_X+50,-150,85,Math.PI+k*Math.PI/6,Math.PI+(k+1)*Math.PI/6);X.fill()}
+  RR(TOWEL_X-60,-4,120,6,3,'#ff6b9d');for(let i=0;i<4;i++)R(TOWEL_X-50+i*30,-4,12,6,'#ffd1dc');
+  for(const s of [-1,1])L(TOWER_X+s*30,0,TOWER_X+s*20,-130,'#fff',6);
+  R(TOWER_X-28,-90,56,5,'#fff');RR(TOWER_X-34,-150,68,22,4,'#e74c3c');R(TOWER_X-34,-178,68,6,'#c0392b');L(TOWER_X+28,-178,TOWER_X+28,-150,'#c0392b',3);
+  X.font='bold 10px system-ui';X.textAlign='center';X.fillStyle='#fff';X.fillText('LIFEGUARD',TOWER_X,-135);
+  const cx=CASTLE_X, cs='#e6c07a', st=beach.castle, crenel=(x,y,w)=>{for(let i=x;i<x+w-4;i+=12)R(i,y-6,7,6,cs)};
+  if(st===0)E(cx,-4,34,10,cs);
+  if(st>=1){R(cx-50,-30,100,30,cs);crenel(cx-50,-30,100)}
+  if(st>=2){R(cx-62,-62,26,62,cs);R(cx+36,-62,26,62,cs);crenel(cx-62,-62,26);crenel(cx+36,-62,26)}
+  if(st>=3){R(cx-18,-84,36,84,cs);crenel(cx-18,-84,36);RR(cx-8,-20,16,20,[8,8,0,0],'#c9a35f')}
+  if(st>=4){L(cx,-90,cx,-118,'#555',2);P([cx,-118,cx+22,-111,cx,-104],'#e74c3c')}
+  RR(cx+74,-22,20,22,3,'#3498db');R(cx+72,-24,24,4,'#2980b9');L(cx+100,0,cx+112,-30,'#f1c40f',3);
+  X.font='20px sans-serif';X.textBaseline='middle';
+  for(const s of beach.shells)if(!s.got)X.fillText('🐚',s.x,-8);
+  X.save();X.translate(beach.crab.x,-10+Math.abs(Math.sin(T*8))*2);X.fillText('🦀',0,0);X.restore();
+  // fish and the dolphin, under the water
+  for(let i=0;i<5;i++){const fx=SHORE+260+((i*331+T*(20+i*8)*(i%2?1:-1))%(BEACH_W-SHORE-300)+(BEACH_W-SHORE-300))%(BEACH_W-SHORE-300);
+    X.save();X.translate(fx,22+(i*7)%18);X.scale(i%2?-1:1,1);X.font='16px sans-serif';X.fillText(i%3?'🐠':'🐟',0,0);X.restore()}
+  const dk=beach.dol.t/1.6;
+  if(dk<1){X.save();X.translate(beach.dol.x+dk*220,-6-Math.sin(dk*Math.PI)*80);X.rotate(dk*2.2-1.1);X.scale(-1,1);X.font='34px sans-serif';X.fillText('🐬',0,0);X.restore()}
+  X.textBaseline='alphabetic';
+  for(const n of beach.folk){X.save();X.translate(n.x,0);X.scale(n.scale||1,n.scale||1);drawPlayer(n.look,0,0,{dir:n.dir,walk:n.walk,T});X.restore()}
+  if(beach.sun>0){X.save();X.translate(TOWEL_X+40,-16);X.rotate(-Math.PI/2);drawPlayer(S.look,0,0,{dir:1,pose:'sleep',T});X.restore()}
+  else drawPlayerAt(T);
+  // the water, with waves and foam washing up the sand
+  const fo=Math.sin(T*1.2)*14;
+  X.fillStyle=wc;X.beginPath();X.moveTo(SHORE-26+fo,0);
+  for(let x=SHORE;x<=BEACH_W+600;x+=30)X.lineTo(x,-6+Math.sin(x*.03+T*2)*3);
+  X.lineTo(BEACH_W+600,46);X.lineTo(SHORE+184,46);X.closePath();X.fill();
+  E(SHORE-22+fo,-1,22,3,'rgba(255,255,255,.8)');
+  for(let x=SHORE+60;x<BEACH_W+600;x+=90)E(x+Math.sin(T+x)*10,-6+Math.sin(x*.03+T*2)*3,14,2,'rgba(255,255,255,.5)');
+  if(swimming()&&!drive){   // arms paddling above the water
+    const sk=SKINS[S.look.skin], px=player.x, d=player.dir;
+    if(player.moving)for(const o of [0,Math.PI]){   // front crawl: each hand comes up out of the water and reaches forward
+      const k=T*7+o;if(Math.sin(k)<0)continue;
+      const ax=px+d*(24+Math.cos(k)*20), ay=-6-Math.sin(k)*20;L(px+d*10,-4,ax,ay,sk,6);E(ax,ay,4.5,4.5,sk);
+    }
+    E(px,-5,26+Math.sin(T*3)*3,3,'rgba(255,255,255,.55)');
+  }
+  const b=beach.ball, by=-16+Math.sin(T*2)*3;
+  for(let k=0;k<6;k++){X.fillStyle=['#e74c3c','#fff','#3498db','#fff','#f1c40f','#fff'][k];X.beginPath();X.moveTo(b.x,by);X.arc(b.x,by,15,b.spin+k*Math.PI/3,b.spin+(k+1)*Math.PI/3);X.fill()}
+  drawCar(carX(),0,T,!!drive);
+  if(night){R(-600,-900,BEACH_W+1200,1800,'rgba(12,14,48,.45)');for(let i=0;i<6;i++)R(1700+Math.sin(T*2+i)*12,-4+i*6,80-i*10,2,'rgba(255,246,200,.5)')}
 }
 
 // ── The mine ─────────────────────────────────────────────────────────────────
@@ -2614,16 +2755,17 @@ function drawMineHud(){
 // ── Update ───────────────────────────────────────────────────────────────────
 const SPEED=170;
 function update(dt,T){
-  updateTrip(dt);updateWedding(dt);updateCity(dt);updateMine(dt);updateTot(dt);updateEra(dt);
+  updateTrip(dt);updateWedding(dt);updateCity(dt);updateMine(dt);updateTot(dt);updateEra(dt);updateBeach(dt);
   if(growPlots(dt*1000)){save();renderFarm()}
   updatePups(dt);
-  const st=away()?0:player.f!==0?stand(player.f):player.x>HW-WALL?CAR_Y:player.x<WALL?YARD_Y:stand(0);   // a step down outside
+  const st=inBeach?seaDepth(player.x):away()?0:player.f!==0?stand(player.f):player.x>HW-WALL?CAR_Y:player.x<WALL?YARD_Y:stand(0);   // a step down outside
   if(!player.climb)player.y=st;
   player.moving=false;
+  const spd=SPEED*(swimming()?.6:1);   // swimming is slower than walking
   if(mode==='play'&&!busy()){
     let kx=(keys.ArrowRight||keys.KeyD?1:0)-(keys.ArrowLeft||keys.KeyA?1:0);
     if(kx&&!player.climb){player.path=[];player.target=null;standUp();
-      player.x=Math.max(minX(player.f),Math.min(maxX(player.f),player.x+kx*SPEED*dt));player.dir=kx;player.moving=true}
+      player.x=Math.max(minX(player.f),Math.min(maxX(player.f),player.x+kx*spd*dt));player.dir=kx;player.moving=true}
     if(player.climb){
       const c=player.climb;c.t+=dt/1.1;
       const k=Math.min(1,c.t);
@@ -2634,12 +2776,12 @@ function update(dt,T){
       if(s.walk!=null){
         const dx=s.walk-player.x;
         if(Math.abs(dx)<3){player.x=s.walk;player.path.shift()}
-        else{player.x+=Math.sign(dx)*Math.min(Math.abs(dx),SPEED*dt);player.dir=Math.sign(dx);player.moving=true}
+        else{player.x+=Math.sign(dx)*Math.min(Math.abs(dx),spd*dt);player.dir=Math.sign(dx);player.moving=true}
       }else if(s.climb){
         player.path.shift();
         const up=s.climb>0, f1=player.f+s.climb;
         player.climb={t:0,x0:player.x,y0:stand(player.f),x1:up?MINX+8:WALL+16,y1:stand(f1),f1};
-      }else if(s.use){player.path.shift();if(s.use==='car')carTapped();else if(typeof s.use==='string')(inEra?eraAction:inTot?totAction:inMine?mineAction:cityAction)(s.use);else if(S.items.includes(s.use))use(s.use)}
+      }else if(s.use){player.path.shift();if(s.use==='car')carTapped();else if(typeof s.use==='string')(inEra?eraAction:inBeach?beachAction:inTot?totAction:inMine?mineAction:cityAction)(s.use);else if(S.items.includes(s.use))use(s.use)}
       if(!player.path.length)save();
     }
   }
@@ -2975,6 +3117,7 @@ function draw(T){
   else if(inTot)drawTot(T);
   else if(inMine)drawMine(T);
   else if(inCity)drawCity(T);
+  else if(inBeach)drawBeach(T);
   else{
   drawHouse(T);
   const vis=S.items.filter(i=>i.f<S.floors);
