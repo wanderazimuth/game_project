@@ -850,7 +850,7 @@ let inBeach=false, beach=null;                            // a day at the beach
 const away=()=>inCity||inMine||inTot||inBeach||!!inEra;
 const PERSONAL=['look','name','tasks','coins','day','owned','night','car','hearts','heartDay','spouse','kids','spacePups','seasonOff','mailDay'];   // yours, wherever you are
 const myHouse=()=>visiting?{...visiting.home,...Object.fromEntries(PERSONAL.map(k=>[k,S[k]]))}:S;
-const clean=items=>items.map(({id,vx,happy,launch,land,trick,tip,tipA,...k})=>k);
+const clean=items=>items.map(({id,vx,happy,launch,land,trick,tipA,...k})=>k);
 function saveNow(){
   clearTimeout(saveTimer);
   const home=myHouse(), pos=visiting?visiting.pos:away()?{px:CAR_X-16,pf:0}:{px:player.x,pf:player.f};
@@ -875,6 +875,7 @@ function share(){
 function save(){clearTimeout(saveTimer);saveTimer=setTimeout(saveNow,300)}
 const loaded=load();
 let S=loaded||newHome();
+if(!S.grannyBack)S.items.forEach(i=>delete i.tip);   // knocked-over things only stay down while Grandma's still rampaging
 S.items.forEach(fill);
 // older saves are from before the daily routine
 S.look.job=S.look.job||0;S.kids=S.kids||[];S.hearts=S.hearts||{};S.heartDay=S.heartDay||{};S.coins=S.coins||0;S.day=S.day||1;S.owned=S.owned||[];S.car=S.car||{m:0,c:CARC[0]};
@@ -2307,17 +2308,28 @@ const GRANDMA={id:'grandma',name:'Grandma',look:{skin:0,hair:5,hairC:7,eyeC:0,to
 const RAMPAGE_LINES=['WHEEEEE! 👵💨','I\'M NOT TIRED!','MORE COOKIES! 🍪','WHERE ARE MY GLASSES?!','GRANDMA SMASH!','YIPPEE!','I CAN STILL DANCE! 💃'];
 const canTip=it=>{const d=ITEMS[it.t];return it.f===0&&!d.wall&&!d.rug&&!d.out&&!d.pet&&it.x>MINX-20&&it.x<HW-WALL};
 function grandmaVisit(){
-  S.grannyMet=true;
+  S.grannyMet=S.grannyBack=true;   // she stays until you calm her down, even if you go out
   invite({...GRANDMA,look:{...GRANDMA.look}},'🔔 Grandma came to visit! 👵');
   const g=guests.find(x=>x.id==='grandma');
   if(g){g.hi=GRANDMA.hi;g.family=true;g.rampT=8+Math.random()*8}
 }
-function startRampage(n){
+function startRampage(n,msg){
   n.rampage=22;n.vx=(Math.random()<.5?-1:1)*340;n.say={txt:'I ATE ALL THE COOKIES! 🍪🍪🍪',t:2.5};
-  toast('👵💨 Uh oh! Grandma ate a whole jar of cookies and is RAMPAGING through your house! Tap her to calm her down!',5000);
+  toast(msg||'👵💨 Uh oh! Grandma ate a whole jar of cookies and is RAMPAGING through your house! Tap her to calm her down!',5000);
   [392,523,659,880].forEach((f,i)=>tone(f,.12,'square',.05,i*.08));
 }
-function tidyUp(){setTimeout(()=>{for(const it of S.items)it.tip=0},1500)}   // everything stands back up
+function tidyUp(){   // everything stands back up
+  S.grannyBack=false;save();
+  setTimeout(()=>{if(!visiting){for(const it of S.items)it.tip=0;save()}},1500);
+}
+// You went out while Grandma was over: she trashed the place and she's still going.
+function grandmaStillHere(){
+  for(const it of S.items)if(canTip(it)&&!it.tip&&Math.random()<.75)it.tip=(Math.random()<.5?-1:1)*(.4+Math.random()*.9);
+  const g={id:'grandma',name:'Grandma',look:{...GRANDMA.look},family:true,hi:GRANDMA.hi,greeted:true,life:150,
+    x:MINX+40+Math.random()*(HW-WALL-MINX-80),dir:1,walk:0,vx:0};
+  guests.push(g);save();
+  startRampage(g,"😱 While you were out, Grandma trashed your house — and she's STILL rampaging! Tap her to calm her down!");
+}
 function calmGrandma(n,e){
   n.rampage=0;n.hop=0;n.vx=0;n.life=20;
   n.say={txt:{'🍵':'Ahh, tea. Much better! 😌','🤗':'Aww, I love you, sweetie! 💕','🧶':'Ooh, knitting! So relaxing…'}[e],t:3.5};
@@ -2868,8 +2880,9 @@ function update(dt,T){
   if(player.act&&player.act.kind==='swim'&&Math.random()<dt*2){const b=box(player.act.it);emit('💦',player.x,b.y,1,16)}
   if(player.act&&player.act.kind==='bath'&&Math.random()<dt*3){const b=box(player.act.it);emit('🫧',b.x+b.w/2,b.y+10,1,16)}
   for(const n of people())updateNpc(n,dt);
-  for(const it of S.items)if(it.tip||it.tipA){if(it.tip&&!guests.some(g=>g.id==='grandma'))it.tip=0;it.tipA=(it.tipA||0)+((it.tip||0)-(it.tipA||0))*Math.min(1,dt*10);if(!it.tip&&Math.abs(it.tipA)<.01)it.tipA=0}   // knocked over by Grandma
+  for(const it of S.items)if(it.tip||it.tipA){it.tipA=(it.tipA||0)+((it.tip||0)-(it.tipA||0))*Math.min(1,dt*10);if(!it.tip&&Math.abs(it.tipA)<.01)it.tipA=0}   // knocked over by Grandma
   for(let i=guests.length-1;i>=0;i--)if(guests[i].gone)guests.splice(i,1);
+  if(mode==='play'&&!visiting&&!away()&&!busy()&&S.grannyBack&&!guests.some(g=>g.id==='grandma'))grandmaStillHere();
   if(mode==='play'&&!visiting&&!away()&&!busy()&&!guests.length){   // once a day a neighbor may drop by
     homeTime+=dt;
     if(homeTime>40&&S.granny!==S.day){S.granny=S.day;if(!S.grannyMet||Math.random()<.35)grandmaVisit()}   // some days Grandma comes
