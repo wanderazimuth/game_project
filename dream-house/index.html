@@ -1218,7 +1218,7 @@ function playTap(wx,wy){
   if(wy>40||wy<-S.floors*FLOOR_H)return;
   if(wx>=CAR_X-6&&wx<=CAR_X+CAR_W+6&&wy>=CAR_Y-80&&wy<=10)return routeTo(0,CAR_X+60,'car');
   for(const n of people())
-    if(Math.abs(wx-n.x)<24&&wy>npcY(n)-100*(n.scale||1)&&wy<npcY(n)+10){talkTo(n);return routeTo(0,n.x+(player.x<n.x?-44:44))}
+    if(Math.abs(wx-n.x)<24&&wy>npcY(n)-100*(n.scale||1)&&wy<npcY(n)+10){talkTo(n);return routeTo(n.f||0,n.x+(player.x<n.x?-44:44))}
   const it=hit(wx,wy,6);
   if(it&&ITEMS[it.t].act){
     const d=ITEMS[it.t];
@@ -2193,7 +2193,7 @@ function newRoomFallback(){return {w:WALLC[0],p:0,fl:0}}
 // Guests at your house: invited, dropping by, or family who visited your house on their phone.
 const guests=[];
 const people=()=>visiting?[visiting.npc]:inTot?tot.kids:inMine?[]:inCity?townsfolk:inBeach?beach.folk:[...homePeople(),...guests];
-const npcY=n=>away()?0:n.x>HW-WALL?CAR_Y:stand(0);
+const npcY=n=>away()?0:n.cy!=null?n.cy:n.f?stand(n.f):n.x>HW-WALL?CAR_Y:stand(0);
 let homeTime=0;
 function invite(g,msg){
   if(visiting)return toast('Go home first to have guests over');
@@ -2287,6 +2287,13 @@ function homePeople(){
 function updateNpc(n,dt){
   if(n.say&&(n.say.t-=dt)<=0)n.say=null;
   if(n.rampage>0)return updateRampage(n,dt);
+  if(n.climb)return npcClimb(n,dt,.9);
+  if(n.goto!=null&&n.f>0){   // upstairs and leaving: down the stairs first
+    const dx=MINX+8-n.x;
+    if(Math.abs(dx)<4){n.x=MINX+8;n.climb=stairsDown(n)}
+    else{n.x+=Math.sign(dx)*Math.min(Math.abs(dx),(n.speed||90)*dt);n.dir=Math.sign(dx);n.walk+=dt*12}
+    return;
+  }
   if(n.life!=null&&!n.leaving&&(n.life-=dt)<=0){n.leaving=true;n.goto=OUT_X+80;n.say={txt:'Bye! Thanks for having me! 👋',t:3}}
   if(n.goto!=null){   // walking in the front door, or out to leave
     const dx=n.goto-n.x;
@@ -2295,7 +2302,7 @@ function updateNpc(n,dt){
     return;
   }
   if(n.rampT!=null&&(n.rampT-=dt)<=0){n.rampT=null;return startRampage(n)}
-  const near=player.f===0&&Math.abs(player.x-n.x)<110;
+  const near=player.f===(n.f||0)&&Math.abs(player.x-n.x)<110;
   if(near&&!n.greeted&&player.x<HW){n.greeted=true;n.say={txt:`Hi ${S.name||'there'}! Come on in!`,t:3}}
   if(near||n.say){n.vx=0;n.dir=player.x<n.x?-1:1}
   else if(!n.vx&&Math.random()<dt*.25)n.vx=(Math.random()<.5?-1:1)*60;
@@ -2314,7 +2321,7 @@ function updateNpc(n,dt){
 const GRANDMA={id:'grandma',name:'Grandma',look:{skin:0,hair:5,hairC:7,eyeC:0,top:2,topC:9,bottom:0,bottomC:9,shoeC:13,hat:0,hatC:0,glasses:1},
   guest:null,hi:['Hello, sweetie! 👵','I brought cookies! 🍪','My, how you\'ve grown!','What a lovely house, dear!']};
 const RAMPAGE_LINES=['WHEEEEE! 👵💨','I\'M NOT TIRED!','MORE COOKIES! 🍪','WHERE ARE MY GLASSES?!','GRANDMA SMASH!','YIPPEE!','I CAN STILL DANCE! 💃'];
-const canTip=it=>{const d=ITEMS[it.t];return it.f===0&&!d.wall&&!d.rug&&!d.out&&!d.pet&&it.x>MINX-20&&it.x<HW-WALL};
+const canTip=it=>{const d=ITEMS[it.t];return it.f<S.floors&&!d.wall&&!d.rug&&!d.out&&!d.pet&&it.x>MINX-20&&it.x<HW-WALL};
 function grandmaVisit(){
   S.grannyMet=S.grannyBack=true;   // she stays until you calm her down, even if you go out
   invite({...GRANDMA,look:{...GRANDMA.look}},'🔔 Grandma came to visit! 👵');
@@ -2352,20 +2359,38 @@ function grandmaStillHere(){
 function calmGrandma(n,e){
   n.rampage=0;n.hop=0;n.vx=0;n.life=20;
   n.say={txt:{'🍵':'Ahh, tea. Much better! 😌','🤗':'Aww, I love you, sweetie! 💕','🧶':'Ooh, knitting! So relaxing…'}[e],t:3.5};
-  emit(e,n.x,stand(0)-120,2,28);emit('💕',n.x,stand(0)-130,3);
+  emit(e,n.x,npcY(n)-120,2,28);emit('💕',n.x,npcY(n)-130,3);
   S.coins+=5;renderGoals();save();tidyUp();taskEvent('family');
   [523,659,784].forEach((f,i)=>tone(f,.2,'sine',.08,i*.12));
   setTimeout(()=>toast('👵 Grandma calmed down! She helped tidy up and gave you 🪙5 for being so sweet 💕',4000),900);
 }
+// Guests can take the stairs too, the same way you do: up from WALL+16, down from MINX+8.
+const stairsUp=n=>({t:0,x0:WALL+16,y0:stand(n.f||0),x1:MINX+8,y1:stand((n.f||0)+1),f1:(n.f||0)+1});
+const stairsDown=n=>({t:0,x0:MINX+8,y0:stand(n.f),x1:WALL+16,y1:stand(n.f-1),f1:n.f-1});
+function npcClimb(n,dt,dur){
+  const c=n.climb, k=Math.min(1,c.t+=dt/dur);
+  n.x=c.x0+(c.x1-c.x0)*k;n.cy=c.y0+(c.y1-c.y0)*k;n.dir=Math.sign(c.x1-c.x0)||1;n.walk+=dt*(dur<1?25:12);
+  if(k>=1){n.f=c.f1;n.climb=null;n.cy=null}
+}
 function updateRampage(n,dt){
-  n.rampage-=dt;n.walk+=dt*25;n.hop=Math.abs(Math.sin(n.walk*.5))*26;
-  n.x+=n.vx*dt;
-  if(n.x<MINX+20){n.x=MINX+20;n.vx=Math.abs(n.vx)}
-  if(n.x>HW-WALL-20){n.x=HW-WALL-20;n.vx=-Math.abs(n.vx)}
-  n.dir=Math.sign(n.vx);
-  for(const it of S.items)if(!it.tip&&canTip(it)&&Math.abs(it.x+ITEMS[it.t].w/2-n.x)<24){
-    it.tip=(Math.random()<.5?-1:1)*(.4+Math.random()*.9);
-    emit('💥',it.x+ITEMS[it.t].w/2,stand(0)-40,1,24);tone(90+Math.random()*60,.15,'sawtooth',.06);
+  n.rampage-=dt;
+  if(n.climb){n.hop=0;npcClimb(n,dt,.5);if(!n.climb)n.vx=340}   // stomping up or down the stairs
+  else{
+    n.walk+=dt*25;n.hop=Math.abs(Math.sin(n.walk*.5))*26;
+    n.x+=n.vx*dt;
+    const f=n.f||0;
+    if(n.vx<0&&n.x<MINX+20){   // at the stairs: always up from the ground floor, then up or down
+      if(n.plan==null)n.plan=f<S.floors-1&&(f===0||Math.random()<.5)?1:f>0?-1:0;
+      if(n.plan===1){if(n.x<=WALL+16){n.x=WALL+16;n.climb=stairsUp(n);n.plan=null}}
+      else if(n.plan===-1){n.x=MINX+8;n.climb=stairsDown(n);n.plan=null}
+      else{n.x=MINX+20;n.vx=340;n.plan=null}
+    }
+    if(n.x>HW-WALL-20){n.x=HW-WALL-20;n.vx=-Math.abs(n.vx)}
+    n.dir=Math.sign(n.vx);
+    for(const it of S.items)if(it.f===f&&!it.tip&&canTip(it)&&Math.abs(it.x+ITEMS[it.t].w/2-n.x)<24){
+      it.tip=(Math.random()<.5?-1:1)*(.4+Math.random()*.9);
+      emit('💥',it.x+ITEMS[it.t].w/2,stand(f)-40,1,24);tone(90+Math.random()*60,.15,'sawtooth',.06);
+    }
   }
   if(!n.say&&Math.random()<dt*.8)n.say={txt:RAMPAGE_LINES[Math.random()*RAMPAGE_LINES.length|0],t:1.6};
   if(n.rampage<=0){n.rampage=0;n.hop=0;n.vx=0;n.life=6;n.say={txt:'Phew! I need a nap… 😴',t:3};tidyUp()}
