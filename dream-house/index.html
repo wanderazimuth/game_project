@@ -2574,12 +2574,22 @@ function enterBeach(){
 function beachTap(wx,wy){
   if(wx>=carX()-6&&wx<=carX()+CAR_W+6&&wy>=-80&&wy<=10)return routeTo(0,BEACH_CAR+60,'car');
   for(const n of beach.folk)if(Math.abs(wx-n.x)<24&&wy>-100&&wy<10){talkTo(n);return routeTo(0,n.x+(player.x<n.x?-44:44))}
+  if(beach.fish&&beach.fish.some(f=>Math.abs(wx-f.x)<40&&Math.abs(wy-f.y)<30))return goFishing();
   const i=beach.shells.findIndex(s=>!s.got&&Math.abs(wx-s.x)<30&&wy>-40&&wy<10);
   if(i>=0)return routeTo(0,beach.shells[i].x,'s'+i);
   if(Math.abs(wx-beach.crab.x)<30&&wy>-40&&wy<10)return routeTo(0,beach.crab.x-30,'crab');
   if(Math.abs(wx-TOWEL_X)<90&&wy>-170&&wy<10)return routeTo(0,TOWEL_X,'towel');
   if(Math.abs(wx-CASTLE_X)<70&&wy>-120&&wy<10)return routeTo(0,CASTLE_X-50,'castle');
   routeTo(0,Math.max(20,Math.min(BEACH_W-20,wx)));   // the beach ball gets pushed when you swim into it
+}
+function goFishing(){
+  if(busy())return;
+  tone(880,.08,'sine',.06);tone(1100,.1,'sine',.06,.08);
+  say('A fish! 🐟',2);
+  choose('🐟 You found a fish!',[['🎣 Go play Fish-Off',()=>{
+    saveNow();
+    fade={t:0,dur:1.2,mid(){location.href='/fish-off/'},done(){}};
+  }]]);
 }
 function beachSpace(){
   const i=beach.shells.findIndex(s=>!s.got&&Math.abs(player.x-s.x)<40);
@@ -2660,8 +2670,10 @@ function drawBeach(T){
   X.font='20px sans-serif';X.textBaseline='middle';
   for(const s of beach.shells)if(!s.got)X.fillText('🐚',s.x,-8);
   X.save();X.translate(beach.crab.x,-10+Math.abs(Math.sin(T*8))*2);X.fillText('🦀',0,0);X.restore();
-  // fish and the dolphin, under the water
+  // fish and the dolphin, under the water; tap a fish to go play Fish-Off
+  beach.fish=[];
   for(let i=0;i<5;i++){const fx=SHORE+260+((i*331+T*(20+i*8)*(i%2?1:-1))%(BEACH_W-SHORE-300)+(BEACH_W-SHORE-300))%(BEACH_W-SHORE-300);
+    beach.fish.push({x:fx,y:22+(i*7)%18});
     X.save();X.translate(fx,22+(i*7)%18);X.scale(i%2?-1:1,1);X.font='16px sans-serif';X.fillText(i%3?'🐠':'🐟',0,0);X.restore()}
   const dk=beach.dol.t/1.6;
   if(dk<1){X.save();X.translate(beach.dol.x+dk*220,-6-Math.sin(dk*Math.PI)*80);X.rotate(dk*2.2-1.1);X.scale(-1,1);X.font='34px sans-serif';X.fillText('🐬',0,0);X.restore()}
