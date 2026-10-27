@@ -76,6 +76,12 @@ const JOBS=[
 ];
 const PRESENTS=['💎 a diamond','🗡️ a sword','🎂 a cake','🛡️ a shield','🏹 a bow','🧭 a compass','🍪 a cookie','👑 a crown','🪄 a magic wand','🧸 a teddy bear','🍉 a melon','⭐ a gold star'];
 const JOB_TIME=70;
+// Sometimes the present is a pet: it follows you around, and in an uh-oh it sniffs out the sorry hearts.
+const PETS=[{e:'🐶',n:'a puppy',sound:'Woof!'},{e:'🐱',n:'a kitten',sound:'Meow!'},{e:'🐰',n:'a bunny',sound:'*thump thump*'},{e:'🦊',n:'a fox',sound:'Yip!'},
+  {e:'🐺',n:'a wolf',sound:'Awoo!'},{e:'🦜',n:'a parrot',sound:'Squawk!'},{e:'🐹',n:'a hamster',sound:'Squeak!'},{e:'🐢',n:'a turtle',sound:'…hi.'}];
+const PET_NAMES=['Biscuit','Pickles','Noodle','Sprinkles','Bean','Waffles','Nugget','Pepper','Muffin','Ziggy','Coco','Pudding'];
+const MAX_PETS=3;
+let pets=[], jobsDone=0;
 
 let state='menu', P, V, job, things, critters, hearts, gifts, score, mood, parts, msg, uh, keysDown={}, touch=null, bumpCd=0, best=0, T0=0;
 function startGame(){
@@ -85,7 +91,7 @@ function startGame(){
   critters=[];
   for(let i=0;i<4;i++){const s=freeSpot(250,P);critters.push({k:'villager',x:s.x,y:s.y,vx:0,vy:0,c:pick(['#8d5a3b','#5d4037','#a1887f']),robe:pick(['#6a4c93','#2e7d32','#1565c0','#c62828'])})}
   for(const k of ['pig','cow','chicken','chicken','chicken','pig']){const s=freeSpot(200,P);critters.push({k,x:s.x,y:s.y,vx:0,vy:0})}
-  things=[];hearts=[];gifts=[];parts=[];score=0;mood=3;msg=null;uh=null;bumpCd=0;job=null;
+  things=[];hearts=[];gifts=[];parts=[];score=0;mood=3;msg=null;uh=null;bumpCd=0;job=null;pets=[];jobsDone=0;
   setTimeout(()=>{if(state==='play'&&!job&&!uh)newJob()},3500);
   state='play';
   document.getElementById('kick').style.display='flex';
@@ -178,9 +184,18 @@ function update(dt,T){
       if(pig&&Math.hypot(pig.x-P.x,pig.y-P.y)<60){job.fed=true;burst(pig.x,pig.y-20,'#ff8fc4',8);tone(300,.1,'square',.05);tone(240,.1,'square',.05,.1)}
     }
     const ready=job&&job.have>=job.need&&(job.then!=='pig'||job.fed);
-    if(ready&&dv<110){   // hand it in for a present
-      const g=pick(PRESENTS);gifts.push(g.split(' ')[0]);score+=100;mood=Math.min(3,mood+1);
-      vsay('Thank you!! 😊 Here, take '+g+'!',3.5);flash('🎁 Verity gave you '+g+'!  +100',2.6,'#ffe066');
+    if(ready&&dv<110){   // hand it in for a present — every third job, or the lost kitten, it's a pet
+      jobsDone++;score+=100;mood=Math.min(3,mood+1);
+      const petTime=pets.length<MAX_PETS&&(job.id==='kitten'||jobsDone%3===0);
+      if(petTime){
+        const kind=job.id==='kitten'?PETS[1]:pick(PETS.filter(k=>!pets.some(p=>p.e===k.e))), name=pick(PET_NAMES.filter(n=>!pets.some(p=>p.name===n)));
+        pets.push({...kind,name,x:V.x,y:V.y,walk:0,say:{t:kind.sound,life:2}});
+        vsay(job.id==='kitten'?`You found her! 😊 You can keep her — her name is ${name}!`:`Thank you!! 😊 Here's a pet for you: ${kind.n} named ${name}!`,4);
+        flash(`${kind.e} Verity gave you ${kind.n}: ${name}!  +100`,2.8,'#ffe066');
+      }else{
+        const g=pick(PRESENTS);gifts.push(g.split(' ')[0]);
+        vsay('Thank you!! 😊 Here, take '+g+'!',3.5);flash('🎁 Verity gave you '+g+'!  +100',2.6,'#ffe066');
+      }
       [784,988,1175].forEach((f,i)=>tone(f,.15,'triangle',.06,i*.1));
       job=null;things=[];setTimeout(()=>{if(state==='play'&&!job&&!uh)newJob()},3000);
     }else if(ready&&!V.say)vsay('You did it! Come here! 😊',2);
@@ -193,6 +208,7 @@ function update(dt,T){
       if(dv<34&&!uh.caught){uh.caught=true;caught()}
       if(Math.random()<dt*(dv<300?3:1.2))tone(dv<300?70:55,.15,'sine',.12);   // heartbeat
     }
+    for(const p of pets)if(!p.say&&Math.random()<dt*.25)p.say={t:`${p.sound} This way! 💛`,life:1.6};
     for(const h of hearts)if(!h.got&&Math.hypot(h.x-P.x,h.y-P.y)<36){
       h.got=true;uh.hearts++;burst(h.x,h.y,'#ffe066',12);tone(880,.2,'triangle',.07);
       if(uh.hearts<3)flash(`💛 Sorry heart ${uh.hearts}/3`,1.6,'#ffe066');else forgive();
@@ -206,6 +222,13 @@ function update(dt,T){
     move(c,c.vx*dt,c.vy*dt,12);if(c.vx)c.dir=Math.sign(c.vx);
     c.walk=(c.walk||0)+(c.vx||c.vy?dt*10:0);
   }
+  // pets trot along behind you in a line
+  pets.forEach((p,i)=>{
+    const lead=i?pets[i-1]:P, d=Math.hypot(lead.x-p.x,lead.y-p.y), gap=i?38:46;
+    if(d>gap){const k=Math.min(d-gap,Math.max(SPEED*1.1,d*3)*dt);p.x+=(lead.x-p.x)/d*k;p.y+=(lead.y-p.y)/d*k;p.walk+=dt*12;p.dir=Math.sign(lead.x-p.x)||p.dir}
+    if(p.say&&(p.say.life-=dt)<=0)p.say=null;
+    if(!uh&&!p.say&&Math.random()<dt*.04)p.say={t:p.sound,life:1.4};
+  });
   for(const p of parts){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=300*dt;p.life-=dt}
   parts=parts.filter(p=>p.life>0);
 }
@@ -274,6 +297,15 @@ function drawCritter(c,T){
   else{E(x,y+8,9,3,'rgba(0,0,0,.25)');R(x-7,y-8-b,14,14,'#fff');R(x+(c.dir<0?-10:5),y-12-b,6,6,'#fff');R(x+(c.dir<0?-13:10),y-10-b,4,3,'#f39c12');R(x-2,y-14-b,4,4,'#e53935')}
   ctx.globalAlpha=1;
 }
+function drawPet(p,T){
+  E(p.x,p.y+12,13,4,'rgba(0,0,0,.25)');
+  ctx.save();ctx.translate(p.x,p.y-Math.abs(Math.sin(p.walk))*5);if(p.dir>0)ctx.scale(-1,1);ctx.fillStyle='#000';emoji(p.e,0,0,30);ctx.restore();
+  if(uh){   // sniffing out the nearest sorry heart: a little arrow points the way
+    const h=hearts.filter(h=>!h.got).sort((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y))[0];
+    if(h){const a=Math.atan2(h.y-p.y,h.x-p.x);ctx.save();ctx.translate(p.x+Math.cos(a)*30,p.y+Math.sin(a)*30);ctx.rotate(a);
+      ctx.fillStyle='#ffe066';ctx.beginPath();ctx.moveTo(10,0);ctx.lineTo(-6,-8);ctx.lineTo(-6,8);ctx.fill();ctx.restore()}
+  }
+}
 function bubble(txt,x,y){
   ctx.font='bold 14px system-ui';const w=Math.min(ctx.measureText(txt).width+20,Math.min(320,W-20));
   const bx=Math.max(10,Math.min(W-w-10,x-w/2));
@@ -298,6 +330,7 @@ function draw(T){
   for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)if(map[y][x]===1)list.push({y:y*TS+TS,f:()=>drawTree(x,y)});
   for(const c of critters)list.push({y:c.y+10,f:()=>drawCritter(c,T)});
   list.push({y:P.y+16,f:()=>drawSteve(P.x,P.y,T)});
+  for(const p of pets)list.push({y:p.y+10,f:()=>drawPet(p,T)});
   list.push({y:V.y+20,f:()=>drawVerity(T)});
   list.sort((a,b)=>a.y-b.y).forEach(o=>o.f());
   for(const p of parts){ctx.globalAlpha=Math.min(1,p.life*2);R(p.x-3,p.y-3,6,6,p.c)}
@@ -319,6 +352,11 @@ function draw(T){
     }
   }
   // speech
+  for(const p of pets){
+    const [px,py]=toScreen(p.x,p.y-20);
+    if(p.say)bubble(p.e+' '+p.say.t,px,py);
+    else{ctx.font='bold 11px system-ui';ctx.textAlign='center';ctx.fillStyle='#fff';ctx.strokeStyle='rgba(0,0,0,.6)';ctx.lineWidth=3;ctx.strokeText(p.name,px,py-2);ctx.fillText(p.name,px,py-2)}
+  }
   if(V.say){const [vx,vy]=toScreen(V.x,V.y-36);bubble(V.say.t,vx,vy)}
   hud(T);
 }
@@ -327,7 +365,7 @@ function hud(T){
   ctx.textAlign='left';ctx.fillStyle='#fff';ctx.font='bold 16px system-ui';
   ctx.fillText('⭐ '+score,20,32);
   ctx.fillText('Verity: '+(uh?'😡':['😡','😟','😐','😊'][mood]),110,32);
-  ctx.font='20px sans-serif';ctx.fillText(gifts.slice(-8).join(''),230,34);
+  ctx.font='20px sans-serif';ctx.fillText(pets.map(p=>p.e).join('')+(pets.length?' ':'')+gifts.slice(-6).join(''),230,34,Math.min(W,436)-246);
   ctx.font='bold 14px system-ui';
   if(uh){ctx.fillStyle='#ff8a80';ctx.fillText(`RUN! Find the sorry hearts 💛 ${uh.hearts}/3`,20,56)}
   else if(job){
@@ -340,14 +378,14 @@ function hud(T){
   if(msg){ctx.globalAlpha=Math.min(1,msg.life*2);ctx.textAlign='center';ctx.font=`bold ${Math.min(26,W/16)}px system-ui`;ctx.strokeStyle='rgba(0,0,0,.7)';ctx.lineWidth=5;ctx.fillStyle=msg.c;ctx.strokeText(msg.t,W/2,H*.78,W-20);ctx.fillText(msg.t,W/2,H*.78,W-20);ctx.globalAlpha=1}
 }
 function drawMenu(T){
-  if(!map){makeMap();P={x:MW*TS/2,y:MH*TS/2,dir:1,walk:0};V={x:P.x,y:P.y-10,roll:0,hop:0};critters=[];things=[];hearts=[];parts=[];gifts=[];score=0;mood=3}
+  if(!map){makeMap();pets=[];P={x:MW*TS/2,y:MH*TS/2,dir:1,walk:0};V={x:P.x,y:P.y-10,roll:0,hop:0};critters=[];things=[];hearts=[];parts=[];gifts=[];score=0;mood=3}
   V.hop=(T%1.4)<.5?1-(T%1.4)*2:0;
   draw(T);
   ctx.fillStyle='rgba(10,10,20,.55)';ctx.fillRect(0,0,W,H);
   ctx.save();ctx.translate(W/2,H*.4);ctx.scale(2.6,2.6);ctx.translate(-V.x,-V.y);drawVerity(T);ctx.restore();
   ctx.textAlign='center';ctx.fillStyle='#ffe066';ctx.font=`bold ${Math.min(64,W/7)}px system-ui`;ctx.fillText('VERITY',W/2,H*.17);
   ctx.font=`${Math.min(17,W/24)}px system-ui`;ctx.fillStyle='#eee';
-  ['Verity is a friendly ball. 😊 It gives you jobs — do them and get presents!','Be nice. If you bump it, kick it or ignore its jobs… uh-oh. 😡','Then run! Find the 3 sorry hearts 💛 before Verity catches you.','Arrow keys / WASD to walk — or hold your finger where you want to go']
+  ['Verity is a friendly ball. 😊 It gives you jobs — do them for presents, and sometimes a pet! 🐶','Be nice. If you bump it, kick it or ignore its jobs… uh-oh. 😡','Then run! Find the 3 sorry hearts 💛 before Verity catches you.','Arrow keys / WASD to walk — or hold your finger where you want to go']
     .forEach((l,i)=>ctx.fillText(l,W/2,H*.6+i*24,W-24));
   if(best)ctx.fillText('Best this time: '+best,W/2,H*.6+4*24+4);
   ctx.font='bold 22px system-ui';ctx.fillStyle=(T*2|0)%2?'#fff':'#ffe066';ctx.fillText('TAP OR PRESS SPACE TO PLAY',W/2,H*.92);
@@ -356,7 +394,7 @@ function drawOver(T){
   draw(T);
   ctx.fillStyle='rgba(30,0,0,.75)';ctx.fillRect(0,0,W,H);
   ctx.textAlign='center';ctx.fillStyle='#ff8a80';ctx.font=`bold ${Math.min(48,W/11)}px system-ui`;ctx.fillText('Verity kicked you out! 😡',W/2,H*.42);
-  ctx.fillStyle='#fff';ctx.font='bold 24px system-ui';ctx.fillText('⭐ '+score+'   '+gifts.join(''),W/2,H*.42+44,W-20);
+  ctx.fillStyle='#fff';ctx.font='bold 24px system-ui';ctx.fillText('⭐ '+score+'   '+pets.map(p=>p.e).join('')+' '+gifts.join(''),W/2,H*.42+44,W-20);
 }
 let last=0;
 function loop(ts){
@@ -390,7 +428,7 @@ const LB_GAME='verity';
 let _lbScore=0;
 function showLB(s){
   _lbScore=s;
-  document.getElementById('lb-score').textContent=s+' points · '+gifts.length+' presents';
+  document.getElementById('lb-score').textContent=s+' points · '+gifts.length+' presents'+(pets.length?' · '+pets.length+' pet'+(pets.length>1?'s':''):'');
   document.getElementById('lb-form').style.display='flex';
   document.getElementById('lb-name').value='';
   document.getElementById('lb-overlay').style.display='flex';
