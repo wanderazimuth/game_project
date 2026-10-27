@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Cookie Rampage</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#ffe4ec;touch-action:none}
+canvas{display:block}
+#jump{position:fixed;right:20px;bottom:20px;width:96px;height:96px;border-radius:50%;display:none;
+  align-items:center;justify-content:center;font:bold 18px system-ui;color:#fff;
+  background:rgba(232,67,147,.55);border:3px solid rgba(255,255,255,.6);
+  touch-action:none;user-select:none;-webkit-user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="jump">JUMP</div>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+let W,H,K,GY;   // K scales everything to the screen; GY is the floor line
+function resize(){
+  const d=devicePixelRatio||1;
+  W=innerWidth;H=innerHeight;
+  cv.width=W*d;cv.height=H*d;cv.style.width=W+'px';cv.style.height=H+'px';
+  ctx.setTransform(d,0,0,d,0,0);
+  K=Math.max(.65,Math.min(1.35,H/700));GY=H*.8;
+}
+addEventListener('resize',resize);resize();
+
+// ── Drawing helpers ───────────────────────────────────────────────────────────
+const R=(x,y,w,h,c)=>{ctx.fillStyle=c;ctx.fillRect(x,y,w,h)};
+const E=(x,y,rx,ry,c)=>{ctx.fillStyle=c;ctx.beginPath();ctx.ellipse(x,y,Math.abs(rx),Math.abs(ry),0,0,Math.PI*2);ctx.fill()};
+function RR(x,y,w,h,r,c){ctx.fillStyle=c;ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill()}
+function emoji(t,x,y,size){ctx.font=size+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,x,y);ctx.textBaseline='alphabetic'}
+function tone(f,d,type='square',v=.05,delay=0){
+  try{
+    const a=tone.ac||(tone.ac=new (window.AudioContext||window.webkitAudioContext)()),t=a.currentTime+delay;
+    const o=a.createOscillator(),g=a.createGain();o.type=type;o.frequency.value=f;
+    g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+d);
+    o.connect(g).connect(a.destination);o.start(t);o.stop(t+d);
+  }catch(e){}
+}
+
+// ── Things in the house ───────────────────────────────────────────────────────
+// Furniture gets smashed (points); cookies refill the sugar meter; the cat and
+// Grandpa's cup of tea calm Grandma down (sugar lost) unless she jumps over them.
+const FURN={
+  sofa:{w:120,h:52,pts:50},tv:{w:70,h:84,pts:80},lamp:{w:34,h:112,pts:30},fridge:{w:62,h:124,pts:100},
+  plant:{w:44,h:72,pts:30},shelf:{w:72,h:120,pts:80},table:{w:92,h:58,pts:40},clock:{w:40,h:130,pts:60},
+};
+const COLORS=['#e74c3c','#3498db','#27ae60','#9b59b6','#f39c12','#16a085','#e84393'];
+const WALLS=['#ffd6e0','#d6eaff','#fff3c4','#dff5d8','#eadcff','#ffe0c7'];
+
+let state='menu', objs, parts, pops, camX, speed, sugar, score, combo, comboT, gran, mega, hurt, nextX, dist, shake, best=0;
+function startGame(){
+  objs=[];parts=[];pops=[];camX=0;speed=300;sugar=100;score=0;combo=0;comboT=0;mega=0;hurt=0;nextX=W*.9;dist=0;shake=0;
+  gran={y:0,vy:0,air:false,jumps:0,run:0};
+  state='play';document.getElementById('jump').style.display=matchMedia('(pointer:coarse)').matches?'flex':'none';
+  tone(523,.1);tone(659,.1,'square',.05,.1);tone(784,.15,'square',.05,.2);
+}
+function spawn(){
+  while(nextX<camX+W*1.6){
+    const r=Math.random(), hz=Math.min(.38,.14+dist/50000);
+    let gap=(240+Math.random()*220)*K;
+    if(r<hz){
+      if(dist>1500&&Math.random()<.45)objs.push({t:'tea',x:nextX,w:44,h:104,vx:-70});
+      else objs.push({t:'cat',x:nextX,w:52,h:36,ph:Math.random()*6});
+      gap+=120*K;
+    }else if(r<hz+.03&&dist>1200&&!mega){objs.push({t:'cake',x:nextX,w:40,h:40,y:150})}
+    else if(r<hz+.32){   // an arc of cookies, some up high so you have to jump
+      const high=Math.random()<.5;
+      for(let i=0;i<4;i++)objs.push({t:'cookie',x:nextX+i*55*K,w:30,h:30,y:high?60+Math.sin(i/3*Math.PI)*120:20});
+      gap+=160*K;
+    }else{
+      const keys=Object.keys(FURN), t=keys[Math.random()*keys.length|0];
+      objs.push({t,furn:true,x:nextX,w:FURN[t].w,h:FURN[t].h,c:COLORS[Math.random()*COLORS.length|0]});
+    }
+    nextX+=gap;
+  }
+}
+
+// ── Drawing ───────────────────────────────────────────────────────────────────
+function drawRooms(){
+  const RW=900*K, first=Math.floor(camX/RW)-1;
+  for(let i=first;i<first+Math.ceil(W/RW)+3;i++){
+    const x=i*RW-camX, c=WALLS[((i%WALLS.length)+WALLS.length)%WALLS.length];
+    R(x,0,RW,GY,c);
+    ctx.globalAlpha=.25;
+    if(i%3===0)for(let s=0;s<RW;s+=36*K)R(x+s,0,14*K,GY,'#fff');
+    if(((i%3)+3)%3===1)for(let yy=30*K;yy<GY;yy+=50*K)for(let s=18*K;s<RW;s+=50*K)E(x+s,yy,4*K,4*K,'#fff');
+    ctx.globalAlpha=1;
+    // a window with curtains, a picture, and the doorway into the next room
+    const wx=x+RW*.25, wy=GY-300*K;
+    R(wx-6*K,wy-6*K,172*K,132*K,'#fff');R(wx,wy,160*K,120*K,'#9fd8ff');E(wx+120*K,wy+30*K,14*K,14*K,'#ffe066');
+    R(wx+78*K,wy,4*K,120*K,'#fff');R(wx,wy+58*K,160*K,4*K,'#fff');
+    R(wx-20*K,wy-14*K,30*K,150*K,COLORS[((i*3)%7+7)%7]);R(wx+150*K,wy-14*K,30*K,150*K,COLORS[((i*3)%7+7)%7]);
+    const px=x+RW*.66, py=GY-280*K;
+    R(px,py,90*K,70*K,'#8d5a3b');R(px+8*K,py+8*K,74*K,54*K,'#c8f0c0');
+    ctx.fillStyle='#4caf50';ctx.beginPath();ctx.moveTo(px+8*K,py+62*K);ctx.lineTo(px+40*K,py+26*K);ctx.lineTo(px+82*K,py+62*K);ctx.fill();
+    R(x+RW-26*K,GY-240*K,26*K,240*K,'rgba(0,0,0,.08)');R(x+RW-30*K,GY-244*K,34*K,10*K,'#c9a27a');
+  }
+  // the wooden floor
+  R(0,GY,W,H-GY,'#c98b55');R(0,GY,W,6*K,'#a86b3a');
+  for(let s=-((camX*1)%(80*K));s<W;s+=80*K)R(s,GY+6*K,3,H-GY,'#b47744');
+}
+function drawFurn(o,sx){
+  const y=GY, w=o.w*K, h=o.h*K, c=o.c, k=K;
+  if(o.t==='sofa'){RR(sx,y-h,w,h*.62,8*k,c);RR(sx,y-h*.55,w,h*.45,6*k,c);RR(sx-6*k,y-h*.7,16*k,h*.6,6*k,c);RR(sx+w-10*k,y-h*.7,16*k,h*.6,6*k,c);R(sx+8*k,y-h*.5,w-16*k,4*k,'rgba(255,255,255,.3)')}
+  if(o.t==='tv'){R(sx+w*.2,y-h*.35,w*.6,h*.35,'#6d4c41');RR(sx,y-h,w,h*.62,5*k,'#222');R(sx+5*k,y-h+5*k,w-10*k,h*.62-10*k,'#5dade2');R(sx+w*.48,y-h*.38,4*k,6*k,'#333')}
+  if(o.t==='lamp'){R(sx+w/2-3*k,y-h*.75,6*k,h*.75,'#555');E(sx+w/2,y-2*k,w/2,5*k,'#444');ctx.fillStyle=c;ctx.beginPath();ctx.moveTo(sx,y-h*.72);ctx.lineTo(sx+w,y-h*.72);ctx.lineTo(sx+w*.78,y-h);ctx.lineTo(sx+w*.22,y-h);ctx.fill()}
+  if(o.t==='fridge'){RR(sx,y-h,w,h,8*k,'#ecf0f1');R(sx,y-h*.62,w,3*k,'#bdc3c7');R(sx+w-12*k,y-h*.9,4*k,h*.2,'#95a5a6');R(sx+w-12*k,y-h*.5,4*k,h*.25,'#95a5a6');E(sx+16*k,y-h*.85,5*k,5*k,c)}
+  if(o.t==='plant'){RR(sx+w*.15,y-h*.4,w*.7,h*.4,4*k,'#d35400');for(let i=0;i<5;i++)E(sx+w/2+(i-2)*8*k,y-h*.55-Math.abs(i-2)*-6*k-10*k,7*k,16*k,'#27ae60')}
+  if(o.t==='shelf'){R(sx,y-h,w,h,'#8d5a3b');for(let r=0;r<3;r++){R(sx+5*k,y-h+8*k+r*h/3,w-10*k,h/3-12*k,'#5d3a1f');for(let b=0;b<5;b++)R(sx+8*k+b*12*k,y-h+14*k+r*h/3,9*k,h/3-18*k,COLORS[(b+r)%7])}}
+  if(o.t==='table'){R(sx,y-h,w,8*k,'#8d5a3b');R(sx+6*k,y-h,7*k,h,'#6d4c41');R(sx+w-13*k,y-h,7*k,h,'#6d4c41');RR(sx+w/2-9*k,y-h-26*k,18*k,26*k,6*k,c);E(sx+w/2,y-h-32*k,10*k,8*k,'#ff7aa2')}
+  if(o.t==='clock'){RR(sx,y-h,w,h,6*k,'#6d4c41');E(sx+w/2,y-h+22*k,15*k,15*k,'#fffbe6');ctx.strokeStyle='#333';ctx.lineWidth=2*k;ctx.beginPath();ctx.moveTo(sx+w/2,y-h+22*k);ctx.lineTo(sx+w/2,y-h+12*k);ctx.moveTo(sx+w/2,y-h+22*k);ctx.lineTo(sx+w/2+8*k,y-h+22*k);ctx.stroke();E(sx+w/2,y-h*.4+Math.sin(performance.now()/300)*0,7*k,7*k,'#f1c40f')}
+}
+function drawPerson(x,y,s,o){   // Grandma (pink dress, grey buns) or Grandpa (cardigan, cup of tea)
+  const k=K*s, t=o.run||0, sw=Math.sin(t)*.7;
+  ctx.save();ctx.translate(x,y);if(o.dir<0)ctx.scale(-1,1);
+  for(const side of [-1,1]){ctx.save();ctx.translate(side*6*k,-30*k);ctx.rotate(side*sw);R(-4*k,0,8*k,28*k,'#f5d0b0');RR(-5*k,24*k,13*k,7*k,3*k,o.grandpa?'#4e342e':'#8e44ad');ctx.restore()}
+  if(o.grandpa){RR(-14*k,-70*k,28*k,42*k,8*k,'#7e9b6f');R(-3*k,-68*k,6*k,38*k,'#5d7a50')}
+  else{ctx.fillStyle=o.mega?'#ff2d95':'#ff8fc4';ctx.beginPath();ctx.moveTo(-12*k,-68*k);ctx.lineTo(12*k,-68*k);ctx.lineTo(20*k,-28*k);ctx.lineTo(-20*k,-28*k);ctx.fill();R(-12*k,-46*k,24*k,4*k,'#fff')}
+  // arms: Grandma's fly about, Grandpa holds out his tea
+  if(o.grandpa){R(4*k,-62*k,22*k,6*k,'#7e9b6f');emoji('☕',30*k,-62*k,20*k)}
+  else for(const side of [-1,1]){ctx.save();ctx.translate(side*11*k,-64*k);ctx.rotate(side*(2.6+Math.sin(t*1.3+side)*.45));R(-3*k,0,6*k,22*k,'#f5d0b0');ctx.restore()}
+  const hy=-86*k;
+  if(!o.grandpa){E(-12*k,hy-14*k,9*k,9*k,'#bdbdbd');E(12*k,hy-14*k,9*k,9*k,'#bdbdbd')}
+  E(0,hy,17*k,17*k,'#f5d0b0');
+  ctx.fillStyle='#bdbdbd';ctx.beginPath();ctx.arc(0,hy-2*k,18*k,Math.PI*1.05,Math.PI*1.95);ctx.fill();
+  ctx.strokeStyle='#333';ctx.lineWidth=1.6*k;
+  for(const side of [-1,1]){ctx.beginPath();ctx.arc(side*6*k+3*k,hy+1*k,5*k,0,Math.PI*2);ctx.stroke()}
+  E(side0(3),hy+1*k,1.8*k,1.8*k,'#333');E(side0(15),hy+1*k,1.8*k,1.8*k,'#333');
+  if(o.mega||!o.grandpa){ctx.beginPath();ctx.arc(5*k,hy+8*k,5*k,0,Math.PI);ctx.fillStyle='#8a3b2a';ctx.fill()}
+  else{ctx.beginPath();ctx.arc(4*k,hy+7*k,4*k,.2,Math.PI-.2);ctx.stroke()}
+  if(o.grandpa)R(-6*k,hy+10*k,22*k,4*k,'#bdbdbd');   // mustache
+  ctx.restore();
+  function side0(v){return v*k-6*k}
+}
+function drawCat(sx,o,T){
+  const k=K, y=GY, b=Math.abs(Math.sin(T*6+o.ph))*3*k;
+  E(sx+26*k,y-16*k-b,24*k,14*k,'#f39c12');E(sx+6*k,y-30*k-b,13*k,12*k,'#f39c12');
+  ctx.fillStyle='#f39c12';ctx.beginPath();ctx.moveTo(sx-4*k,y-38*k-b);ctx.lineTo(sx,y-50*k-b);ctx.lineTo(sx+6*k,y-40*k-b);ctx.moveTo(sx+8*k,y-40*k-b);ctx.lineTo(sx+14*k,y-50*k-b);ctx.lineTo(sx+17*k,y-36*k-b);ctx.fill();
+  E(sx+2*k,y-31*k-b,2*k,2.5*k,'#222');E(sx+10*k,y-31*k-b,2*k,2.5*k,'#222');
+  ctx.strokeStyle='#f39c12';ctx.lineWidth=5*k;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(sx+48*k,y-18*k-b);ctx.quadraticCurveTo(sx+66*k,y-30*k,sx+58*k,y-48*k+Math.sin(T*5)*6*k);ctx.stroke();ctx.lineCap='butt';
+  for(const lx of [10,20,34,44])R(sx+lx*k,y-8*k,5*k,8*k,'#e67e22');
+}
+const objY=o=>GY-(o.y||0)*K;   // cookies and cake float above the floor
+function hudBar(){
+  R(0,0,W,52,'rgba(60,20,50,.75)');
+  ctx.fillStyle='#fff';ctx.font='bold 20px system-ui';ctx.textAlign='left';ctx.fillText(score.toLocaleString(),14,33);
+  const bw=Math.min(220,W*.4), bx=W/2-bw/2;
+  RR(bx,13,bw,26,13,'#2a1030');RR(bx+3,16,(bw-6)*Math.max(0,sugar)/100,20,10,sugar>50?'#ffb347':sugar>25?'#ff7f50':'#ff3b3b');
+  emoji('🍪',bx-16,26,22);
+  ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.fillStyle='#fff';ctx.fillText('SUGAR',W/2,31);
+  if(combo>=3){ctx.textAlign='right';ctx.fillStyle='#ffd166';ctx.font='bold 18px system-ui';ctx.fillText('x'+mult()+' COMBO',W-14,33)}
+  if(mega>0){ctx.textAlign='center';ctx.fillStyle='#ff2d95';ctx.font=`bold ${Math.min(34,W/14)}px system-ui`;ctx.fillText('🎂 MEGA RAMPAGE! 🎂',W/2,92)}
+}
+const mult=()=>Math.min(5,1+Math.floor(combo/3));
+
+// ── Game loop ─────────────────────────────────────────────────────────────────
+function burst(x,y,colors,n){for(let i=0;i<n;i++)parts.push({x,y,vx:(Math.random()-.5)*500*K,vy:-(200+Math.random()*420)*K,s:(6+Math.random()*12)*K,c:colors[i%colors.length],r:Math.random()*6,vr:(Math.random()-.5)*14,life:1.3})}
+function pop(txt,x,y,c='#fff'){pops.push({txt,x,y,c,life:1.1})}
+function jump(){
+  if(state!=='play')return;
+  if(gran.jumps<2){gran.vy=-(gran.jumps?720:860)*K;gran.air=true;gran.jumps++;tone(gran.jumps>1?880:600,.12,'square',.04)}
+}
+function update(dt,T){
+  speed=Math.min(620,speed+7*dt);
+  const v=speed*K*(mega>0?1.25:1);
+  camX+=v*dt;dist+=v*dt/K;
+  sugar-=(5+speed/120)*dt;
+  if(mega>0)mega-=dt;
+  if(hurt>0)hurt-=dt;
+  if(shake>0)shake-=dt*3;
+  if((comboT-=dt)<=0)combo=0;
+  gran.run+=dt*(speed/22);
+  gran.vy+=2300*K*dt;gran.y+=gran.vy*dt;
+  if(gran.y>=0){gran.y=0;gran.vy=0;gran.air=false;gran.jumps=0}
+  spawn();
+  const s=mega>0?1.6:1, gx=camX+W*.28, gw=34*K*s, gh=100*K*s, gb=GY+gran.y, gt=gb-gh;
+  for(const o of objs){
+    if(o.done)continue;
+    if(o.t==='tea')o.x+=o.vx*K*dt;
+    const ox=o.x, ow=o.w*K, oy=objY(o), oh=o.h*K;
+    if(gx+gw/2<ox||gx-gw/2>ox+ow||gb<oy-oh||gt>oy)continue;
+    const sx=ox-camX+ow/2;
+    if(o.furn){
+      o.done=true;combo++;comboT=2.5;const p=FURN[o.t].pts*mult()*(mega>0?2:1);score+=p;shake=Math.min(1,shake+.5);
+      burst(sx,oy-oh/2,[o.c||'#888','#8d5a3b','#fff','#bdc3c7'],14);pop('+'+p,sx,oy-oh-10,'#ffd166');
+      tone(120+Math.random()*80,.18,'sawtooth',.06);tone(70,.25,'square',.05,.05);
+      if(combo===3||combo===6||combo===9||combo===12)pop('COMBO x'+mult()+'!',W/2,H*.3,'#ff6fae');
+    }else if(o.t==='cookie'){o.done=true;sugar=Math.min(100,sugar+9);score+=10;pop('🍪',sx,oy-40*K);tone(1200,.06,'triangle',.06);tone(1600,.08,'triangle',.06,.06)}
+    else if(o.t==='cake'){o.done=true;mega=6;sugar=100;pop('🎂 MEGA!',sx,oy-60*K,'#ff2d95');[523,659,784,1047].forEach((f,i)=>tone(f,.15,'square',.05,i*.08))}
+    else if(mega>0){   // MEGA Grandma just bowls them over
+      o.done=true;o.fly=1;score+=100;pop('+100 WHEEE!',sx,oy-oh-10,'#ffd166');burst(sx,oy-oh/2,['#fff','#ffd166'],8);tone(300,.2,'sawtooth',.05)
+    }else if(hurt<=0){
+      hurt=1.2;combo=0;sugar-=o.t==='tea'?30:20;shake=1;o.over=true;
+      pop(o.t==='tea'?'☕ "Calm down, dear!"':'😾 MEOW!',sx,oy-oh-20,'#fff');
+      tone(200,.3,'sawtooth',.06);tone(140,.4,'sawtooth',.06,.15);
+    }
+  }
+  for(const o of objs)if(!o.done&&(o.t==='cat'||o.t==='tea')&&!o.over&&o.x+o.w*K<gx-gw/2&&hurt<=0){o.over=true;score+=25;pop('Jumped it! +25',o.x-camX,objY(o)-o.h*K-20,'#9fe8ff')}
+  objs=objs.filter(o=>o.x>camX-400*K&&!(o.done&&!o.fly));
+  for(const p of parts){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=1400*K*dt;p.r+=p.vr*dt;p.life-=dt}
+  parts=parts.filter(p=>p.life>0&&p.y<H+40);
+  for(const p of pops){p.y-=50*dt;p.life-=dt}
+  pops=pops.filter(p=>p.life>0);
+  if(sugar<=0){sugar=0;gameOver()}
+}
+function draw(T){
+  ctx.save();
+  if(shake>0)ctx.translate(Math.sin(T*70)*shake*6,Math.cos(T*55)*shake*4);
+  drawRooms();
+  for(const o of objs){
+    const sx=o.x-camX, y=objY(o);
+    if(sx>W+200||sx<-300)continue;
+    if(o.fly){ctx.save();ctx.translate(sx+o.w*K/2,y-o.h*K/2-(1-o.fly)*0);o.fly+=.016;ctx.translate(0,-o.fly*260*K+260*K);ctx.rotate(o.fly*8);ctx.translate(-(sx+o.w*K/2),-(y-o.h*K/2))}
+    if(o.furn)drawFurn(o,sx);
+    else if(o.t==='cookie')emoji('🍪',sx+15*K,y-15*K+Math.sin(T*4+o.x)*3,28*K);
+    else if(o.t==='cake'){ctx.globalAlpha=.4+.3*Math.sin(T*6);E(sx+20*K,y-20*K,34*K,34*K,'#fff6a8');ctx.globalAlpha=1;emoji('🎂',sx+20*K,y-20*K,36*K)}
+    else if(o.t==='cat')drawCat(sx,o,T);
+    else if(o.t==='tea')drawPerson(sx+22*K,GY,1,{grandpa:true,dir:-1,run:T*5});
+    if(o.fly)ctx.restore();
+  }
+  if(!(hurt>0&&(T*14|0)%2)){
+    const s=mega>0?1.6:1, gx=W*.28;
+    if(mega>0){ctx.globalAlpha=.35;E(gx,GY+gran.y-60*K*s,70*K*s,80*K*s,'#ff6fae');ctx.globalAlpha=1}
+    for(let i=1;i<4&&!gran.air;i++){ctx.globalAlpha=.15*i;R(gx-60*K-i*14*K,GY-60*K+i*12*K,30*K,3*K,'#fff')}ctx.globalAlpha=1;
+    drawPerson(gx,GY+gran.y,s,{run:gran.air?2:gran.run,mega:mega>0});
+  }
+  for(const p of parts){ctx.save();ctx.globalAlpha=Math.min(1,p.life*2);ctx.translate(p.x,p.y);ctx.rotate(p.r);R(-p.s/2,-p.s/3,p.s,p.s*.66,p.c);ctx.restore()}
+  ctx.globalAlpha=1;
+  ctx.restore();
+  for(const p of pops){ctx.globalAlpha=Math.min(1,p.life*2);ctx.fillStyle=p.c;ctx.font=`bold ${Math.round(20*K)}px system-ui`;ctx.textAlign='center';ctx.strokeStyle='rgba(60,20,50,.8)';ctx.lineWidth=4;ctx.strokeText(p.txt,p.x,p.y);ctx.fillText(p.txt,p.x,p.y)}
+  ctx.globalAlpha=1;
+  hudBar();
+  if(sugar<25&&(T*4|0)%2){ctx.fillStyle='#ff3b3b';ctx.font='bold 16px system-ui';ctx.textAlign='center';ctx.fillText('Eat cookies! 🍪 Grandma is getting sleepy…',W/2,H*.2)}
+}
+function drawMenu(T){
+  if(!objs){objs=[];camX=0}
+  camX+=40*(1/60);drawRooms();
+  ctx.fillStyle='rgba(60,20,50,.55)';ctx.fillRect(0,0,W,H);
+  drawPerson(W/2,H*.62,1.4,{run:T*10});
+  ctx.textAlign='center';ctx.fillStyle='#fff';ctx.font=`bold ${Math.min(54,W/9)}px system-ui`;ctx.fillText('COOKIE RAMPAGE',W/2,H*.15);
+  ctx.font=`${Math.min(17,W/26)}px system-ui`;ctx.fillStyle='#ffd6e8';
+  const lines=['Grandma ate ALL the cookies! 🍪 Smash the furniture for points.','Eat cookies to keep her sugar up — at zero she falls asleep 😴','Jump over the cat 🐈 and Grandpa\'s cup of tea ☕ (they calm her down)','Grab a cake 🎂 for a MEGA RAMPAGE!  ·  Space / ↑ / tap to jump — twice for a double jump'];
+  lines.forEach((l,i)=>ctx.fillText(l,W/2,H*.23+i*24,W-24));
+  if(best){ctx.fillStyle='#ffd166';ctx.fillText('Best this time: '+best.toLocaleString(),W/2,H*.23+4*24+6)}
+  ctx.font='bold 22px system-ui';ctx.fillStyle=(T*2|0)%2?'#fff':'#ffd166';ctx.fillText('TAP OR PRESS SPACE TO START',W/2,H*.9);
+}
+function gameOver(){
+  state='over';best=Math.max(best,score);document.getElementById('jump').style.display='none';
+  tone(400,.3,'triangle',.06);tone(300,.3,'triangle',.06,.25);tone(200,.6,'triangle',.06,.5);
+  setTimeout(()=>showLB(score),1600);
+}
+function drawOver(T){
+  draw(T);
+  ctx.fillStyle='rgba(60,20,50,.6)';ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';ctx.fillStyle='#fff';ctx.font=`bold ${Math.min(44,W/12)}px system-ui`;ctx.fillText('Grandma fell asleep 😴',W/2,H*.4);
+  emoji('💤',W*.28+30*K+Math.sin(T*2)*6,GY-140*K-(T*20%40),30*K);
+  ctx.font='bold 26px system-ui';ctx.fillStyle='#ffd166';ctx.fillText(score.toLocaleString()+' points',W/2,H*.4+46);
+}
+let last=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  const dt=Math.min(.05,(ts-last)/1000);last=ts;const T=ts/1000;
+  if(state==='menu')return drawMenu(T);
+  if(state==='over')return drawOver(T);
+  update(dt,T);draw(T);
+}
+requestAnimationFrame(loop);
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+const lbOpen=()=>document.getElementById('lb-overlay').style.display!=='none';
+addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT')return;
+  if([' ','ArrowUp','w','W','Enter'].includes(e.key)){
+    e.preventDefault();
+    if(lbOpen())return;
+    if(state==='play')jump();else if(state==='menu')startGame();
+  }
+});
+cv.addEventListener('pointerdown',e=>{e.preventDefault();if(lbOpen())return;if(state==='play')jump();else if(state==='menu')startGame()});
+document.getElementById('jump').addEventListener('pointerdown',e=>{e.preventDefault();jump()});
+
+// ── Leaderboard ───────────────────────────────────────────────────────────────
+const LB_GAME='cookie-rampage';
+let _lbScore=0;
+function showLB(s){
+  _lbScore=s;
+  document.getElementById('lb-score').textContent=s.toLocaleString()+' points';
+  document.getElementById('lb-form').style.display='flex';
+  document.getElementById('lb-name').value='';
+  document.getElementById('lb-overlay').style.display='flex';
+  fetch('/scores/'+LB_GAME).then(r=>r.json()).then(list=>lbRender(list,false)).catch(()=>lbRender([],false));
+}
+function lbRender(list,done){
+  const el=document.getElementById('lb-rows');
+  if(!list.length){el.innerHTML='<div style="color:#b78;padding:8px 0;font-size:.85rem">No scores yet — be first!</div>';return}
+  el.innerHTML=list.slice(0,10).map((s,i)=>{
+    const hi=done&&s.score===_lbScore;
+    return `<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid #4a2040;font-size:.9rem">
+      <span style="color:#b78;width:22px">${i+1}.</span>
+      <span style="flex:1;color:${hi?'#ffd166':'#f3d6e6'}">${s.name}</span>
+      <span style="color:${hi?'#ffd166':'#ff8fc4'}">${s.score.toLocaleString()}</span></div>`;
+  }).join('');
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  document.getElementById('lb-btn').addEventListener('click',()=>{
+    const name=(document.getElementById('lb-name').value.trim().toUpperCase()||'ANON').slice(0,12);
+    fetch('/scores/'+LB_GAME,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,score:_lbScore})})
+      .then(r=>r.json()).then(list=>{lbRender(list,true);document.getElementById('lb-form').style.display='none'})
+      .catch(()=>document.getElementById('lb-form').style.display='none');
+  });
+  document.getElementById('lb-name').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('lb-btn').click()});
+  document.getElementById('lb-again').addEventListener('click',()=>{document.getElementById('lb-overlay').style.display='none';startGame()});
+});
+</script>
+
+<div id="lb-overlay" style="position:fixed;inset:0;z-index:100;background:rgba(40,10,35,.88);display:none;align-items:center;justify-content:center">
+  <div style="background:#2a1030;border:2px solid #ff8fc4;border-radius:14px;padding:24px 28px;min-width:280px;max-width:90vw;font-family:system-ui,sans-serif">
+    <div style="color:#ff8fc4;font-size:1.1rem;font-weight:bold;text-align:center;margin-bottom:6px">👵 COOKIE RAMPAGE 🍪</div>
+    <div id="lb-score" style="color:#fff;font-size:1.3rem;font-weight:bold;margin-bottom:14px;text-align:center"></div>
+    <div id="lb-rows" style="margin-bottom:14px;text-align:left;min-height:40px"></div>
+    <div id="lb-form" style="display:flex;gap:8px;margin-bottom:14px">
+      <input id="lb-name" maxlength="12" placeholder="YOUR NAME" autocomplete="off" spellcheck="false"
+        style="flex:1;background:rgba(255,143,196,.1);border:1px solid #ff8fc4;color:#ffd6e8;padding:8px;border-radius:6px;font-size:.95rem;outline:none">
+      <button id="lb-btn" style="background:rgba(255,143,196,.2);border:1px solid #ff8fc4;color:#ffd6e8;padding:8px 12px;border-radius:6px;font-size:.9rem;cursor:pointer;font-weight:bold">OK</button>
+    </div>
+    <div id="lb-again" style="color:#ffd166;font-size:.95rem;cursor:pointer;padding:6px;text-align:center;font-weight:bold">▶ RAMPAGE AGAIN</div>
+  </div>
+</div>
+</body>
+</html>
