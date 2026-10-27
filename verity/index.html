@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Verity</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#3f8f3a;touch-action:none}
+canvas{display:block}
+#kick{position:fixed;right:18px;bottom:20px;width:84px;height:84px;border-radius:50%;display:none;align-items:center;justify-content:center;
+  font:bold 15px system-ui;color:#fff;background:rgba(160,30,30,.45);border:3px solid rgba(255,255,255,.55);flex-direction:column;
+  touch-action:none;user-select:none;-webkit-user-select:none}
+#kick b{font-size:30px;line-height:1}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="kick"><b>🦶</b>Kick</div>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+let W,H;
+function resize(){
+  const d=devicePixelRatio||1;W=innerWidth;H=innerHeight;
+  cv.width=W*d;cv.height=H*d;cv.style.width=W+'px';cv.style.height=H+'px';ctx.setTransform(d,0,0,d,0,0);
+}
+addEventListener('resize',resize);resize();
+const R=(x,y,w,h,c)=>{ctx.fillStyle=c;ctx.fillRect(x,y,w,h)};
+const E=(x,y,rx,ry,c)=>{ctx.fillStyle=c;ctx.beginPath();ctx.ellipse(x,y,Math.abs(rx),Math.abs(ry),0,0,Math.PI*2);ctx.fill()};
+function RR(x,y,w,h,r,c){ctx.fillStyle=c;ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill()}
+function emoji(t,x,y,size){ctx.font=size+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,x,y);ctx.textBaseline='alphabetic'}
+function tone(f,d,type='square',v=.05,delay=0){
+  try{
+    const a=tone.ac||(tone.ac=new (window.AudioContext||window.webkitAudioContext)()),t=a.currentTime+delay;
+    const o=a.createOscillator(),g=a.createGain();o.type=type;o.frequency.value=f;
+    g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+d);
+    o.connect(g).connect(a.destination);o.start(t);o.stop(t+d);
+  }catch(e){}
+}
+const rnd=(a,b)=>a+Math.random()*(b-a), pick=a=>a[Math.random()*a.length|0];
+
+// ── The world: a blocky grid with trees, a pond and some stone ────────────────
+const TS=48, MW=46, MH=34;   // tile size, map width and height in tiles
+let map;   // 0 grass, 1 tree, 2 water, 3 stone (minable, blocks the way until mined)
+function makeMap(){
+  map=[];
+  for(let y=0;y<MH;y++){map.push([]);for(let x=0;x<MW;x++){
+    const edge=x<1||y<1||x>=MW-1||y>=MH-1;
+    map[y].push(edge?1:Math.random()<.07?1:0);
+  }}
+  const px=rnd(8,MW-8)|0, py=rnd(6,MH-6)|0;   // a pond somewhere
+  for(let y=py-4;y<=py+4;y++)for(let x=px-6;x<=px+6;x++)if(((x-px)/6)**2+((y-py)/4)**2<1&&map[y]&&map[y][x]!=null)map[y][x]=2;
+  for(let y=MH/2-3;y<=MH/2+3;y++)for(let x=MW/2-3;x<=MW/2+3;x++)map[y][x]=0;   // a clear spot to start
+}
+const tile=(x,y)=>(map[y|0]&&map[y|0][x|0])??1;
+const solid=(wx,wy)=>{const t=tile(wx/TS,wy/TS);return t===1||t===2||t===3};
+function freeSpot(minDist=0,from=null){
+  for(let n=0;n<500;n++){
+    const x=(rnd(2,MW-2)|0)*TS+TS/2, y=(rnd(2,MH-2)|0)*TS+TS/2;
+    if(tile(x/TS,y/TS)!==0)continue;
+    if(from&&Math.hypot(x-from.x,y-from.y)<minDist)continue;
+    return {x,y};
+  }
+  return {x:MW*TS/2,y:MH*TS/2};
+}
+
+// ── Verity's jobs and presents ────────────────────────────────────────────────
+const JOBS=[
+  {id:'apples',short:'Apples 🍎',txt:'Collect 5 apples for me! 🍎',need:5,thing:'🍎'},
+  {id:'flowers',short:'Flowers 🌸',txt:'Pick 6 flowers, please! 🌸',need:6,thing:'🌸'},
+  {id:'carrots',short:'Carrots 🥕',txt:'Find 3 carrots and feed the pig! 🥕🐷',need:3,thing:'🥕',then:'pig'},
+  {id:'kitten',short:'Find the kitten 🐱',txt:'My kitten is lost! Find her! 🐱',need:1,thing:'🐱'},
+  {id:'torches',short:'Torches lit 🔥',txt:'Light the 4 torches! 🔥',need:4,thing:'torch'},
+  {id:'stone',short:'Stone mined ⛏️',txt:'Mine 4 stone blocks! ⛏️',need:4,thing:'stone'},
+  {id:'eggs',short:'Eggs 🥚',txt:'Gather 4 eggs from the chickens! 🥚',need:4,thing:'🥚'},
+];
+const PRESENTS=['💎 a diamond','🗡️ a sword','🎂 a cake','🛡️ a shield','🏹 a bow','🧭 a compass','🍪 a cookie','👑 a crown','🪄 a magic wand','🧸 a teddy bear','🍉 a melon','⭐ a gold star'];
+const JOB_TIME=70;
+
+let state='menu', P, V, job, things, critters, hearts, gifts, score, mood, parts, msg, uh, keysDown={}, touch=null, bumpCd=0, best=0, T0=0;
+function startGame(){
+  makeMap();
+  P={x:MW*TS/2,y:MH*TS/2+30,dir:1,walk:0,moving:false};
+  V={x:P.x+90,y:P.y-40,roll:0,say:{t:'Hi! I\'m Verity! 😊 I\'ll give you jobs — and presents!',life:4},angry:0,size:1,hop:0};
+  critters=[];
+  for(let i=0;i<4;i++){const s=freeSpot(250,P);critters.push({k:'villager',x:s.x,y:s.y,vx:0,vy:0,c:pick(['#8d5a3b','#5d4037','#a1887f']),robe:pick(['#6a4c93','#2e7d32','#1565c0','#c62828'])})}
+  for(const k of ['pig','cow','chicken','chicken','chicken','pig']){const s=freeSpot(200,P);critters.push({k,x:s.x,y:s.y,vx:0,vy:0})}
+  things=[];hearts=[];gifts=[];parts=[];score=0;mood=3;msg=null;uh=null;bumpCd=0;job=null;
+  setTimeout(()=>{if(state==='play'&&!job&&!uh)newJob()},3500);
+  state='play';
+  document.getElementById('kick').style.display='flex';
+  tone(523,.12,'triangle',.06);tone(784,.18,'triangle',.06,.12);
+}
+function newJob(){
+  const j=pick(JOBS.filter(j=>!job||j.id!==job.id));
+  job={...j,have:0,time:JOB_TIME,fed:false};
+  things=[];
+  const far=()=>freeSpot(260,P);
+  if(['apples','flowers','carrots','eggs'].includes(j.id))for(let i=0;i<j.need+1;i++){const s=far();things.push({kind:'pick',e:j.thing,x:s.x,y:s.y})}
+  if(j.id==='kitten'){const s=freeSpot(700,P);things.push({kind:'pick',e:'🐱',x:s.x,y:s.y})}
+  if(j.id==='torches')for(let i=0;i<j.need;i++){const s=far();things.push({kind:'torch',x:s.x,y:s.y,lit:false})}
+  if(j.id==='stone')for(let i=0;i<j.need+1;i++){const s=far();map[s.y/TS|0][s.x/TS|0]=3;things.push({kind:'stone',x:s.x,y:s.y})}
+  vsay(j.txt,4.5);
+  tone(660,.1,'triangle',.06);tone(880,.12,'triangle',.06,.1);
+}
+function vsay(t,life=3){V.say={t,life}}
+function flash(t,life=2.2,c='#fff'){msg={t,life,c}}
+function burst(x,y,c,n=10){for(let i=0;i<n;i++)parts.push({x,y,vx:rnd(-120,120),vy:rnd(-160,40),life:rnd(.4,.9),c})}
+
+// being mean: bumping, kicking, or letting a job run out
+function mean(amount,why){
+  if(uh)return;
+  mood=Math.max(0,mood-amount);
+  if(mood<=0)return uhOh();
+  vsay(why,2.5);tone(300,.2,'triangle',.06);tone(240,.3,'triangle',.06,.18);
+}
+function uhOh(){
+  uh={t:0,hearts:0,caught:false};
+  vsay('uh-oh.',3);job=null;things=[];
+  for(const c of critters){const a=Math.atan2(c.y-P.y,c.x-P.x);c.vx=Math.cos(a)*200;c.vy=Math.sin(a)*200;c.hiding=true}
+  hearts=[];for(let i=0;i<3;i++){const s=freeSpot(420,P);hearts.push({x:s.x,y:s.y,got:false})}
+  tone(110,1.2,'sawtooth',.07);tone(82,1.6,'sawtooth',.07,.4);
+}
+function forgive(){
+  uh=null;mood=3;score+=50;
+  vsay('…okay. I forgive you. 😊 Let\'s be friends again!',4);flash('💛 Verity forgave you! +50',2.5,'#ffe066');
+  for(const c of critters){c.hiding=false;c.alpha=0}
+  [523,659,784,1047].forEach((f,i)=>tone(f,.18,'triangle',.06,i*.12));
+  setTimeout(()=>{if(state==='play'&&!uh&&!job)newJob()},3000);
+}
+function kick(){
+  if(state!=='play'||uh)return;
+  const d=Math.hypot(V.x-P.x,V.y-P.y);
+  if(d>110){flash('Verity is too far away to kick',1.5);return}
+  V.hop=1;tone(160,.15,'square',.07);
+  mood=0;uhOh();
+}
+
+// ── Update ────────────────────────────────────────────────────────────────────
+const SPEED=230;
+function move(o,dx,dy,r=14){
+  if(!solid(o.x+dx+Math.sign(dx)*r,o.y-r+2)&&!solid(o.x+dx+Math.sign(dx)*r,o.y+r-2))o.x+=dx;
+  if(!solid(o.x-r+2,o.y+dy+Math.sign(dy)*r)&&!solid(o.x+r-2,o.y+dy+Math.sign(dy)*r))o.y+=dy;
+}
+function update(dt,T){
+  // you
+  let mx=(keysDown.ArrowRight||keysDown.d||keysDown.D?1:0)-(keysDown.ArrowLeft||keysDown.a||keysDown.A?1:0);
+  let my=(keysDown.ArrowDown||keysDown.s||keysDown.S?1:0)-(keysDown.ArrowUp||keysDown.w||keysDown.W?1:0);
+  if(touch&&!mx&&!my){const [sx,sy]=toScreen(P.x,P.y), dx=touch.x-sx, dy=touch.y-sy, d=Math.hypot(dx,dy);if(d>18){mx=dx/d;my=dy/d}}
+  const ml=Math.hypot(mx,my);P.moving=ml>0;
+  if(ml){move(P,mx/ml*SPEED*dt,my/ml*SPEED*dt);P.walk+=dt*12;if(mx)P.dir=Math.sign(mx)}
+  if(bumpCd>0)bumpCd-=dt;
+  if(V.hop>0)V.hop-=dt*2;
+  if(V.say&&(V.say.life-=dt)<=0)V.say=null;
+  if(msg&&(msg.life-=dt)<=0)msg=null;
+  const dv=Math.hypot(V.x-P.x,V.y-P.y);
+  if(!uh){
+    // Verity rolls along nearby, keeping a friendly distance
+    if(dv>120){const k=Math.min(1,(dv-120)/80)*200*dt;V.x+=(P.x-V.x)/dv*k;V.y+=(P.y-V.y)/dv*k;V.roll+=k/22}
+    if(dv<38&&P.moving&&bumpCd<=0){
+      bumpCd=1.5;V.x+=(V.x-P.x)/dv*50;V.y+=(V.y-P.y)/dv*50;V.hop=1;
+      mean(1,pick(['Ouch! 😟 Please be gentle…','Hey! That hurt! 😟','Don\'t bump me! 😟']));
+    }
+    if(job){
+      job.time-=dt;
+      if(job.time<=0){job=null;things=[];mean(1,'You didn\'t do my job… 😟');if(!uh)setTimeout(()=>{if(state==='play'&&!job&&!uh)newJob()},2500)}
+    }
+    // doing the job
+    if(job)for(const t of things){
+      if(t.done)continue;
+      const d=Math.hypot(t.x-P.x,t.y-P.y);
+      if(t.kind==='pick'&&d<34){t.done=true;job.have++;burst(t.x,t.y,'#fff',6);tone(1200,.06,'triangle',.06);tone(1500,.08,'triangle',.06,.06)}
+      if(t.kind==='torch'&&!t.lit&&d<40){t.lit=true;job.have++;burst(t.x,t.y-20,'#ffb347',10);tone(500,.15,'sawtooth',.04)}
+      if(t.kind==='stone'&&d<52&&map[t.y/TS|0][t.x/TS|0]===3){map[t.y/TS|0][t.x/TS|0]=0;t.done=true;job.have++;burst(t.x,t.y,'#9e9e9e',14);tone(140,.12,'square',.07)}
+    }
+    if(job&&job.then==='pig'&&job.have>=job.need&&!job.fed){
+      const pig=critters.find(c=>c.k==='pig');
+      if(pig&&Math.hypot(pig.x-P.x,pig.y-P.y)<60){job.fed=true;burst(pig.x,pig.y-20,'#ff8fc4',8);tone(300,.1,'square',.05);tone(240,.1,'square',.05,.1)}
+    }
+    const ready=job&&job.have>=job.need&&(job.then!=='pig'||job.fed);
+    if(ready&&dv<110){   // hand it in for a present
+      const g=pick(PRESENTS);gifts.push(g.split(' ')[0]);score+=100;mood=Math.min(3,mood+1);
+      vsay('Thank you!! 😊 Here, take '+g+'!',3.5);flash('🎁 Verity gave you '+g+'!  +100',2.6,'#ffe066');
+      [784,988,1175].forEach((f,i)=>tone(f,.15,'triangle',.06,i*.1));
+      job=null;things=[];setTimeout(()=>{if(state==='play'&&!job&&!uh)newJob()},3000);
+    }else if(ready&&!V.say)vsay('You did it! Come here! 😊',2);
+  }else{
+    // uh-oh: Verity chases you, faster and faster, until you find the sorry hearts
+    uh.t+=dt;
+    if(uh.t>1.6){
+      const sp=(150+Math.min(110,uh.t*5))*dt;
+      V.x+=(P.x-V.x)/dv*sp;V.y+=(P.y-V.y)/dv*sp;V.roll+=sp/22;
+      if(dv<34&&!uh.caught){uh.caught=true;caught()}
+      if(Math.random()<dt*(dv<300?3:1.2))tone(dv<300?70:55,.15,'sine',.12);   // heartbeat
+    }
+    for(const h of hearts)if(!h.got&&Math.hypot(h.x-P.x,h.y-P.y)<36){
+      h.got=true;uh.hearts++;burst(h.x,h.y,'#ffe066',12);tone(880,.2,'triangle',.07);
+      if(uh.hearts<3)flash(`💛 Sorry heart ${uh.hearts}/3`,1.6,'#ffe066');else forgive();
+    }
+  }
+  // animals and villagers wander (and hide during an uh-oh)
+  for(const c of critters){
+    if(c.hiding){move(c,c.vx*dt,c.vy*dt,12);c.alpha=Math.max(0,(c.alpha??1)-dt);continue}
+    c.alpha=Math.min(1,(c.alpha??1)+dt);
+    if(Math.random()<dt*.6){const a=rnd(0,7),s=c.k==='chicken'?70:40;c.vx=Math.random()<.4?0:Math.cos(a)*s;c.vy=Math.random()<.4?0:Math.sin(a)*s}
+    move(c,c.vx*dt,c.vy*dt,12);if(c.vx)c.dir=Math.sign(c.vx);
+    c.walk=(c.walk||0)+(c.vx||c.vy?dt*10:0);
+  }
+  for(const p of parts){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=300*dt;p.life-=dt}
+  parts=parts.filter(p=>p.life>0);
+}
+function caught(){
+  state='over';document.getElementById('kick').style.display='none';
+  tone(90,1,'sawtooth',.08);tone(60,1.4,'sawtooth',.08,.3);
+  best=Math.max(best,score);
+  setTimeout(()=>showLB(score),2600);
+}
+
+// ── Drawing ───────────────────────────────────────────────────────────────────
+let cam={x:0,y:0,s:1};
+const toScreen=(x,y)=>[(x-cam.x)*cam.s+W/2,(y-cam.y)*cam.s+H/2];
+function drawTile(x,y,t,T){
+  const px=x*TS, py=y*TS, v=((x*7+y*13)%5);
+  if(t===2){R(px,py,TS,TS,'#3b8fd9');R(px+((T*20+y*9)%TS),py+12,14,3,'rgba(255,255,255,.35)');return}
+  R(px,py,TS,TS,['#5fb04b','#62b44e','#5aab47','#66b752','#5dae49'][v]);
+  if(v===0)R(px+10,py+14,4,4,'#4e9a3d');
+  if(t===3){R(px+2,py+2,TS-4,TS-4,'#8e8e8e');R(px+8,py+8,12,10,'#a5a5a5');R(px+26,py+24,14,12,'#777');R(px+12,py+30,8,6,'#6d6d6d')}
+}
+function drawTree(x,y){
+  const px=x*TS, py=y*TS;
+  R(px+18,py+26,12,22,'#7b5232');R(px+2,py-14,44,40,'#2f7d32');R(px+8,py-8,14,12,'#3d9440');R(px+26,py+4,12,10,'#256b28');
+}
+function drawSteve(x,y,T,s=1){   // you: a blocky player, seen from the front
+  const w=Math.sin(P.walk)*(P.moving?5:0);
+  ctx.save();ctx.translate(x,y);ctx.scale(s,s);
+  E(0,18,15,5,'rgba(0,0,0,.25)');
+  R(-9,4+0,8,14+w*.3,'#3b4cc0');R(1,4,8,14-w*.3,'#3b4cc0');
+  R(-11,-14,22,20,'#2fa3b5');R(-16,-13+w*.3,5,16,'#c99367');R(11,-13-w*.3,5,16,'#c99367');
+  R(-10,-34,20,20,'#c99367');R(-10,-34,20,7,'#4a2f1b');R(-10,-28,3,4,'#4a2f1b');R(7,-28,3,4,'#4a2f1b');
+  R(-6,-24,4,3,'#fff');R(2,-24,4,3,'#fff');R(-4+P.dir,-24,2,3,'#3b4cc0');R(4+P.dir,-24,2,3,'#3b4cc0');R(-3,-19,6,2,'#8a4b2f');
+  ctx.restore();
+}
+function drawVerity(T){
+  const angry=!!uh&&uh.t>.4, hop=Math.max(0,V.hop)*30*Math.sin(Math.max(0,V.hop)*Math.PI);
+  const r=angry?30:24, x=V.x+(angry?Math.sin(T*40)*1.5:0), y=V.y-hop;
+  E(V.x,V.y+r*.8,r*.9,r*.3,'rgba(0,0,0,.3)');
+  if(angry){ctx.globalAlpha=.35+.15*Math.sin(T*8);E(x,y,r*1.6,r*1.6,'#ff2a2a');ctx.globalAlpha=1}
+  const g=ctx.createRadialGradient(x-r*.35,y-r*.4,r*.1,x,y,r);
+  g.addColorStop(0,angry?'#ff8a80':'#fff59d');g.addColorStop(1,angry?'#c62828':'#fbc02d');
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle=angry?'#7f0000':'#c49000';ctx.lineWidth=2;ctx.stroke();
+  // face (rolls a little as it moves)
+  const fx=x+Math.sin(V.roll)*2;
+  if(angry){
+    E(fx-9,y-5,4.5,5.5,'#fff');E(fx+9,y-5,4.5,5.5,'#fff');E(fx-9,y-4,2.4,2.4,'#000');E(fx+9,y-4,2.4,2.4,'#000');
+    ctx.strokeStyle='#3b0000';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(fx-16,y-16);ctx.lineTo(fx-4,y-10);ctx.moveTo(fx+16,y-16);ctx.lineTo(fx+4,y-10);ctx.stroke();
+    ctx.beginPath();ctx.arc(fx,y+16,9,Math.PI*1.15,Math.PI*1.85);ctx.stroke();
+  }else{
+    const sad=mood<=1, blink=(T%3.5)<.12;
+    if(blink){R(fx-11,y-6,6,2,'#3e2a00');R(fx+5,y-6,6,2,'#3e2a00')}else{E(fx-8,y-6,3,4,'#3e2a00');E(fx+8,y-6,3,4,'#3e2a00')}
+    ctx.strokeStyle='#3e2a00';ctx.lineWidth=2.5;ctx.beginPath();
+    if(sad)ctx.arc(fx,y+12,7,Math.PI*1.15,Math.PI*1.85);else ctx.arc(fx,y+2,10,Math.PI*.15,Math.PI*.85);
+    ctx.stroke();
+    E(fx-14,y+4,4,2.5,'rgba(255,120,80,.35)');E(fx+14,y+4,4,2.5,'rgba(255,120,80,.35)');
+  }
+}
+function drawCritter(c,T){
+  ctx.globalAlpha=c.alpha??1;
+  const x=c.x,y=c.y,b=Math.abs(Math.sin(c.walk||0))*2;
+  if(c.k==='villager'){
+    E(x,y+18,13,5,'rgba(0,0,0,.25)');R(x-10,y-12-b,20,30,c.robe);R(x-9,y-32-b,18,20,c.c);R(x-2,y-24-b,4,8,'#6d4c41');R(x-6,y-26-b,4,3,'#fff');R(x+2,y-26-b,4,3,'#fff');R(x-5,y-26-b,2,3,'#2e7d32');R(x+3,y-26-b,2,3,'#2e7d32');
+  }else if(c.k==='pig'){E(x,y+12,18,5,'rgba(0,0,0,.25)');R(x-16,y-10-b,32,20,'#f8a5c2');R(x+(c.dir<0?-24:12),y-12-b,12,14,'#f8a5c2');R(x+(c.dir<0?-26:20),y-8-b,6,6,'#e77fa6');for(const lx of [-12,-4,6,12])R(x+lx,y+8,4,6,'#e77fa6')}
+  else if(c.k==='cow'){E(x,y+14,22,6,'rgba(0,0,0,.25)');R(x-20,y-12-b,40,24,'#fff');R(x-10,y-10-b,10,8,'#333');R(x+6,y-2-b,8,8,'#333');R(x+(c.dir<0?-30:18),y-16-b,14,16,'#5d4037');for(const lx of [-16,-6,6,14])R(x+lx,y+10,5,8,'#5d4037')}
+  else{E(x,y+8,9,3,'rgba(0,0,0,.25)');R(x-7,y-8-b,14,14,'#fff');R(x+(c.dir<0?-10:5),y-12-b,6,6,'#fff');R(x+(c.dir<0?-13:10),y-10-b,4,3,'#f39c12');R(x-2,y-14-b,4,4,'#e53935')}
+  ctx.globalAlpha=1;
+}
+function bubble(txt,x,y){
+  ctx.font='bold 14px system-ui';const w=Math.min(ctx.measureText(txt).width+20,Math.min(320,W-20));
+  const bx=Math.max(10,Math.min(W-w-10,x-w/2));
+  RR(bx,y-34,w,28,12,'#fff');ctx.fillStyle='#fff';ctx.beginPath();ctx.moveTo(x-6,y-7);ctx.lineTo(x+6,y-7);ctx.lineTo(x,y+1);ctx.fill();
+  ctx.fillStyle='#333';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(txt,bx+w/2,y-20,w-12);ctx.textBaseline='alphabetic';
+}
+function draw(T){
+  cam.s=Math.max(.6,Math.min(1.2,Math.min(W,H)/620));
+  cam.x=Math.max(W/2/cam.s,Math.min(MW*TS-W/2/cam.s,P.x));cam.y=Math.max(H/2/cam.s,Math.min(MH*TS-H/2/cam.s,P.y));
+  R(0,0,W,H,'#2f7d32');
+  ctx.save();ctx.translate(W/2,H/2);ctx.scale(cam.s,cam.s);ctx.translate(-cam.x,-cam.y);
+  const x0=Math.max(0,(cam.x-W/2/cam.s)/TS-1|0), x1=Math.min(MW,(cam.x+W/2/cam.s)/TS+2|0), y0=Math.max(0,(cam.y-H/2/cam.s)/TS-1|0), y1=Math.min(MH,(cam.y+H/2/cam.s)/TS+2|0);
+  for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)drawTile(x,y,map[y][x],T);
+  for(const t of things){
+    if(t.done)continue;
+    if(t.kind==='pick')emoji(t.e,t.x,t.y+Math.sin(T*3+t.x)*3,30);
+    if(t.kind==='torch'){R(t.x-3,t.y-20,6,26,'#7b5232');if(t.lit){E(t.x,t.y-26,7+Math.sin(T*12)*1.5,10,'#ffb347');E(t.x,t.y-24,4,6,'#ffe066')}else R(t.x-4,t.y-24,8,6,'#333')}
+  }
+  if(uh)for(const h of hearts)if(!h.got){ctx.globalAlpha=.4+.2*Math.sin(T*5);E(h.x,h.y,30,30,'#ffe066');ctx.globalAlpha=1;emoji('💛',h.x,h.y+Math.sin(T*4)*3,32)}
+  // trees and everyone else, back to front
+  const list=[];
+  for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)if(map[y][x]===1)list.push({y:y*TS+TS,f:()=>drawTree(x,y)});
+  for(const c of critters)list.push({y:c.y+10,f:()=>drawCritter(c,T)});
+  list.push({y:P.y+16,f:()=>drawSteve(P.x,P.y,T)});
+  list.push({y:V.y+20,f:()=>drawVerity(T)});
+  list.sort((a,b)=>a.y-b.y).forEach(o=>o.f());
+  for(const p of parts){ctx.globalAlpha=Math.min(1,p.life*2);R(p.x-3,p.y-3,6,6,p.c)}
+  ctx.globalAlpha=1;
+  ctx.restore();
+  // uh-oh: dark all around, a little light around you
+  if(uh){
+    const [sx,sy]=toScreen(P.x,P.y), g=ctx.createRadialGradient(sx,sy,60*cam.s,sx,sy,Math.max(W,H)*.6);
+    g.addColorStop(0,'rgba(20,0,0,0)');g.addColorStop(.5,'rgba(25,0,0,.75)');g.addColorStop(1,'rgba(10,0,0,.95)');
+    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    const [vx,vy]=toScreen(V.x,V.y);   // Verity's eyes glow in the dark
+    E(vx-9*cam.s,vy-5*cam.s,4*cam.s,4*cam.s,'rgba(255,60,60,.9)');E(vx+9*cam.s,vy-5*cam.s,4*cam.s,4*cam.s,'rgba(255,60,60,.9)');
+    if(uh.t<1.4){   // the big face, just for a moment
+      const a=Math.min(1,uh.t*3)*(1-Math.max(0,uh.t-1)/.4);
+      ctx.globalAlpha=a;ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(0,0,W,H);
+      ctx.save();ctx.translate(W/2,H/2);ctx.scale(4,4);ctx.translate(-V.x,-V.y);drawVerity(T);ctx.restore();
+      ctx.fillStyle='#fff';ctx.font=`bold ${Math.min(60,W/8)}px Georgia,serif`;ctx.textAlign='center';ctx.fillText('uh-oh.',W/2,H*.85);
+      ctx.globalAlpha=1;
+    }
+  }
+  // speech
+  if(V.say){const [vx,vy]=toScreen(V.x,V.y-36);bubble(V.say.t,vx,vy)}
+  hud(T);
+}
+function hud(T){
+  RR(8,8,Math.min(W-16,420),uh?58:job?82:58,12,'rgba(20,20,30,.7)');
+  ctx.textAlign='left';ctx.fillStyle='#fff';ctx.font='bold 16px system-ui';
+  ctx.fillText('⭐ '+score,20,32);
+  ctx.fillText('Verity: '+(uh?'😡':['😡','😟','😐','😊'][mood]),110,32);
+  ctx.font='20px sans-serif';ctx.fillText(gifts.slice(-8).join(''),230,34);
+  ctx.font='bold 14px system-ui';
+  if(uh){ctx.fillStyle='#ff8a80';ctx.fillText(`RUN! Find the sorry hearts 💛 ${uh.hearts}/3`,20,56)}
+  else if(job){
+    const ready=job.have>=job.need&&(job.then!=='pig'||job.fed);
+    ctx.fillStyle=ready?'#9fe8a0':'#ffe9a8';
+    const txt=ready?'✅ Done! Go back to Verity':job.have>=job.need&&job.then==='pig'?'🥕 Now feed the pig! 🐷':`${job.short}  ${job.have}/${job.need}`;
+    ctx.fillText(txt,20,56,Math.min(W-40,400));
+    const bw=Math.min(W-40,400);R(20,66,bw,8,'#333');R(20,66,bw*Math.max(0,job.time)/JOB_TIME,8,job.time<15?'#ff5252':'#4caf50');
+  }else{ctx.fillStyle='#bbb';ctx.fillText('Stay close to Verity…',20,56)}
+  if(msg){ctx.globalAlpha=Math.min(1,msg.life*2);ctx.textAlign='center';ctx.font=`bold ${Math.min(26,W/16)}px system-ui`;ctx.strokeStyle='rgba(0,0,0,.7)';ctx.lineWidth=5;ctx.fillStyle=msg.c;ctx.strokeText(msg.t,W/2,H*.78,W-20);ctx.fillText(msg.t,W/2,H*.78,W-20);ctx.globalAlpha=1}
+}
+function drawMenu(T){
+  if(!map){makeMap();P={x:MW*TS/2,y:MH*TS/2,dir:1,walk:0};V={x:P.x,y:P.y-10,roll:0,hop:0};critters=[];things=[];hearts=[];parts=[];gifts=[];score=0;mood=3}
+  V.hop=(T%1.4)<.5?1-(T%1.4)*2:0;
+  draw(T);
+  ctx.fillStyle='rgba(10,10,20,.55)';ctx.fillRect(0,0,W,H);
+  ctx.save();ctx.translate(W/2,H*.4);ctx.scale(2.6,2.6);ctx.translate(-V.x,-V.y);drawVerity(T);ctx.restore();
+  ctx.textAlign='center';ctx.fillStyle='#ffe066';ctx.font=`bold ${Math.min(64,W/7)}px system-ui`;ctx.fillText('VERITY',W/2,H*.17);
+  ctx.font=`${Math.min(17,W/24)}px system-ui`;ctx.fillStyle='#eee';
+  ['Verity is a friendly ball. 😊 It gives you jobs — do them and get presents!','Be nice. If you bump it, kick it or ignore its jobs… uh-oh. 😡','Then run! Find the 3 sorry hearts 💛 before Verity catches you.','Arrow keys / WASD to walk — or hold your finger where you want to go']
+    .forEach((l,i)=>ctx.fillText(l,W/2,H*.6+i*24,W-24));
+  if(best)ctx.fillText('Best this time: '+best,W/2,H*.6+4*24+4);
+  ctx.font='bold 22px system-ui';ctx.fillStyle=(T*2|0)%2?'#fff':'#ffe066';ctx.fillText('TAP OR PRESS SPACE TO PLAY',W/2,H*.92);
+}
+function drawOver(T){
+  draw(T);
+  ctx.fillStyle='rgba(30,0,0,.75)';ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';ctx.fillStyle='#ff8a80';ctx.font=`bold ${Math.min(48,W/11)}px system-ui`;ctx.fillText('Verity kicked you out! 😡',W/2,H*.42);
+  ctx.fillStyle='#fff';ctx.font='bold 24px system-ui';ctx.fillText('⭐ '+score+'   '+gifts.join(''),W/2,H*.42+44,W-20);
+}
+let last=0;
+function loop(ts){
+  requestAnimationFrame(loop);
+  const dt=Math.min(.05,(ts-last)/1000);last=ts;const T=ts/1000;
+  if(state==='menu')return drawMenu(T);
+  if(state==='over')return drawOver(T);
+  update(dt,T);draw(T);
+}
+requestAnimationFrame(loop);
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+const lbOpen=()=>document.getElementById('lb-overlay').style.display!=='none';
+addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT')return;
+  keysDown[e.key]=true;
+  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' '].includes(e.key))e.preventDefault();
+  if(lbOpen())return;
+  if((e.key===' '||e.key==='Enter')&&state==='menu')startGame();
+  if((e.key==='k'||e.key==='K')&&state==='play')kick();
+});
+addEventListener('keyup',e=>{keysDown[e.key]=false});
+addEventListener('blur',()=>{for(const k in keysDown)keysDown[k]=false;touch=null});
+cv.addEventListener('pointerdown',e=>{e.preventDefault();if(lbOpen())return;if(state==='menu'){startGame();return}touch={x:e.clientX,y:e.clientY,id:e.pointerId}});
+cv.addEventListener('pointermove',e=>{if(touch&&touch.id===e.pointerId){touch.x=e.clientX;touch.y=e.clientY}});
+for(const ev of ['pointerup','pointercancel'])cv.addEventListener(ev,e=>{if(touch&&touch.id===e.pointerId)touch=null});
+document.getElementById('kick').addEventListener('pointerdown',e=>{e.preventDefault();kick()});
+
+// ── Leaderboard ───────────────────────────────────────────────────────────────
+const LB_GAME='verity';
+let _lbScore=0;
+function showLB(s){
+  _lbScore=s;
+  document.getElementById('lb-score').textContent=s+' points · '+gifts.length+' presents';
+  document.getElementById('lb-form').style.display='flex';
+  document.getElementById('lb-name').value='';
+  document.getElementById('lb-overlay').style.display='flex';
+  fetch('/scores/'+LB_GAME).then(r=>r.json()).then(list=>lbRender(list,false)).catch(()=>lbRender([],false));
+}
+function lbRender(list,done){
+  const el=document.getElementById('lb-rows');
+  if(!list.length){el.innerHTML='<div style="color:#998;padding:8px 0;font-size:.85rem">No scores yet — be first!</div>';return}
+  el.innerHTML=list.slice(0,10).map((s,i)=>{
+    const hi=done&&s.score===_lbScore;
+    return `<div style="display:flex;gap:8px;padding:4px 0;border-bottom:1px solid #443a10;font-size:.9rem">
+      <span style="color:#998;width:22px">${i+1}.</span>
+      <span style="flex:1;color:${hi?'#ffe066':'#eee'}">${s.name}</span>
+      <span style="color:${hi?'#ffe066':'#fbc02d'}">${s.score.toLocaleString()}</span></div>`;
+  }).join('');
+}
+document.addEventListener('DOMContentLoaded',()=>{   // the score box is below this script
+  document.getElementById('lb-btn').addEventListener('click',()=>{
+    const name=(document.getElementById('lb-name').value.trim().toUpperCase()||'ANON').slice(0,12);
+    fetch('/scores/'+LB_GAME,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,score:_lbScore})})
+      .then(r=>r.json()).then(list=>{lbRender(list,true);document.getElementById('lb-form').style.display='none'})
+      .catch(()=>document.getElementById('lb-form').style.display='none');
+  });
+  document.getElementById('lb-name').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('lb-btn').click()});
+  document.getElementById('lb-again').addEventListener('click',()=>{document.getElementById('lb-overlay').style.display='none';startGame()});
+});
+</script>
+
+<div id="lb-overlay" style="position:fixed;inset:0;z-index:100;background:rgba(20,10,0,.88);display:none;align-items:center;justify-content:center">
+  <div style="background:#2a2208;border:2px solid #fbc02d;border-radius:14px;padding:24px 28px;min-width:280px;max-width:90vw;font-family:system-ui,sans-serif">
+    <div style="color:#fbc02d;font-size:1.1rem;font-weight:bold;text-align:center;margin-bottom:6px">🟡 VERITY 😊</div>
+    <div id="lb-score" style="color:#fff;font-size:1.2rem;font-weight:bold;margin-bottom:14px;text-align:center"></div>
+    <div id="lb-rows" style="margin-bottom:14px;text-align:left;min-height:40px"></div>
+    <div id="lb-form" style="display:flex;gap:8px;margin-bottom:14px">
+      <input id="lb-name" maxlength="12" placeholder="YOUR NAME" autocomplete="off" spellcheck="false"
+        style="flex:1;background:rgba(251,192,45,.1);border:1px solid #fbc02d;color:#eee;padding:8px;border-radius:6px;font-size:.95rem;outline:none">
+      <button id="lb-btn" style="background:rgba(251,192,45,.2);border:1px solid #fbc02d;color:#eee;padding:8px 12px;border-radius:6px;font-size:.9rem;cursor:pointer;font-weight:bold">OK</button>
+    </div>
+    <div id="lb-again" style="color:#ffe066;font-size:.95rem;cursor:pointer;padding:6px;text-align:center;font-weight:bold">▶ PLAY AGAIN</div>
+  </div>
+</div>
+</body>
+</html>

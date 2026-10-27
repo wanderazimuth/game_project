@@ -31,6 +31,7 @@ GAMES = {
     "dream-house": ("dream-house", "Dream House", "Make your player, then design and decorate your own house"),
     "cookie-rampage": ("cookie-rampage", "Cookie Rampage", "Grandma ate all the cookies — smash through the house on a sugar rush"),
     "turbo-karts": ("turbo-karts", "Turbo Karts", "Kart race: 3 laps against Grandma, Captain Max and Dr. Lily"),
+    "verity": ("verity", "Verity", "A friendly ball gives you jobs and presents — but don't be mean to it…"),
 }
 
 # What makes the arcade an installable app: url_path -> (file in app/, content type).
