@@ -848,6 +848,7 @@ let inTot=false, tot=null;                                // trick-or-treating o
 let inEra=null, era=null;                                 // time travel: which era, and what's in it
 let inBeach=false, beach=null;                            // a day at the beach
 let rampageArmed=false;                                   // Build mode's 👵 Rampage! button was pressed
+let marriedTo={};                                         // made-up neighbors someone in the family married: id -> who
 const away=()=>inCity||inMine||inTot||inBeach||!!inEra;
 const PERSONAL=['look','name','tasks','coins','day','owned','night','car','hearts','heartDay','spouse','kids','spacePups','seasonOff','mailDay'];   // yours, wherever you are
 const myHouse=()=>visiting?{...visiting.home,...Object.fromEntries(PERSONAL.map(k=>[k,S[k]]))}:S;
@@ -869,7 +870,7 @@ function share(){
   shareTimer=setTimeout(()=>{
     shareTimer=0;
     const h=myHouse();
-    fetch('/houses/'+MY_ID,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:h.name,day:h.day,
+    fetch('/houses/'+MY_ID,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:h.name,day:h.day,spouse:h.spouse?h.spouse.id:null,
       house:{floors:h.floors,rooms:h.rooms,items:clean(h.items),roof:h.roof,side:h.side,look:h.look,name:h.name}})}).catch(()=>{});
   },3000);
 }
@@ -2141,16 +2142,21 @@ $('nbOpen').onclick=async()=>{
     d.appendChild(btns);nbList.appendChild(d);
   };
   nbList.innerHTML='';
+  let houses=null;   // family houses on the server; null when the arcade can't be reached
+  try{houses=(await (await fetch('/houses',{cache:'no-store'})).json()).filter(h=>h.id!==MY_ID)}catch(e){}
+  if(houses)marriedTo=Object.fromEntries(houses.filter(h=>h.spouse).map(h=>[h.spouse,h.name]));
   for(const n of MADE_UP){
     if(S.spouse&&S.spouse.id===n.id){row(n.emoji,n.name,'💍 Married to you — lives at your house');continue}
     const h=S.hearts[n.id]||0, hearts='❤️'.repeat(h)+'🤍'.repeat(5-h);
+    if(marriedTo[n.id]){row(n.emoji,n.name,`${hearts}  💍 Married to ${marriedTo[n.id]}`,()=>travel(n),()=>invite(n));continue}
     const canPropose=n.marry&&h>=5&&!S.spouse&&!visiting;
     row(n.emoji,n.name,hearts+'  '+n.blurb,()=>travel(n),()=>invite(n),canPropose?[['💍 Propose',()=>propose(n),' ring']]:null);
   }
   const note=Object.assign(document.createElement('div'),{className:'nbNote',textContent:'Looking for family houses…'});
   nbList.appendChild(note);
   try{
-    const list=(await (await fetch('/houses',{cache:'no-store'})).json()).filter(h=>h.id!==MY_ID).sort((a,b)=>b.updated-a.updated);
+    if(!houses)throw new Error('offline');
+    const list=houses.sort((a,b)=>b.updated-a.updated);
     note.textContent=list.length?'Family houses':'No family houses yet — everyone who plays Dream House shows up here.';
     const getHouse=async h=>(await fetch('/houses/'+h.id,{cache:'no-store'})).json();
     const oops=()=>toast("Couldn't reach that house — are you connected to the arcade?",3000);
@@ -2239,12 +2245,13 @@ function addHeart(id,kind){
   S.heartDay[id+kind]=S.day;S.hearts[id]=(S.hearts[id]||0)+1;save();
   const h=S.hearts[id];
   setTimeout(()=>toast(h<5?`❤️ You and ${n.name} are better friends!  ${'❤️'.repeat(h)}${'🤍'.repeat(5-h)}`
-    :n.marry&&!S.spouse?`💍 You and ${n.name} are best friends! You could propose in 🏘️ Neighbors…`:`❤️ You and ${n.name} are best friends!`,3500),1200);
+    :n.marry&&!S.spouse&&!marriedTo[n.id]?`💍 You and ${n.name} are best friends! You could propose in 🏘️ Neighbors…`:`❤️ You and ${n.name} are best friends!`,3500),1200);
 }
 // ── Marriage and kids ────────────────────────────────────────────────────────
 let wedding=null;   // {t, partner} while the wedding plays
 function propose(n){
   if(busy()||S.spouse)return;
+  if(marriedTo[n.id])return toast(`${n.name} is already married to ${marriedTo[n.id]} 💍`,3000);
   if(!confirm(`Ask ${n.name} to marry you? 💍`))return;
   nbEl.style.display='none';guests.length=0;
   wedding={t:0,partner:n};

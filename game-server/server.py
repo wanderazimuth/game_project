@@ -108,7 +108,7 @@ def _load_houses():
 
 def list_houses():
     with HOUSES_LOCK:
-        return [{"id": k, "name": v["name"], "day": v["day"], "updated": v["updated"]}
+        return [{"id": k, "name": v["name"], "day": v["day"], "updated": v["updated"], "spouse": v.get("spouse")}
                 for k, v in _load_houses().items()]
 
 def get_house(house_id):
@@ -122,11 +122,12 @@ def _save_houses(data):
         json.dump(data, f)
     os.replace(tmp, HOUSES_FILE)
 
-def save_house(house_id, name, day, house):
+def save_house(house_id, name, day, house, spouse=None):
     with HOUSES_LOCK:
         data = _load_houses()
         visits = data.get(house_id, {}).get("visits", [])
-        data[house_id] = {"name": name, "day": day, "house": house, "updated": int(time.time()), "visits": visits}
+        data[house_id] = {"name": name, "day": day, "house": house, "updated": int(time.time()), "visits": visits,
+                          "spouse": spouse}   # which made-up neighbor they married, so nobody else can
         _save_houses(data)
 
 # When someone visits a family member's house, the owner's game sees it and their character drops by.
@@ -563,7 +564,9 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
                 if not isinstance(house, dict):
                     raise TypeError
                 name = str(body.get("name", "")).strip()[:16] or "Neighbor"
-                save_house(house_id, name, int(body.get("day", 1)), house)
+                spouse = body.get("spouse")
+                spouse = spouse[:32] if isinstance(spouse, str) and spouse else None
+                save_house(house_id, name, int(body.get("day", 1)), house, spouse)
                 self.send_json({"ok": True})
             except (ValueError, KeyError, TypeError):
                 self.send_error(400)
