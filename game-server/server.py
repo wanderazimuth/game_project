@@ -32,6 +32,7 @@ GAMES = {
     "cookie-rampage": ("cookie-rampage", "Cookie Rampage", "Grandma ate all the cookies — smash through the house on a sugar rush"),
     "turbo-karts": ("turbo-karts", "Turbo Karts", "Kart race: 3 laps against Grandma, Captain Max and Dr. Lily"),
     "verity": ("verity", "Verity", "A friendly ball gives you jobs and presents — but don't be mean to it…"),
+    "zombie-apocalypse": ("zombie-apocalypse", "Zombie Apocalypse", "Zombies invade the town! Shoot them, grab coins and buy better guns at the shop."),
 }
 
 # What makes the arcade an installable app: url_path -> (file in app/, content type).
@@ -57,8 +58,8 @@ def app_file(path):
 # them in their own section.
 TWO_PLAYER_GAMES = {"brick-runner", "magma-runner", "fish-off", "td"}
 
-# Games with nothing to score; the All Scores page leaves them out.
-UNSCORED_GAMES = {"dream-house"}
+# Games with no high scores; the landing page and All Scores page leave them out.
+UNSCORED_GAMES = {"dream-house", "zombie-apocalypse"}
 
 # ── Score management ──────────────────────────────────────────────────────────
 SCORES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scores.json")
@@ -252,7 +253,7 @@ def build_landing_page():
     cards = "".join(
         f'  <a class="game-card" href="/{key}/">'
         f'<h2>{info[1]}</h2><p>{info[2]}</p>'
-        f'{build_scores_html(key)}</a>\n'
+        f'{"" if key in UNSCORED_GAMES else build_scores_html(key)}</a>\n'
         for key, info in GAMES.items()
     )
     page = LANDING_PAGE_TEMPLATE.replace('{cards}', cards)
