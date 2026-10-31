@@ -2591,7 +2591,8 @@ function total_winner() {
 }
 
 // ── Saving (comfort: the game saves itself before every command) ─────────────
-const SAVE_KEY = 'rogue-save-v1';
+// Rogue Deluxe shares this file and sets ROGUE_SAVE_KEY first, so the two games keep separate saves
+const SAVE_KEY = (typeof ROGUE_SAVE_KEY === 'string' && ROGUE_SAVE_KEY) || 'rogue-save-v1';
 function serialize() {
   const rooms = G.rooms.concat(G.passages), ri = r => r ? rooms.indexOf(r) : -1, pk = o => o ? G.pack.indexOf(o) : -1;
   const dest = d => {
@@ -2664,4 +2665,6 @@ async function playit() {
 }
 const Rogue = { new_game, load_game, playit, hasSave: () => { try { return !!localStorage.getItem(SAVE_KEY); } catch (e) { return false; } },
   get G() { return G; }, scr, sout, statusText, discoveries, inv_name, monsters, msgLog: () => msgLog, newMsgs: () => newMsgs,
-  hero: () => hero, chat, P, NUMLINES, NUMCOLS, isPlaying: () => playing };
+  hero: () => hero, chat, P, NUMLINES, NUMCOLS, isPlaying: () => playing,
+  // for Rogue Deluxe's drawing: what you can see right now (read only, changes nothing)
+  cansee, blind: () => on(player, ISBLIND), halluc: () => on(player, ISHALU) };
