@@ -438,11 +438,11 @@ RELAY_ROOMS = {
     "/ws/td": ({}, threading.Lock()),
 }
 
-# Castle Siege online games: one relay room per 3-digit room code. The host
-# opens /ws/castle-siege/<code>?host=1 and the friend joins /ws/castle-siege/<code>.
-CS_ROOMS = {}
-CS_LOCK = threading.Lock()
-CS_PATH = re.compile(r"^/ws/castle-siege/(\d{3})(\?host=1)?$")
+# Two-device games joined with a room code: one relay room per game + 3-digit
+# code. The host opens /ws/<game>/<code>?host=1 and the friend joins /ws/<game>/<code>.
+CODE_ROOMS = {}
+CODE_LOCK = threading.Lock()
+CODE_PATH = re.compile(r"^/ws/(castle-siege|zombie-apocalypse)/(\d{3})(\?host=1)?$")
 
 
 class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
@@ -469,9 +469,9 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
             self.handle_relay_ws(*RELAY_ROOMS[self.path])
             return
 
-        m = CS_PATH.match(self.path)
+        m = CODE_PATH.match(self.path)
         if m:
-            self.handle_castle_siege_ws(m.group(1), bool(m.group(2)))
+            self.handle_code_room_ws(m.group(1) + "/" + m.group(2), bool(m.group(3)))
             return
 
         # All-scores page
@@ -862,10 +862,10 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
                 clients.pop(client_id, None)
             self.relay_peer_status(clients, lock)
 
-    def handle_castle_siege_ws(self, code, host):
+    def handle_code_room_ws(self, code, host):
         # A host needs a free code; a friend needs a code someone is hosting.
-        with CS_LOCK:
-            room = CS_ROOMS.get(code)
+        with CODE_LOCK:
+            room = CODE_ROOMS.get(code)
             busy = bool(room and room[0])
             if host and busy:
                 reject = "code_taken"
@@ -874,16 +874,16 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
             else:
                 reject = None
                 if room is None:
-                    room = CS_ROOMS[code] = ({}, threading.Lock())
+                    room = CODE_ROOMS[code] = ({}, threading.Lock())
         if reject:
             self.handle_relay_ws({}, threading.Lock(), reject=reject)
             return
         try:
             self.handle_relay_ws(*room)
         finally:
-            with CS_LOCK:
-                if not room[0] and CS_ROOMS.get(code) is room:
-                    del CS_ROOMS[code]
+            with CODE_LOCK:
+                if not room[0] and CODE_ROOMS.get(code) is room:
+                    del CODE_ROOMS[code]
 
     def relay_peer_status(self, clients, lock):
         with lock:
