@@ -61,7 +61,7 @@ def app_file(path):
 TWO_PLAYER_GAMES = {"brick-runner", "magma-runner", "fish-off", "td"}
 
 # Games with no high scores; the landing page and All Scores page leave them out.
-UNSCORED_GAMES = {"dream-house", "zombie-apocalypse", "castle-siege", "rogue"}
+UNSCORED_GAMES = {"dream-house"}
 
 # ── Score management ──────────────────────────────────────────────────────────
 SCORES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scores.json")

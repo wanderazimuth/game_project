@@ -122,7 +122,7 @@ function buildCastle(side,lv){
 // ── Game state ────────────────────────────────────────────────────────────────
 let mode='menu',twoP=false,bside=0,level=1,tool='stone',design=null,turn=0,phase='aim',waitT=0,aiT=0,endT=0,winner=-1;
 let projs=[],parts=[],texts=[],aim=null,shake=0,fallT=0,falling=false,catArm=[0,0],banner=null;
-let ammo={},sel='rock';
+let ammo={},sel='rock',pts=0,shots=0;   // 1 player: points add up castle after castle
 const AMMO={
   rock: {e:'🪨',n:'Boulder',start:Infinity},
   bomb: {e:'💣',n:'Bomb',   start:2},
@@ -134,7 +134,7 @@ const PNAME=['🔵 Player 1','🔴 Player 2'];
 const human=side=>side===0||twoP;   // in 2 player mode nobody is the computer
 const mine=side=>!net||side===net.me; // online: you only aim on your own turn
 function newGame(two){
-  level=1;twoP=two;
+  level=1;twoP=two;pts=0;
   kings=[{side:0,c:5,r:0,hearts:3,inv:0},{side:1,c:38,r:0,hearts:3,inv:0}];
   grid.fill(null);
   buildCastle(0,1);if(twoP)buildCastle(1,1);
@@ -164,7 +164,7 @@ function restoreDesign(side){
 }
 function startBattle(first=0){
   saveDesign();
-  mode='battle';turn=first;phase='aim';winner=-1;endT=0;waitT=0;
+  mode='battle';turn=first;phase='aim';winner=-1;endT=0;waitT=0;shots=0;
   ammo=[{},{}];for(const k in AMMO){ammo[0][k]=AMMO[k].start;ammo[1][k]=AMMO[k].start}sel='rock';
   kings.forEach(k=>{k.hearts=3;k.inv=0;k.ko=0});
   show('battleBar');renderBattleBar();
@@ -189,7 +189,7 @@ function launch(side,vx,vy,kind){
   const mk=(vx,vy,r,dmg)=>projs.push({x:p.x,y:p.y,vx,vy,r,dmg,kind,side,rot:0});
   if(kind==='triple'){const a=Math.atan2(vy,vx),v=Math.hypot(vx,vy);for(const d of[-.07,0,.07])mk(Math.cos(a+d)*v,Math.sin(a+d)*v,8,2)}
   else mk(vx,vy,kind==='rock'?12:11,kind==='rock'?4:0);
-  phase='flying';waitT=0;
+  phase='flying';waitT=0;if(side===0)shots++;
   if(human(side)&&ammo[side][kind]!==Infinity)ammo[side][kind]--;
   if(net&&side===net.me)netSend({t:'shot',vx,vy,kind});
   noise(.25,.08,600);snd(180,.2,'triangle',.05,.5);
@@ -440,8 +440,10 @@ function draw(T){
   ctx.restore();
   // HUD
   if(mode==='build'||mode==='battle'){
-    ctx.fillStyle='rgba(40,25,10,.6)';ctx.beginPath();ctx.roundRect(10,10,200,34,10);ctx.fill();
-    ctx.textAlign='left';ctx.textBaseline='middle';ctx.font='bold 16px system-ui';ctx.fillStyle='#fff';ctx.fillText(net?'📡 Room '+net.code:twoP?'🏰 2 Players':'🏰 Level '+level,20,27);
+    const hud=net?'📡 Room '+net.code:twoP?'🏰 2 Players':'🏰 Level '+level+'  ⭐ '+pts.toLocaleString();
+    ctx.font='bold 16px system-ui';
+    ctx.fillStyle='rgba(40,25,10,.6)';ctx.beginPath();ctx.roundRect(10,10,Math.max(200,ctx.measureText(hud).width+24),34,10);ctx.fill();
+    ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillStyle='#fff';ctx.fillText(hud,20,27);
     if(mode==='build'&&twoP){
       const s=net?(net.ready?'Waiting for '+PNAME[1-net.me]+'…':'You are '+PNAME[net.me]+' — build your castle!'):PNAME[bside]+' is building'+(bside?' →':'');
       ctx.font='bold 18px system-ui';ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,.6)';ctx.strokeText(s,W/2,26);ctx.fillStyle=bside?'#ffb0a0':'#b8d4ff';ctx.fillText(s,W/2,26);
@@ -523,14 +525,50 @@ function battleOver(){
     return;
   }
   if(winner===0){
-    showMsg(`<h1>🏆 VICTORY! 🏆</h1><p>You bonked the enemy king! 👑💫</p><p>The next castle is even bigger — make yours stronger!</p><button id="mbtn">Next castle ▶</button> ${MENU_BTN}`);
+    // points: bigger castles are worth more, plus a bonus for crowns left and for using few shots
+    const gain=level*100+kings[0].hearts*50+Math.max(0,10-shots)*20;pts+=gain;
+    showMsg(`<h1>🏆 VICTORY! 🏆</h1><p>You bonked the enemy king! 👑💫</p><p>+${gain} points &nbsp;⭐ ${pts.toLocaleString()} total</p><p>The next castle is even bigger — make yours stronger!</p><button id="mbtn">Next castle ▶</button> <button id="saveBtn" style="background:#6e4c2a;border-color:#8a6a3a">💾 Save score &amp; stop</button>`);
     tune([523,659,784,1047,1319],120);
     document.getElementById('mbtn').onclick=()=>{level++;restoreDesign(0);startBuild()};
+    document.getElementById('saveBtn').onclick=()=>scoreScreen('🏰 Well played!','',true);
   }else{
-    showMsg(`<h1>Oh no! 😵</h1><p>Your king got bonked!</p><p>Fix up your castle and try again.</p><button id="mbtn">Try again ↺</button> ${MENU_BTN}`);
     tune([392,330,262],200,'triangle');
+    if(pts>0){scoreScreen('Oh no! 😵','Your king got bonked on castle '+level+'.');return}
+    showMsg(`<h1>Oh no! 😵</h1><p>Your king got bonked!</p><p>Fix up your castle and try again.</p><button id="mbtn">Try again ↺</button> ${MENU_BTN}`);
     document.getElementById('mbtn').onclick=()=>{restoreDesign(0);startBuild()};
+    document.getElementById('menuBtn').onclick=showTitle;
   }
+}
+// ── High scores (1 player) ────────────────────────────────────────────────────
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+function scoreRows(list,mine){
+  if(!list.length)return '<p>No scores yet — be the first!</p>';
+  let hi=false;
+  return '<div style="text-align:left;margin:8px auto;max-width:260px">'+list.slice(0,10).map((s,i)=>{
+    const me=!hi&&mine&&s.name===mine.name&&s.score===mine.score;if(me)hi=true;
+    return `<div style="display:flex;gap:8px;padding:2px 0;${me?'color:#ffd84a;font-weight:bold':''}"><span style="width:22px;opacity:.7">${i+1}.</span><span style="flex:1">${esc(s.name)}</span><span>${s.score.toLocaleString()}</span></div>`}).join('')+'</div>';
+}
+function scoreScreen(title,line='',won=false){
+  const score=pts,lvl=level;pts=0;   // this run is over; the next one starts from 0
+  let nm='';try{nm=localStorage.getItem('castle-name')||''}catch(e){}
+  showMsg(`<h1>${title}</h1>${line?`<p>${line}</p>`:''}<p>⭐ ${score.toLocaleString()} points</p>
+    <div id="lbForm"><input id="lbName" maxlength="12" placeholder="Your name" value="${esc(nm)}" style="font-size:1.3rem;width:9em;letter-spacing:0"><br><button id="lbSave">💾 Save score</button></div>
+    <div id="lbRows"><p>Loading high scores…</p></div>
+    <p style="font-size:.85rem">Keep playing and your score starts over from 0.</p><button id="mbtn">${won?'Next castle ▶':'Try again ↺'}</button> ${MENU_BTN}`);
+  const rows=h=>{const el=document.getElementById('lbRows');if(el)el.innerHTML=h};
+  let saved=false;
+  fetch('/scores/castle-siege').then(r=>r.json()).then(l=>{if(!saved)rows(scoreRows(l))}).catch(()=>rows(''));
+  const save=()=>{
+    if(saved)return;saved=true;
+    const mine={name:(document.getElementById('lbName').value.trim()||'ANON').slice(0,12),score};
+    try{localStorage.setItem('castle-name',mine.name)}catch(e){}
+    document.getElementById('lbForm').innerHTML='<p>Saved! 🎉</p>';
+    fetch('/scores/castle-siege',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(mine)})
+      .then(r=>r.json()).then(l=>rows(scoreRows(l,mine))).catch(()=>{});
+  };
+  document.getElementById('lbSave').onclick=save;
+  document.getElementById('lbName').onkeydown=e=>{if(e.key==='Enter')save()};
+  document.getElementById('mbtn').onclick=()=>{level=lvl+(won?1:0);restoreDesign(0);startBuild()};
   document.getElementById('menuBtn').onclick=showTitle;
 }
 function showTitle(){

@@ -293,8 +293,21 @@ A number before a command repeats it (5s = search 5 times).  Tap the message bar
       html = `<div class="stone"><div class="rip">REST<br>IN<br>PEACE</div><div>${esc(info.name)}</div><div>${info.gold} Au</div>
 <div>${info.quit ? 'quit' : 'killed by ' + esc(info.killer)}</div><div>on level ${info.level}</div><div>${year}</div></div>`;
     }
-    openModal(html + '<div class="row" style="justify-content:center"><button id="againBtn">Play again</button></div>');
+    openModal(html + '<p class="sec">Top Rogues</p><div id="topten"><p>Loading…</p></div><div class="row" style="justify-content:center"><button id="againBtn">Play again</button></div>');
     document.getElementById('againBtn').onclick = () => { closeModal(); showTitle(); };
+    // like the original, every finished game goes on the scoreboard
+    const mine = { name: info.name.slice(0, 16), score: info.won ? info.total : info.gold };
+    const shown = list => {
+      const el = document.getElementById('topten'); if (!el) return;
+      let hi = false;
+      el.innerHTML = list.length ? list.slice(0, 10).map((s, i) => {
+        const me = !hi && s.name === mine.name && s.score === mine.score; if (me) hi = true;
+        return `<p${me ? ' style="color:#ffd84a"' : ''}>${String(i + 1).padStart(2)}. ${String(s.score).padStart(6)}  ${esc(s.name)}</p>`;
+      }).join('') : '<p>No scores yet.</p>';
+    };
+    (mine.score > 0
+      ? fetch('/scores/rogue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mine) })
+      : fetch('/scores/rogue')).then(r => r.json()).then(shown).catch(() => shown([]));
   },
 };
 

@@ -232,7 +232,7 @@ function startGame(){
      armor:0,boots:false,magnet:false,buddy:null,walk:0};
   zs=[];bullets=[];grenades=[];pickups=[];parts=[];splats=[];flashes=[];texts=[];
   if(fr)fr.dead=false;hideMsg();shopEl.style.display='none';
-  coins=0;score=0;kills=0;wave=0;queue=[];phase='break';breakT=6;flowT=0;
+  lb.shown=false;coins=0;score=0;kills=0;wave=0;queue=[];phase='break';breakT=6;flowT=0;
   shake=0;hurtT=0;overT=0;shopLatch=false;
   state='play';buildFlow();
   showBanner('🧟 THE ZOMBIES ARE COMING! 🧟','Get ready…');
@@ -375,7 +375,7 @@ function update(dt,T){
   if(net)netTick(dt);
   if(state==='shop'&&!net)return;
   updateFx(dt);
-  if(state==='over'){overT+=dt;return}
+  if(state==='over'){overT+=dt;if(overT>1.6&&!lb.shown)showScores();return}
 
   // wave logic (on the host)
   if(guest()){}
@@ -771,6 +771,7 @@ function draw(T){
   drawHUD(T);
   if(state==='over'){
     ctx.fillStyle=`rgba(60,0,0,${Math.min(.5,overT*.4)})`;ctx.fillRect(0,0,W,H);
+    if(lb.shown&&msgOpen())return;
     bigText(net?'THE ZOMBIES GOT YOU BOTH! 🧟':'THE ZOMBIES GOT YOU! 🧟',H*.4,Math.min(48,W/14),'#ff6b6b');
     bigText('Wave '+wave+' • '+kills+' zombies • '+score+' points',H*.4+50,Math.min(22,W/26),'#fff');
     if(overT>1.6&&Math.floor(overT*2)%2)bigText(isTouch?'TAP TO PLAY AGAIN':'CLICK OR PRESS SPACE TO PLAY AGAIN',H*.4+110,Math.min(26,W/20),'#ffd84a');
@@ -877,6 +878,37 @@ const msgEl=document.getElementById('msg');
 const msgOpen=()=>msgEl.style.display==='flex';
 function showMsg(h){document.getElementById('msgBox').innerHTML=h;msgEl.style.display='flex'}
 function hideMsg(){msgEl.style.display='none'}
+// ── High scores ───────────────────────────────────────────────────────────────
+const lb={shown:false,saved:false};
+function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c])}
+function lbList(list,mine){
+  if(!list.length)return '<p style="color:#9a9">No scores yet — be the first!</p>';
+  let hi=false;
+  return '<div style="text-align:left;margin:8px auto;max-width:260px">'+list.slice(0,10).map((s,i)=>{
+    const me=!hi&&mine&&s.name===mine.name&&s.score===mine.score;if(me)hi=true;
+    return `<div style="display:flex;gap:8px;padding:2px 0;${me?'color:#ffd84a;font-weight:bold':''}"><span style="width:22px;color:#9a9">${i+1}.</span><span style="flex:1">${esc(s.name)}</span><span>${s.score.toLocaleString()}</span></div>`}).join('')+'</div>';
+}
+function showScores(){
+  lb.shown=true;lb.saved=false;
+  let nm='';try{nm=localStorage.getItem('zombie-name')||''}catch(e){}
+  showMsg(`<h1 style="color:#ff6b6b">${net?'THE ZOMBIES GOT YOU BOTH!':'THE ZOMBIES GOT YOU!'} 🧟</h1><p style="font-size:1.4rem;color:#ffd84a;font-weight:bold">⭐ ${score.toLocaleString()} points</p><p>Wave ${wave} • ${kills} zombies</p>
+    <div id="lbForm"><input id="lbName" maxlength="12" placeholder="Your name" value="${esc(nm)}" style="font-size:1.3rem;width:9em;letter-spacing:0"><br><button id="lbSave">💾 Save score</button></div>
+    <div id="lbRows"><p style="color:#9a9">Loading high scores…</p></div>
+    <button id="lbAgain">▶ Play again</button>`);
+  const rows=l=>{const el=document.getElementById('lbRows');if(el)el.innerHTML=l};
+  fetch('/scores/zombie-apocalypse').then(r=>r.json()).then(l=>{if(!lb.saved)rows(lbList(l))}).catch(()=>rows(''));
+  const save=()=>{
+    if(lb.saved)return;lb.saved=true;
+    const mine={name:(document.getElementById('lbName').value.trim()||'ANON').slice(0,12),score};
+    try{localStorage.setItem('zombie-name',mine.name)}catch(e){}
+    document.getElementById('lbForm').innerHTML='<p>Saved! 🎉</p>';
+    fetch('/scores/zombie-apocalypse',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(mine)})
+      .then(r=>r.json()).then(l=>rows(lbList(l,mine))).catch(()=>{});
+  };
+  document.getElementById('lbSave').onclick=save;
+  document.getElementById('lbName').onkeydown=e=>{if(e.key==='Enter')save()};
+  document.getElementById('lbAgain').onclick=()=>{hideMsg();playAgain()};
+}
 const BACK=`<button id="backBtn">◀ Back</button>`;
 function toMenu(){netClose();state='menu';hideMsg();shopEl.style.display='none'}
 
