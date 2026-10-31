@@ -438,6 +438,12 @@ RELAY_ROOMS = {
     "/ws/td": ({}, threading.Lock()),
 }
 
+# Castle Siege online games: one relay room per 3-digit room code. The host
+# opens /ws/castle-siege/<code>?host=1 and the friend joins /ws/castle-siege/<code>.
+CS_ROOMS = {}
+CS_LOCK = threading.Lock()
+CS_PATH = re.compile(r"^/ws/castle-siege/(\d{3})(\?host=1)?$")
+
 
 class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -461,6 +467,11 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
 
         if self.path in RELAY_ROOMS:
             self.handle_relay_ws(*RELAY_ROOMS[self.path])
+            return
+
+        m = CS_PATH.match(self.path)
+        if m:
+            self.handle_castle_siege_ws(m.group(1), bool(m.group(2)))
             return
 
         # All-scores page
@@ -773,7 +784,7 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
     # Same protocol as the brick-runner room: the first client is player1, the
     # second player2, a third gets room_full, and every JSON message is passed
     # to the other player.
-    def handle_relay_ws(self, clients, lock):
+    def handle_relay_ws(self, clients, lock, reject=None):
         key = self.headers.get("Sec-WebSocket-Key")
         if not key:
             self.send_error(400, "Missing Sec-WebSocket-Key")
@@ -791,6 +802,14 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
         client_id = id(self)
         write_lock = threading.Lock()
         role = None
+
+        if reject:
+            self.ws_send(write_lock, {"type": reject})
+            try:
+                self.connection.sendall(ws_build_frame(0x8, b""))
+            except OSError:
+                pass
+            return
 
         with lock:
             taken = {c["role"] for c in clients.values()}
@@ -842,6 +861,29 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
             with lock:
                 clients.pop(client_id, None)
             self.relay_peer_status(clients, lock)
+
+    def handle_castle_siege_ws(self, code, host):
+        # A host needs a free code; a friend needs a code someone is hosting.
+        with CS_LOCK:
+            room = CS_ROOMS.get(code)
+            busy = bool(room and room[0])
+            if host and busy:
+                reject = "code_taken"
+            elif not host and not busy:
+                reject = "no_room"
+            else:
+                reject = None
+                if room is None:
+                    room = CS_ROOMS[code] = ({}, threading.Lock())
+        if reject:
+            self.handle_relay_ws({}, threading.Lock(), reject=reject)
+            return
+        try:
+            self.handle_relay_ws(*room)
+        finally:
+            with CS_LOCK:
+                if not room[0] and CS_ROOMS.get(code) is room:
+                    del CS_ROOMS[code]
 
     def relay_peer_status(self, clients, lock):
         with lock:
