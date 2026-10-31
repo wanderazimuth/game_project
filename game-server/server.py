@@ -33,6 +33,7 @@ GAMES = {
     "turbo-karts": ("turbo-karts", "Turbo Karts", "Kart race: 3 laps against Grandma, Captain Max and Dr. Lily"),
     "verity": ("verity", "Verity", "A friendly ball gives you jobs and presents — but don't be mean to it…"),
     "castle-siege": ("castle-siege", "Castle Siege", "Build a castle to protect your king, then fling boulders and bombs at the enemy's castle"),
+    "rogue": ("rogue", "Rogue", "The 1980 classic: explore the Dungeons of Doom and find the Amulet of Yendor"),
     "zombie-apocalypse": ("zombie-apocalypse", "Zombie Apocalypse", "Zombies invade the town! Shoot them, grab coins and buy better guns at the shop."),
 }
 
@@ -60,7 +61,7 @@ def app_file(path):
 TWO_PLAYER_GAMES = {"brick-runner", "magma-runner", "fish-off", "td"}
 
 # Games with no high scores; the landing page and All Scores page leave them out.
-UNSCORED_GAMES = {"dream-house", "zombie-apocalypse", "castle-siege"}
+UNSCORED_GAMES = {"dream-house", "zombie-apocalypse", "castle-siege", "rogue"}
 
 # ── Score management ──────────────────────────────────────────────────────────
 SCORES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scores.json")
