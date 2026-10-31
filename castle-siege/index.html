@@ -92,7 +92,7 @@ function settleNow(){
 function clearSide(side){const z=ZONES[side];for(let r=0;r<ROWS;r++)for(let c=z.c0;c<=z.c1;c++)setBlk(c,r,null)}
 function genCastle(side,lv){
   // a list of blocks in the order they should be built: king's room, front wall, towers, extras
-  const weights=side===0?{wood:4,stone:5,metal:1}:
+  const weights=side===0||twoP?{wood:4,stone:5,metal:1}:
     lv<=1?{glass:3,wood:6,stone:1}:lv===2?{glass:2,wood:5,stone:3}:lv===3?{wood:4,stone:5,metal:1}:{wood:3,stone:5,metal:Math.min(6,1+lv/2)};
   const M=()=>{let t=0;for(const k in weights)t+=weights[k];let x=Math.random()*t;for(const k in weights){x-=weights[k];if(x<=0)return k}return 'wood'};
   const L=[],add=(u,r,m=M())=>{if(u>=0&&u<=9&&r<ROWS&&!L.some(o=>o.u===u&&o.r===r))L.push({u,r,m})};
@@ -118,7 +118,7 @@ function buildCastle(side,lv){
 }
 
 // ── Game state ────────────────────────────────────────────────────────────────
-let mode='menu',level=1,tool='stone',design=null,turn=0,phase='aim',waitT=0,aiT=0,endT=0,winner=-1;
+let mode='menu',twoP=false,bside=0,level=1,tool='stone',design=null,turn=0,phase='aim',waitT=0,aiT=0,endT=0,winner=-1;
 let projs=[],parts=[],texts=[],aim=null,shake=0,fallT=0,falling=false,catArm=[0,0],banner=null;
 let ammo={},sel='rock';
 const AMMO={
@@ -128,43 +128,50 @@ const AMMO={
   triple:{e:'☄️',n:'Triple',start:2},
 };
 const showBanner=(a,b,t=2.5)=>{banner={a,b,t}};
-function newGame(){
-  level=1;
+const PNAME=['🔵 Player 1','🔴 Player 2'];
+const human=side=>side===0||twoP;   // in 2 player mode nobody is the computer
+function newGame(two){
+  level=1;twoP=two;
   kings=[{side:0,c:5,r:0,hearts:3,inv:0},{side:1,c:38,r:0,hearts:3,inv:0}];
   grid.fill(null);
-  buildCastle(0,1);
+  buildCastle(0,1);if(twoP)buildCastle(1,1);
   startBuild();
 }
 function startBuild(){
-  mode='build';
-  buildCastle(1,level);
+  mode='build';bside=0;
+  if(!twoP)buildCastle(1,level);
   kings[1].hearts=3;kings[0].hearts=3;
   projs=[];parts=[];texts=[];
   hideMsg();renderBuildBar();show('buildBar');
-  showBanner('Level '+level+': build your castle! 🏰','Keep your King 👑 safe — tap to add blocks',3.5);
+  if(twoP)showBanner(PNAME[0]+': build your castle! 🏰','Then tap Done and pass to Player 2',3.5);
+  else showBanner('Level '+level+': build your castle! 🏰','Keep your King 👑 safe — tap to add blocks',3.5);
 }
 function saveDesign(){
-  const z=ZONES[0],L=[];
-  for(let r=0;r<ROWS;r++)for(let c=z.c0;c<=z.c1;c++){const b=blk(c,r);if(b)L.push({c,r,m:b.m})}
-  design={L,kc:kings[0].c,kr:kings[0].r};
+  design=[0,1].map(side=>{
+    const z=ZONES[side],L=[];
+    for(let r=0;r<ROWS;r++)for(let c=z.c0;c<=z.c1;c++){const b=blk(c,r);if(b)L.push({c,r,m:b.m})}
+    return {L,kc:kings[side].c,kr:kings[side].r};
+  });
 }
-function restoreDesign(){
-  clearSide(0);for(const o of design.L)setBlk(o.c,o.r,{m:o.m,hp:MAT[o.m].hp,fire:0,burnT:0,fell:0});
-  kings[0].c=design.kc;kings[0].r=design.kr;settleNow();
+function restoreDesign(side){
+  const d=design[side];
+  clearSide(side);for(const o of d.L)setBlk(o.c,o.r,{m:o.m,hp:MAT[o.m].hp,fire:0,burnT:0,fell:0});
+  kings[side].c=d.kc;kings[side].r=d.kr;settleNow();
 }
 function startBattle(){
   saveDesign();
   mode='battle';turn=0;phase='aim';winner=-1;endT=0;waitT=0;
-  for(const k in AMMO)ammo[k]=AMMO[k].start;sel='rock';
+  ammo=[{},{}];for(const k in AMMO){ammo[0][k]=AMMO[k].start;ammo[1][k]=AMMO[k].start}sel='rock';
   kings.forEach(k=>{k.hearts=3;k.inv=0;k.ko=0});
   show('battleBar');renderBattleBar();
-  showBanner('⚔️ BATTLE! ⚔️','Drag back and let go to fling!',3);
+  showBanner('⚔️ BATTLE! ⚔️',twoP?PNAME[0]+' goes first — drag back and let go!':'Drag back and let go to fling!',3);
   tune([392,523,659,784],110);
 }
 function nextTurn(){
   if(winner>=0)return;
-  turn=1-turn;phase='aim';waitT=0;
-  if(turn===1){aiT=1.3;showBanner('Enemy turn…','',1.2)}
+  turn=1-turn;phase='aim';waitT=0;sel='rock';
+  if(twoP)showBanner(PNAME[turn]+"'s turn!",'',1.2);
+  else if(turn===1){aiT=1.3;showBanner('Enemy turn…','',1.2)}
   else showBanner('Your turn!','',1.2);
   renderBattleBar();
 }
@@ -178,7 +185,7 @@ function launch(side,vx,vy,kind){
   if(kind==='triple'){const a=Math.atan2(vy,vx),v=Math.hypot(vx,vy);for(const d of[-.07,0,.07])mk(Math.cos(a+d)*v,Math.sin(a+d)*v,8,2)}
   else mk(vx,vy,kind==='rock'?12:11,kind==='rock'?4:0);
   phase='flying';waitT=0;
-  if(ammo&&side===0&&ammo[kind]!==Infinity)ammo[kind]--;
+  if(human(side)&&ammo[side][kind]!==Infinity)ammo[side][kind]--;
   noise(.25,.08,600);snd(180,.2,'triangle',.05,.5);
   renderBattleBar();
 }
@@ -312,7 +319,7 @@ function update(dt,T){
   }
   if(phase==='flying'){
     if(!projs.length&&!falling&&!burning){waitT+=dt;if(waitT>.7)nextTurn()}else waitT=0;
-  }else if(turn===1&&phase==='aim'){
+  }else if(!twoP&&turn===1&&phase==='aim'){
     aiT-=dt;if(aiT<=0)aiShoot();
   }
 }
@@ -330,7 +337,7 @@ function drawScene(T){
   R(-400,GY,WW+800,400,'#6b4a2a');R(-400,GY,WW+800,12,'#5cae4a');R(-400,GY+12,WW+800,6,'#4a8a3a');
   // build zone marker
   if(mode==='build'){
-    const z=ZONES[0];ctx.fillStyle='rgba(255,255,255,.12)';ctx.fillRect(cellX(z.c0),cellY(ROWS-1),(z.c1-z.c0+1)*CS,ROWS*CS);
+    const z=ZONES[bside];ctx.fillStyle='rgba(255,255,255,.12)';ctx.fillRect(cellX(z.c0),cellY(ROWS-1),(z.c1-z.c0+1)*CS,ROWS*CS);
     ctx.strokeStyle='rgba(255,255,255,.18)';ctx.lineWidth=1;ctx.beginPath();
     for(let c=z.c0;c<=z.c1+1;c++){ctx.moveTo(cellX(c),cellY(ROWS-1));ctx.lineTo(cellX(c),GY)}
     for(let r=0;r<=ROWS;r++){ctx.moveTo(cellX(z.c0),GY-r*CS);ctx.lineTo(cellX(z.c1+1),GY-r*CS)}ctx.stroke();
@@ -367,7 +374,7 @@ function drawCatapult(side){
   ctx.save();ctx.translate(x,y);ctx.scale(dir,1);
   R(-30,-16,60,10,'#7a5230');E(-20,-6,9,9,'#4a3020');E(20,-6,9,9,'#4a3020');E(-20,-6,3,3,'#a07040');E(20,-6,3,3,'#a07040');
   P([-4,-16,4,-16,2,-46,-2,-46],'#6a4628');
-  const a=-.25-catArm[side]*.0+(mode==='battle'&&((side===0&&aim)||(side===1&&turn===1&&phase==='aim'))?.9:0)-catArm[side]*1.2;
+  const a=-.25-catArm[side]*.0+(mode==='battle'&&side===turn&&phase==='aim'&&(aim||!human(side))?.9:0)-catArm[side]*1.2;
   ctx.save();ctx.translate(0,-44);ctx.rotate(-a-1.2);R(-4,-34,7,40,'#8a6038');E(0,-36,10,6,'#5a3a20');ctx.restore();
   ctx.restore();
 }
@@ -381,7 +388,7 @@ function drawProj(p){
 function trajectory(){
   if(!aim)return;
   const {vx,vy}=aimVel();if(!vx&&!vy)return;
-  const p=catPos(0);let x=p.x,y=p.y,ux=vx,uy=vy;
+  const p=catPos(turn);let x=p.x,y=p.y,ux=vx,uy=vy;
   for(let i=0;i<30;i++){
     for(let s=0;s<3;s++){uy+=G*.012;x+=ux*.012;y+=uy*.012}
     if(y>GY)break;
@@ -408,7 +415,7 @@ function draw(T){
   for(const k of kings)drawKing(k,T);
   for(const p of projs)drawProj(p);
   for(const q of parts){ctx.globalAlpha=Math.max(0,q.t/q.max);R(q.x-q.s/2,q.y-q.s/2,q.s,q.s,q.c)}ctx.globalAlpha=1;
-  if(mode==='battle'&&turn===0&&phase==='aim')trajectory();
+  if(mode==='battle'&&human(turn)&&phase==='aim')trajectory();
   ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='bold 18px system-ui';
   for(const t of texts){ctx.globalAlpha=Math.min(1,t.t*2);ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,.6)';ctx.strokeText(t.s,t.x,t.y);ctx.fillStyle=t.c;ctx.fillText(t.s,t.x,t.y)}
   ctx.globalAlpha=1;
@@ -416,10 +423,15 @@ function draw(T){
   // HUD
   if(mode==='build'||mode==='battle'){
     ctx.fillStyle='rgba(40,25,10,.6)';ctx.beginPath();ctx.roundRect(10,10,200,34,10);ctx.fill();
-    ctx.textAlign='left';ctx.textBaseline='middle';ctx.font='bold 16px system-ui';ctx.fillStyle='#fff';ctx.fillText('🏰 Level '+level,20,27);
+    ctx.textAlign='left';ctx.textBaseline='middle';ctx.font='bold 16px system-ui';ctx.fillStyle='#fff';ctx.fillText(twoP?'🏰 2 Players':'🏰 Level '+level,20,27);
+    if(mode==='build'&&twoP){
+      const s=PNAME[bside]+' is building'+(bside?' →':'');
+      ctx.font='bold 18px system-ui';ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,.6)';ctx.strokeText(s,W/2,26);ctx.fillStyle=bside?'#ffb0a0':'#b8d4ff';ctx.fillText(s,W/2,26);
+    }
     if(mode==='battle'&&winner<0){
-      const s=turn===0?(phase==='aim'?'👉 Your turn — drag back to aim!':'Watch out…'):'Enemy is aiming…';
-      ctx.font='bold 18px system-ui';ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,.6)';ctx.strokeText(s,W/2,26);ctx.fillStyle=turn===0?'#fff':'#ffb0a0';ctx.fillText(s,W/2,26);
+      const s=twoP?(phase==='aim'?PNAME[turn]+' — drag back to aim!':'Watch out…'):
+        turn===0?(phase==='aim'?'👉 Your turn — drag back to aim!':'Watch out…'):'Enemy is aiming…';
+      ctx.font='bold 18px system-ui';ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,.6)';ctx.strokeText(s,W/2,26);ctx.fillStyle=twoP?(turn?'#ffb0a0':'#b8d4ff'):turn===0?'#fff':'#ffb0a0';ctx.fillText(s,W/2,26);
     }
     if(aim&&mode==='battle'){const v=aimVel();if(v.pow){R(W/2-80,46,160,10,'rgba(0,0,0,.4)');R(W/2-80,46,160*v.pow,10,v.pow>.9?'#ff5a3a':'#ffd84a')}}
   }
@@ -447,12 +459,12 @@ function renderBuildBar(){
   h+=`<button data-tool="erase" class="${tool==='erase'?'sel':''}"><b>🧽</b>Remove</button>`;
   h+=`<button data-act="auto"><b>🏰</b>Auto castle</button>`;
   h+=`<button data-act="clear"><b>🗑️</b>Clear</button>`;
-  h+=`<button data-act="battle" class="go"><b>⚔️</b>BATTLE!</button>`;
+  h+=twoP&&bside===0?`<button data-act="done" class="go"><b>✅</b>Done ▶ P2</button>`:`<button data-act="battle" class="go"><b>⚔️</b>BATTLE!</button>`;
   b.innerHTML=h;
 }
 function renderBattleBar(){
   const b=document.getElementById('battleBar');let h='';
-  for(const k in AMMO){const n=ammo[k];h+=`<button data-ammo="${k}" class="${sel===k?'sel':''}" ${n<=0||turn!==0?'disabled':''}><b>${AMMO[k].e}</b>${AMMO[k].n} ${n===Infinity?'∞':'×'+n}</button>`}
+  for(const k in AMMO){const n=ammo[human(turn)?turn:0][k];h+=`<button data-ammo="${k}" class="${sel===k?'sel':''}" ${n<=0||!human(turn)?'disabled':''}><b>${AMMO[k].e}</b>${AMMO[k].n} ${n===Infinity?'∞':'×'+n}</button>`}
   b.innerHTML=h;
 }
 document.getElementById('buildBar').addEventListener('click',e=>{
@@ -460,35 +472,51 @@ document.getElementById('buildBar').addEventListener('click',e=>{
   if(b.dataset.tool){tool=b.dataset.tool;renderBuildBar();return}
   const a=b.dataset.act;
   if(a==='battle')startBattle();
-  else if(a==='clear'){clearSide(0);kings[0].r=0;settleNow();snd(300,.1)}
-  else if(a==='auto'){buildCastle(0,Math.min(level+1,5));snd(500,.1)}
+  else if(a==='done'){bside=1;tool='stone';renderBuildBar();showBanner(PNAME[1]+': build your castle! 🏰','Then tap BATTLE! ⚔️',3.5);tune([523,659],100)}
+  else if(a==='clear'){clearSide(bside);kings[bside].r=0;settleNow();snd(300,.1)}
+  else if(a==='auto'){buildCastle(bside,twoP?3:Math.min(level+1,5));snd(500,.1)}
 });
 document.getElementById('battleBar').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b||b.disabled)return;sel=b.dataset.ammo;renderBattleBar();snd(600,.05);
 });
+const MENU_BTN=`<button id="menuBtn" style="background:#6e4c2a;border-color:#8a6a3a">🏠 Menu</button>`;
 function battleOver(){
   show(null);
-  if(winner===0){
-    showMsg(`<h1>🏆 VICTORY! 🏆</h1><p>You bonked the enemy king! 👑💫</p><p>The next castle is even bigger — make yours stronger!</p><button id="mbtn">Next castle ▶</button>`);
+  if(twoP){
+    showMsg(`<h1>🏆 ${PNAME[winner]} WINS! 🏆</h1><p>${PNAME[1-winner]}'s king got bonked! 👑💫</p><button id="mbtn">Rematch ⚔️</button> <button id="mbtn2">Build again 🏰</button> ${MENU_BTN}`);
     tune([523,659,784,1047,1319],120);
-    document.getElementById('mbtn').onclick=()=>{level++;restoreDesign();startBuild()};
-  }else{
-    showMsg(`<h1>Oh no! 😵</h1><p>Your king got bonked!</p><p>Fix up your castle and try again.</p><button id="mbtn">Try again ↺</button>`);
-    tune([392,330,262],200,'triangle');
-    document.getElementById('mbtn').onclick=()=>{restoreDesign();startBuild()};
+    document.getElementById('mbtn').onclick=()=>{restoreDesign(0);restoreDesign(1);projs=[];parts=[];texts=[];hideMsg();startBattle()};
+    document.getElementById('mbtn2').onclick=()=>{restoreDesign(0);restoreDesign(1);startBuild()};
+    document.getElementById('menuBtn').onclick=showTitle;
+    return;
   }
+  if(winner===0){
+    showMsg(`<h1>🏆 VICTORY! 🏆</h1><p>You bonked the enemy king! 👑💫</p><p>The next castle is even bigger — make yours stronger!</p><button id="mbtn">Next castle ▶</button> ${MENU_BTN}`);
+    tune([523,659,784,1047,1319],120);
+    document.getElementById('mbtn').onclick=()=>{level++;restoreDesign(0);startBuild()};
+  }else{
+    showMsg(`<h1>Oh no! 😵</h1><p>Your king got bonked!</p><p>Fix up your castle and try again.</p><button id="mbtn">Try again ↺</button> ${MENU_BTN}`);
+    tune([392,330,262],200,'triangle');
+    document.getElementById('mbtn').onclick=()=>{restoreDesign(0);startBuild()};
+  }
+  document.getElementById('menuBtn').onclick=showTitle;
 }
-showMsg(`<h1>🏰 CASTLE SIEGE 🏰</h1><p>Build a castle to keep your King 👑 safe.</p><p>Then take turns flinging boulders, bombs and fire with your catapult.</p><p>Bonk the enemy king 3 times to win!</p><button id="mbtn">Play ▶</button>`);
-document.getElementById('mbtn').onclick=()=>{initAudio();newGame()};
+function showTitle(){
+  mode='menu';show(null);banner=null;
+  showMsg(`<h1>🏰 CASTLE SIEGE 🏰</h1><p>Build a castle to keep your King 👑 safe.</p><p>Then take turns flinging boulders, bombs and fire with your catapult.</p><p>Bonk the enemy king 3 times to win!</p><button id="mbtn">1 Player 🤖</button> <button id="mbtn2">2 Players 👥</button><p style="font-size:.85rem;margin-top:10px">2 Players: each builds a castle, then pass the device and take turns!</p>`);
+  document.getElementById('mbtn').onclick=()=>{initAudio();newGame(false)};
+  document.getElementById('mbtn2').onclick=()=>{initAudio();newGame(true)};
+}
+showTitle();
 
 // ── Pointer: building & aiming ────────────────────────────────────────────────
 const toWorld=(sx,sy)=>({x:(sx-OX)/SC,y:(sy-OY)/SC});
 let painting=null;
 function buildAt(sx,sy){
   const w=toWorld(sx,sy),c=Math.floor(w.x/CS);let r=Math.floor((GY-w.y)/CS);
-  if(sideOf(c)!==0||r<0||r>=ROWS)return;
+  if(sideOf(c)!==bside||r<0||r>=ROWS)return;
   const key=c+','+r;if(painting&&painting.last===key)return;if(painting)painting.last=key;
-  const k=kings[0];
+  const k=kings[bside];
   if(tool==='erase'){const b=blk(c,r);if(b){setBlk(c,r,null);settleNow();snd(260,.06)}return}
   if(tool==='king'){if(blk(c,r))return;k.c=c;k.r=r;settleNow();snd(700,.06);return}
   if(blk(c,r)||(k.c===c&&k.r===r))return;
@@ -500,7 +528,7 @@ function buildAt(sx,sy){
 cv.addEventListener('pointerdown',e=>{
   e.preventDefault();initAudio();
   if(mode==='build'){painting={id:e.pointerId,last:null};buildAt(e.clientX,e.clientY);return}
-  if(mode==='battle'&&turn===0&&phase==='aim'&&winner<0&&!aim)aim={id:e.pointerId,sx:e.clientX,sy:e.clientY,x:e.clientX,y:e.clientY};
+  if(mode==='battle'&&human(turn)&&phase==='aim'&&winner<0&&!aim)aim={id:e.pointerId,sx:e.clientX,sy:e.clientY,x:e.clientX,y:e.clientY};
 });
 cv.addEventListener('pointermove',e=>{
   if(painting&&painting.id===e.pointerId&&tool!=='king')buildAt(e.clientX,e.clientY);
@@ -510,9 +538,9 @@ for(const ev of ['pointerup','pointercancel'])addEventListener(ev,e=>{
   if(painting&&painting.id===e.pointerId)painting=null;
   if(aim&&aim.id===e.pointerId){
     const v=aimVel();aim=null;
-    if(ev==='pointerup'&&v.pow&&mode==='battle'&&turn===0&&phase==='aim'){
-      if(ammo[sel]<=0)sel='rock';
-      launch(0,v.vx,v.vy,sel);if(ammo[sel]<=0)sel='rock';renderBattleBar();
+    if(ev==='pointerup'&&v.pow&&mode==='battle'&&human(turn)&&phase==='aim'){
+      const a=ammo[turn];if(a[sel]<=0)sel='rock';
+      launch(turn,v.vx,v.vy,sel);if(a[sel]<=0)sel='rock';renderBattleBar();
     }
   }
 });
