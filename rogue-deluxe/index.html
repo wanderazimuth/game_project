@@ -953,7 +953,7 @@ function titleArt() {
 function showTitle() {
   const saved = Rogue.hasSave();
   const name = store.get('rogue-deluxe-name', 'Rogue');
-  titleEl.innerHTML = `<h1>ROGUE<br>DELUXE</h1><div class="sub">Exploring the Dungeons of Doom</div><div id="artHere"></div>
+  titleEl.innerHTML = `<h1>ROGUE+</h1><div class="sub">Exploring the Dungeons of Doom</div><div id="artHere"></div>
 ${saved ? '<button id="contBtn">Continue your game ▶</button>' : ''}
 <div><input id="nameIn" maxlength="20" value="${esc(name)}" aria-label="Your name"></div>
 <button id="newBtn">${saved ? 'Start a new game' : 'Start ▶'}</button>

@@ -1,10 +1,12 @@
 // Keeps the arcade page and every game, so the installed app plays offline (scores and 2-player
 // games need the server). Network first: online you always get the latest game files; the saved
 // copy is only used when the server can't be reached.
-// server.py fills in the game list, so a new game in GAMES is saved without editing this file.
+// server.py fills in the game list and the other files games load (Rogue's rogue.js), so a new
+// game in GAMES is saved without editing this file.
 const GAMES = /*GAMES*/[];
+const FILES = /*FILES*/[];
 const CACHE = "arcade-1";
-const PAGES = ["/", ...GAMES.map((g) => `/${g}/`)];
+const PAGES = ["/", ...GAMES.map((g) => `/${g}/`), ...FILES];
 const WAIT_MS = 6000;  // weak signal: give up on the server after this and use the saved copy
 
 self.addEventListener("install", (e) => {
@@ -20,7 +22,7 @@ self.addEventListener("activate", (e) => {
 
 // Fetch every game again, so the offline copies stay as new as the last visit to the arcade page.
 async function refreshGames(cache) {
-  await Promise.all(GAMES.map((g) => fetch(`/${g}/`).then((r) => r.ok && cache.put(`/${g}/`, r)).catch(() => {})));
+  await Promise.all(PAGES.slice(1).map((p) => fetch(p).then((r) => r.ok && cache.put(p, r)).catch(() => {})));
 }
 
 async function networkFirst(e, key) {
@@ -44,6 +46,7 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin) return;
   if (url.pathname.startsWith("/scores/") || url.pathname.startsWith("/ws/")) return;  // live only
-  if (e.request.mode === "navigate") return e.respondWith(networkFirst(e, url.pathname));
+  // A game's own files come fresh with its page, so the two never mismatch.
+  if (e.request.mode === "navigate" || FILES.includes(url.pathname)) return e.respondWith(networkFirst(e, url.pathname));
   e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request)));
 });

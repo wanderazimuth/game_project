@@ -53,9 +53,25 @@ def app_file(path):
     with open(os.path.join(APP_DIR, name), "rb") as f:
         data = f.read()
     if name == "sw.js":
-        # The service worker saves every game for offline play; it gets the list from GAMES.
+        # The service worker saves every game for offline play; it gets the list from GAMES,
+        # and the files a game loads besides its page (Rogue's rogue.js) from game_files().
         data = data.replace(b"/*GAMES*/[]", json.dumps(list(GAMES)).encode())
+        data = data.replace(b"/*FILES*/[]", json.dumps(game_files()).encode())
     return data, content_type
+
+
+def game_files():
+    """Every file in the games' folders other than their pages, as URL paths."""
+    out = []
+    for key, (directory, _, _) in GAMES.items():
+        folder = os.path.join(GAMES_DIR, directory)
+        for dirpath, dirnames, filenames in os.walk(folder):
+            dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+            for name in sorted(filenames):
+                rel = os.path.relpath(os.path.join(dirpath, name), folder).replace(os.sep, "/")
+                if rel != "index.html" and not name.startswith("."):
+                    out.append(f"/{key}/{rel}")
+    return out
 
 # Games played by two people on separate devices; the All Scores page lists
 # them in their own section.
