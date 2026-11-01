@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Rogue Deluxe</title>
+<title>Rogue+</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#0e0b12;color:#e8e2d8;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -124,7 +124,7 @@ pre.mono,.mono{font-family:"DejaVu Sans Mono",Menlo,Consolas,monospace;white-spa
 <script src="sprites.js"></script>
 <script>
 'use strict';
-// Rogue Deluxe: the same game as Rogue (../rogue/rogue.js runs every rule), drawn with pixel art
+// Rogue+: the same game as Rogue (../rogue/rogue.js runs every rule), drawn with pixel art
 // and played with taps, swipes, pinch zoom and a quick-use bar.
 
 const store = {
@@ -878,7 +878,7 @@ const UI = {
   discoveries: () => UI.showPanel('<h2>Discoveries</h2>' + Rogue.discoveries().map(([t, rows]) =>
     `<p class="sec">${t}</p>` + rows.map(r => `<p>${esc(r)}</p>`).join('')).join('')),
   log: () => UI.showPanel('<h2>Messages</h2>' + (Rogue.msgLog().slice(-60).map(m => `<p>${esc(m)}</p>`).join('') || '<p>No messages yet</p>'), true),
-  help: () => UI.showPanel(`<h2>How to play Rogue Deluxe</h2><p>Find the Amulet of Yendor on level 26 or deeper, then climb all the way back up with it. It's the original 1980 Rogue — same monsters, same magic, same rules — with pictures and phone controls.</p>
+  help: () => UI.showPanel(`<h2>How to play Rogue+</h2><p>Find the Amulet of Yendor on level 26 or deeper, then climb all the way back up with it. It's the original 1980 Rogue — same monsters, same magic, same rules — with pictures and phone controls.</p>
 <p class="sec">Moving</p><p>Tap a square to walk there. Tap next to you to step — or to attack a monster. Flick (swipe) to run that way.
 Pinch to zoom, drag to look around; ◎ or a double tap brings the view back to you. Press and hold anything to see what it is.</p>
 <p class="sec">The big button</p><p>It does what fits where you stand: Go down on stairs, Pick up on an item, otherwise Search. Hold it to search and rest for 20 turns (a monster showing up stops it).</p>

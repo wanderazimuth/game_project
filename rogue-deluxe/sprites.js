@@ -1,4 +1,4 @@
-// Rogue Deluxe pixel art: every sprite is 16×16, drawn here as text.
+// Rogue+ pixel art: every sprite is 16×16, drawn here as text.
 // Each letter is a palette colour, '.' is see-through. x / X / z are the item's own colour
 // (light, dark, highlight) — potions get their real colour, rings their stone, wands their wood or metal.
 'use strict';
