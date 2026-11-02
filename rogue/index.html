@@ -148,7 +148,7 @@ cv.addEventListener('click', e => {
   const h = Rogue.hero(), dy = y - h.y, dx = x - h.x;
   if (dx === 0 && dy === 0) { pushKey(Rogue.chat(h.y, h.x) === '%' ? '>' : 's'); return; }
   if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) { pushKey(dirKey(dy, dx)); return; }
-  travel = { y, x, msgs: Rogue.msgLog().length };
+  travel = { y, x, sy: h.y, sx: h.x, msgs: Rogue.msgLog().length };
   pushKey('TRAVEL');
 });
 const dirKey = (dy, dx) => ({ '-1,-1': 'y', '-1,0': 'k', '-1,1': 'u', '0,-1': 'h', '0,1': 'l', '1,-1': 'b', '1,0': 'j', '1,1': 'n' })[dy + ',' + dx];
@@ -161,21 +161,30 @@ function travelStep() {
     const c = scr[y] && scr[y][x];
     if (c >= 'A' && c <= 'Z') { travel = null; return null; }   // a monster next to you: stop
   }
-  const ok = (y, x) => y >= 1 && y <= 22 && x >= 0 && x < 80 && (WALKABLE.includes(scr[y][x]) || (y === travel.y && x === travel.x && scr[y][x] !== ' '));
-  const prev = new Map(), q = [[travel.y, travel.x]];
-  prev.set(travel.y * 80 + travel.x, -1);
-  while (q.length) {
-    const [y, x] = q.shift();
+  const ok = (y, x) => y >= 1 && y <= 22 && x >= 0 && x < 80 && ((y === h.y && x === h.x) || WALKABLE.includes(scr[y][x]) || (y === travel.y && x === travel.x && scr[y][x] !== ' '));
+  const can = (y, x, ny, nx) => ok(ny, nx) && (y === ny || x === nx || (ok(y, nx) && ok(ny, x)));   // no cutting corners, like the original
+  // steps from the target to every square, out as far as you
+  const dist = new Map([[travel.y * 80 + travel.x, 0]]), q = [[travel.y, travel.x]], home = h.y * 80 + h.x;
+  while (q.length && !dist.has(home)) {
+    const [y, x] = q.shift(), d = dist.get(y * 80 + x);
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       const ny = y + dy, nx = x + dx, k = ny * 80 + nx;
-      if ((!dy && !dx) || prev.has(k)) continue;
-      if (dy && dx && (!ok(y, nx) || !ok(ny, x))) continue;   // no cutting corners, like the original
-      if (ny === h.y && nx === h.x) return dirKey(y - ny, x - nx);
-      if (!ok(ny, nx)) continue;
-      prev.set(k, 1); q.push([ny, nx]);
+      if ((!dy && !dx) || dist.has(k) || !can(y, x, ny, nx)) continue;
+      dist.set(k, d + 1); q.push([ny, nx]);
     }
   }
-  travel = null; return null;
+  if (!dist.has(home)) { travel = null; return null; }
+  // Many ways are equally short (a diagonal step costs the same as a straight one): take the one
+  // nearest the straight line from where the walk began, not always the first one found going up.
+  let best = null, bestOff = Infinity;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const ny = h.y + dy, nx = h.x + dx;
+    if (dist.get(ny * 80 + nx) !== dist.get(home) - 1 || !can(h.y, h.x, ny, nx)) continue;
+    const off = Math.abs((ny - travel.sy) * (travel.x - travel.sx) - (nx - travel.sx) * (travel.y - travel.sy));
+    if (off < bestOff) { best = dirKey(dy, dx); bestOff = off; }
+  }
+  if (!best) travel = null;
+  return best;
 }
 
 // ── The control pad ──────────────────────────────────────────────────────────
