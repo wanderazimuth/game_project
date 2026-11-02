@@ -22,6 +22,10 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0e0b12;color:#e8e2d
 .chip.bad{background:#6a1420;border-color:#e04848;color:#fff}
 #mapwrap{flex:1;position:relative;min-height:0;overflow:hidden}
 #map{position:absolute;inset:0;width:100%;height:100%;display:block}
+#dpad{position:absolute;left:8px;bottom:8px;display:grid;grid-template-columns:repeat(3,46px);grid-template-rows:repeat(3,46px);gap:4px}
+#dpad button{font-size:20px;background:rgba(42,34,52,.55);border-color:rgba(106,90,128,.6);touch-action:none}
+#dpad button:active{background:rgba(90,72,112,.85)}
+#dpad.off{display:none}
 #centerBtn{position:absolute;right:10px;bottom:10px;width:46px;height:46px;border-radius:23px;font-size:22px;display:none;opacity:.9}
 #aimbar{position:absolute;left:0;right:0;top:0;display:none;justify-content:center;align-items:center;gap:10px;padding:8px;background:rgba(20,10,30,.88);font-size:15px;color:#ffd84a;flex-wrap:wrap}
 #aimbar button{padding:6px 14px}
@@ -104,6 +108,7 @@ pre.mono,.mono{font-family:"DejaVu Sans Mono",Menlo,Consolas,monospace;white-spa
       <canvas id="map"></canvas>
       <div id="aimbar"><span id="aimtext"></span><button id="aimCancel">✖ Cancel</button></div>
       <div id="tip"></div>
+      <div id="dpad"></div>
       <button id="centerBtn" title="Back to you">◎</button>
     </div>
   </div>
@@ -131,7 +136,7 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } },
 };
-const prefs = Object.assign({ classic: false, buzz: true }, store.get('rogue-deluxe-prefs', {}));
+const prefs = Object.assign({ classic: false, buzz: true, dpad: true }, store.get('rogue-deluxe-prefs', {}));
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const $ = id => document.getElementById(id);
@@ -588,6 +593,32 @@ function travelStep() {
   return best;
 }
 
+// ── The direction pad: tap an arrow to step, hold it to run; the middle is the big button ──
+const dpad = $('dpad');
+dpad.classList.toggle('off', !prefs.dpad);
+[['y', '↖'], ['k', '↑'], ['u', '↗'], ['h', '←'], ['', '●'], ['l', '→'], ['b', '↙'], ['j', '↓'], ['n', '↘']].forEach(([k, l]) => {
+  const b = document.createElement('button'); b.textContent = l;
+  let held = null, long = false;
+  const ready = () => Rogue.isPlaying() && !modalOpen() && (!aiming || k);   // when aiming, the arrows pick the direction
+  b.addEventListener('pointerdown', () => {
+    long = false;
+    held = setTimeout(() => {
+      long = true;
+      if (!ready() || aiming) return;
+      travel = null;
+      if (k) pushKey(k.toUpperCase());
+      else { pushKey('2'); pushKey('0'); pushKey('s'); }   // like holding the big button
+    }, 450);
+  });
+  b.addEventListener('pointerup', () => {
+    clearTimeout(held);
+    if (long || !ready()) return;
+    travel = null; pushKey(k || actionKey()[0]);
+  });
+  b.addEventListener('pointerleave', () => clearTimeout(held));
+  dpad.appendChild(b);
+});
+
 // ── The action button: whatever makes sense where you stand ─────────────────
 function actionKey() {
   const h = Rogue.hero(), u = Rogue.chat(h.y, h.x);
@@ -736,11 +767,13 @@ function openMenu() {
 <p class="sec">Settings</p><div class="menu">
 <button id="optClassic">${prefs.classic ? '🧱 Pixel art view' : '🔤 Classic letters view'}</button>
 <button id="optBuzz">${prefs.buzz ? '📳 Buzz: on' : '📴 Buzz: off'}</button>
+<button id="optDpad">${prefs.dpad ? '🕹 Direction pad: on' : '🕹 Direction pad: off'}</button>
 <button id="optQuit">🏳 Quit this game</button></div>
 <div class="row"><button id="menuClose">Close</button></div>`);
   mbox.querySelectorAll('[data-menu]').forEach(b => b.onclick = () => { closeModal(); travel = null; pushKey(b.dataset.menu); });
   $('optClassic').onclick = () => { prefs.classic = !prefs.classic; store.set('rogue-deluxe-prefs', prefs); closeModal(); };
   $('optBuzz').onclick = () => { prefs.buzz = !prefs.buzz; store.set('rogue-deluxe-prefs', prefs); closeModal(); };
+  $('optDpad').onclick = () => { prefs.dpad = !prefs.dpad; store.set('rogue-deluxe-prefs', prefs); dpad.classList.toggle('off', !prefs.dpad); closeModal(); };
   $('optQuit').onclick = () => { closeModal(); pushKey('Q'); };
   $('menuClose').onclick = closeModal;
 }
@@ -889,9 +922,10 @@ const UI = {
   log: () => UI.showPanel('<h2>Messages</h2>' + (Rogue.msgLog().slice(-60).map(m => `<p>${esc(m)}</p>`).join('') || '<p>No messages yet</p>'), true),
   help: () => UI.showPanel(`<h2>How to play Rogue+</h2><p>Find the Amulet of Yendor on level 26 or deeper, then climb all the way back up with it. It's the original 1980 Rogue — same monsters, same magic, same rules — with pictures and phone controls.</p>
 <p class="sec">Moving</p><p>Tap a square to walk there. Tap next to you to step — or to attack a monster. Flick (swipe) to run that way.
+Or use the direction pad in the corner: tap an arrow to step, hold it to run; its middle does what the big button does (☰ Menu turns the pad off).
 Pinch to zoom, drag to look around; ◎ or a double tap brings the view back to you. Press and hold anything to see what it is.</p>
 <p class="sec">The big button</p><p>It does what fits where you stand: Go down on stairs, Pick up on an item, otherwise Search. Hold it to search and rest for 20 turns (a monster showing up stops it).</p>
-<p class="sec">Items</p><p>🎒 Pack shows your things — tap one to use it. The quick bar under the map fills itself with food, potions, scrolls and wands; tap a slot to use it, hold for more. Drag items onto the quick bar in your pack to pin favourites. When a wand or throw needs aiming, tap toward the target.</p>
+<p class="sec">Items</p><p>🎒 Pack shows your things — tap one to use it. The quick bar under the map fills itself with food, potions, scrolls and wands; tap a slot to use it, hold for more. Drag items onto the quick bar in your pack to pin favourites. When a wand or throw needs aiming, tap toward the target or press an arrow on the pad.</p>
 <p class="sec">Keyboard</p><p class="mono">Arrows or h j k l y u b n (Shift runs), and all the original letter commands — see ☰ Menu.</p>
 <p class="sec">The map</p><p>Unknown potions show their real colour, rings their stone, wands and staffs their wood or metal. Dimmed squares are places you remember but can't see right now.</p>
 <p class="sec">About</p><p>Ported from Rogue 5.4.4 by Michael Toy, Glenn Wichman and Ken Arnold (1980–1985), under the BSD license — see <a href="../rogue/LICENSE.TXT" target="_blank" style="color:#9be564">LICENSE.TXT</a>. Pixel art made for this arcade. Your game saves itself after every move.</p>`),
