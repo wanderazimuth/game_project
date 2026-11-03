@@ -2591,7 +2591,7 @@ function total_winner() {
 }
 
 // ── Saving (comfort: the game saves itself before every command) ─────────────
-// Rogue Deluxe shares this file and sets ROGUE_SAVE_KEY first, so the two games keep separate saves
+// Rogue+ shares this file and sets ROGUE_SAVE_KEY first, so the two games keep separate saves
 const SAVE_KEY = (typeof ROGUE_SAVE_KEY === 'string' && ROGUE_SAVE_KEY) || 'rogue-save-v1';
 function serialize() {
   const rooms = G.rooms.concat(G.passages), ri = r => r ? rooms.indexOf(r) : -1, pk = o => o ? G.pack.indexOf(o) : -1;

@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Roguish</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#0e0b12;color:#e8e2d8;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  -webkit-user-select:none;user-select:none;touch-action:none;-webkit-touch-callout:none}
+#app{position:fixed;inset:0;display:flex;flex-direction:column}
+#main{flex:1;display:flex;flex-direction:column;min-height:0;min-width:0}
+#top{background:#17121e;border-bottom:2px solid #2a2234}
+#msgbar{min-height:2.7em;max-height:4.1em;overflow:hidden;padding:5px 10px 3px;font-size:14px;line-height:1.3em;color:#fff;cursor:pointer}
+#msgbar .old{color:#8a8296}
+#stat{display:flex;align-items:center;gap:6px;padding:3px 8px 6px;font-size:13px;flex-wrap:wrap}
+#hp{position:relative;width:118px;height:18px;border-radius:9px;background:#3a1620;overflow:hidden;border:1px solid #000;flex:none}
+#hpfill{position:absolute;inset:0;width:100%;background:linear-gradient(#ff6b6b,#c0303c);transition:width .25s}
+#hptext{position:absolute;inset:0;text-align:center;font-size:12px;line-height:16px;font-weight:bold;color:#fff;text-shadow:0 1px 1px #000}
+.chip{background:#251d2e;border:1px solid #3a2f46;border-radius:8px;padding:1px 6px;white-space:nowrap}
+.chip.warn{background:#5a2a10;border-color:#c0602a;color:#ffd0a0}
+.chip.bad{background:#6a1420;border-color:#e04848;color:#fff}
+#mapwrap{flex:1;position:relative;min-height:0;overflow:hidden}
+#map{position:absolute;inset:0;width:100%;height:100%;display:block}
+#dpad{position:absolute;left:8px;bottom:8px;display:grid;grid-template-columns:repeat(3,46px);grid-template-rows:repeat(3,46px);gap:4px}
+#dpad button{font-size:20px;background:rgba(42,34,52,.55);border-color:rgba(106,90,128,.6);touch-action:none}
+#dpad button:active{background:rgba(90,72,112,.85)}
+#dpad.off{display:none}
+#centerBtn{position:absolute;right:10px;bottom:10px;width:46px;height:46px;border-radius:23px;font-size:22px;display:none;opacity:.9}
+#aimbar{position:absolute;left:0;right:0;top:0;display:none;justify-content:center;align-items:center;gap:10px;padding:8px;background:rgba(20,10,30,.88);font-size:15px;color:#ffd84a;flex-wrap:wrap}
+#aimbar button{padding:6px 14px}
+#tip{position:absolute;display:none;background:rgba(20,14,28,.95);border:1px solid #6a5a80;border-radius:8px;padding:5px 9px;font-size:14px;pointer-events:none;white-space:nowrap;transform:translate(-50%,-190%)}
+#side{background:#17121e;border-top:2px solid #2a2234;padding:6px 8px 8px;display:flex;flex-direction:column;gap:6px}
+#quick{display:grid;grid-template-columns:repeat(6,1fr);gap:5px}
+#quick,#btns{width:100%;max-width:640px;margin:0 auto}
+.slot{position:relative;height:50px;border-radius:9px;background:#221a2c;border:2px solid #3a2f46;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:none}
+.slot img{width:38px;height:38px;image-rendering:pixelated;pointer-events:none}
+.slot .n{position:absolute;right:3px;bottom:1px;font-size:11px;font-weight:bold;color:#fff;text-shadow:0 1px 2px #000}
+.slot .pin{position:absolute;left:3px;top:0;font-size:9px}
+.slot.empty{opacity:.4;cursor:default}
+.slot:active{background:#3a2f46}
+#btns{display:grid;grid-template-columns:1fr 1.6fr 1fr;gap:6px}
+button{font:inherit;color:#eee;background:#2a2234;border:1px solid #4a3d5a;border-radius:10px;cursor:pointer;touch-action:manipulation}
+button:active{background:#3e3250}
+#btns button{height:50px;font-size:15px;display:flex;align-items:center;justify-content:center;gap:6px}
+#actBtn{background:#4a3a14;border-color:#c8a040;color:#ffe9a8;font-weight:bold;font-size:16px!important}
+#actBtn:active{background:#6a5420}
+@media (orientation:landscape) and (max-height:560px){
+  #app{flex-direction:row}
+  #side{width:212px;border-top:none;border-left:2px solid #2a2234;justify-content:flex-end}
+  #quick{grid-template-columns:repeat(3,1fr)}
+  #btns{grid-template-columns:1fr 1fr}
+  #actBtn{grid-column:1 / span 2;order:-1}
+  #msgbar{min-height:2.6em}
+}
+#modal{position:fixed;inset:0;background:rgba(5,2,10,.7);display:none;align-items:center;justify-content:center;z-index:10;padding:12px}
+#modal.drawer{align-items:flex-end;padding:0}
+#modal.drawer .box{border-radius:14px 14px 0 0;max-height:70vh;max-width:100%}
+#modal .box{background:#1b1524;border:1px solid #4a3d5a;border-radius:14px;padding:14px;max-width:560px;width:100%;max-height:92vh;overflow:auto}
+#modal h2{font-size:16px;color:#ffd84a;margin-bottom:10px}
+#modal p{font-size:14px;line-height:1.45em;margin:4px 0}
+#modal .sec{color:#9be564;margin-top:12px;font-weight:bold}
+#modal .row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+#modal .row button{padding:10px 16px;font-size:15px}
+#modal input{font:inherit;font-size:16px;width:100%;padding:9px;background:#0e0b12;color:#fff;border:1px solid #6a5a80;border-radius:8px}
+.items{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.item{display:flex;align-items:center;gap:8px;padding:6px 8px;text-align:left;font-size:13px;min-height:50px;touch-action:none}
+.item img{width:36px;height:36px;image-rendering:pixelated;flex:none;pointer-events:none}
+.item span{pointer-events:none}
+.item.dim{opacity:.38}
+.item.worn{border-color:#c8a040}
+.item .tag{display:block;font-size:11px;color:#c8a040}
+.sheet{display:flex;gap:14px;align-items:center}
+.sheet img{width:72px;height:72px;image-rendering:pixelated;background:#221a2c;border-radius:10px;padding:6px}
+.acts{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;margin-top:12px}
+.acts button{padding:11px 8px;font-size:15px}
+.mini{display:grid;grid-template-columns:repeat(6,1fr);gap:5px;margin-bottom:10px}
+.mini .slot{height:46px}
+.mini .slot.hot{border-color:#ffd84a;background:#3e3250}
+.menu{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.menu button{padding:10px;text-align:left;font-size:14px}
+.menu button b{color:#ffd84a;margin-right:4px;font-family:monospace}
+.dirs{display:grid;grid-template-columns:repeat(3,62px);grid-template-rows:repeat(3,54px);gap:6px;justify-content:center}
+.dirs button{font-size:22px}
+#ghost{position:fixed;width:44px;height:44px;image-rendering:pixelated;pointer-events:none;z-index:30;display:none;transform:translate(-50%,-50%)}
+#title{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;background:#0e0b12;z-index:20;padding:16px;text-align:center}
+#title h1{font-size:40px;letter-spacing:.18em;color:#ffd84a;font-weight:900;text-shadow:0 3px 0 #8e2533}
+#title .sub{color:#b9b0c8;font-size:14px}
+#title canvas{image-rendering:pixelated;width:min(360px,90vw);border-radius:10px;border:2px solid #2a2234}
+#title input{font:inherit;font-size:17px;padding:9px;background:#17121e;color:#fff;border:1px solid #6a5a80;border-radius:8px;text-align:center;width:230px}
+#title button{padding:11px 24px;font-size:17px}
+#title .credit{color:#776d86;font-size:11px;max-width:520px;line-height:1.4em}
+#title a{color:#9a90aa}
+.stone{margin:0 auto 12px;width:240px;padding:24px 14px 16px;border-radius:120px 120px 8px 8px;background:#4a4556;border:3px solid #7d7a8c;color:#f2eee4;text-align:center;line-height:1.5em;box-shadow:0 6px 0 #2b2733}
+.stone .rip{font-size:22px;letter-spacing:.2em;font-weight:bold;margin-bottom:6px}
+.won{color:#ffd84a;font-size:20px;text-align:center;margin-bottom:8px;font-weight:bold}
+pre.mono,.mono{font-family:"DejaVu Sans Mono",Menlo,Consolas,monospace;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="main">
+    <div id="top">
+      <div id="msgbar" title="Tap for the message log"></div>
+      <div id="stat"></div>
+    </div>
+    <div id="mapwrap">
+      <canvas id="map"></canvas>
+      <div id="aimbar"><span id="aimtext"></span><button id="aimCancel">✖ Cancel</button></div>
+      <div id="tip"></div>
+      <div id="dpad"></div>
+      <button id="centerBtn" title="Back to you">◎</button>
+    </div>
+  </div>
+  <div id="side">
+    <div id="quick"></div>
+    <div id="btns">
+      <button id="packBtn">🎒 Pack</button>
+      <button id="actBtn"></button>
+      <button id="menuBtn">☰ Menu</button>
+    </div>
+  </div>
+</div>
+<div id="modal"><div class="box" id="mbox"></div></div>
+<img id="ghost" alt="">
+<div id="title"></div>
+<script>const ROGUE_SAVE_KEY = 'roguish-save-v1';</script>
+<script src="rogue.js"></script>
+<script src="sprites.js"></script>
+<script>
+'use strict';
+// Roguish: started as a copy of Rogue+, with its own copy of rogue.js, so its rules can change
+// while Rogue and Rogue+ stay true to the original. Drawn with pixel art and played with taps,
+// swipes, pinch zoom and a quick-use bar.
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } },
+};
+const prefs = Object.assign({ classic: false, buzz: true, dpad: true }, store.get('roguish-prefs', {}));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const $ = id => document.getElementById(id);
+
+// ── Input: every key, tap and button goes into one queue the game reads from ──
+const keyq = [];
+let keyWaiter = null;
+function pushKey(k) { if (keyWaiter) { const w = keyWaiter; keyWaiter = null; w(k); } else keyq.push(k); }
+function nextKey() { return keyq.length ? Promise.resolve(keyq.shift()) : new Promise(r => { keyWaiter = r; }); }
+
+const KEYMAP = { ArrowLeft: 'h', ArrowDown: 'j', ArrowUp: 'k', ArrowRight: 'l', Home: 'y', PageUp: 'u', End: 'b', PageDown: 'n', Escape: '\x1b' };
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if ($('title').style.display !== 'none') return;
+  if (menuOpen) { if (e.key === 'Escape') closeModal(); return; }
+  let k = KEYMAP[e.key];
+  if (k && e.shiftKey && 'hjklyubn'.includes(k)) k = k.toUpperCase();
+  if (!k && e.ctrlKey) { if (e.key.toLowerCase() === 'p') k = '^P'; else if ('hjklyubn'.includes(e.key.toLowerCase())) k = '^' + e.key.toLowerCase(); }
+  if (!k && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) k = e.key;
+  if (!k) return;
+  e.preventDefault();
+  travel = null;
+  pushKey(k);
+});
+
+// An item action (from the pack or the quick bar) presses the command key and answers
+// the "which object?" question that follows with this item.
+let pending = null;
+function doItem(cmd, obj) {
+  if (!Rogue.isPlaying()) return;
+  travel = null;
+  pending = { cmd, letter: obj.packch, armed: false };
+  pushKey(cmd);
+}
+
+// ── Pictures for things ─────────────────────────────────────────────────────
+const tintOf = name => {
+  if (COLOR_NAMES[name]) return COLOR_NAMES[name];
+  let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) & 0xffffff;
+  return '#' + (h | 0x404040).toString(16).padStart(6, '0').slice(-6);
+};
+// [sprite, tint] for an item of this type and kind
+function itemArt(type, which) {
+  const G = Rogue.G;
+  switch (type) {
+    case '!': return ['potion', tintOf(G.p_colors[which])];
+    case '?': return ['scroll'];
+    case ':': return [which === 1 ? 'fruit' : 'ration'];
+    case ')': return [WEAPON_SPRITE[which] || 'sword'];
+    case ']': return ['armor', ARMOR_TINT[which] || '#9aa0b0'];
+    case '=': return ['ring', tintOf(G.r_stones[which])];
+    case '/': return [G.ws_type[which] === 'staff' ? 'staff' : 'wand', tintOf(G.ws_made[which])];
+    case '*': return ['gold'];
+    case ',': return ['amulet'];
+  }
+  return null;
+}
+const KINDS = { '!': 14, ':': 2, ')': 9, ']': 8, '=': 14, '/': 14 };
+// what a thing on the map looks like; a xeroc pretending to be an item gets a believable look too
+function mapItemArt(ch, y, x) {
+  const o = Rogue.G.lvl_obj.find(o => o.pos.y === y && o.pos.x === x);
+  const which = o && o.type === ch ? o.which : ((y * 131 + x * 71 + Rogue.G.level * 17) % (KINDS[ch] || 1));
+  return itemArt(ch, which);
+}
+const iconCache = new Map();
+function iconURL(art) {
+  const key = art.join('|');
+  if (!iconCache.has(key)) iconCache.set(key, sprite(art[0], art[1]).toDataURL());
+  return iconCache.get(key);
+}
+const objIcon = o => iconURL(itemArt(o.type, o.which) || ['scroll']);
+
+// ── The map ─────────────────────────────────────────────────────────────────
+const cv = $('map'), ctx = cv.getContext('2d');
+const COLS = 80, ROWS = 22;           // screen lines 1–22 are the dungeon
+const TERRAIN = '.#+-|%^';
+const ITEMS = '*!?:)]=/,';
+const MON_COLORS = ['#ff6b6b', '#ff9f43', '#ffd166', '#06d6a0', '#4cc9f0', '#f72585', '#b5179e', '#e9c46a', '#90e0ef', '#ff8fab'];
+const CLASSIC = { '@': '#ffd84a', '-': '#c8a26a', '|': '#c8a26a', '.': '#5c5c5c', '#': '#9a9a9a', '+': '#c87533', '%': '#3cff6e',
+  '^': '#ff4fd8', '*': '#ffd700', '!': '#ff7ad9', '?': '#f4f4f4', ':': '#b9f27a', ')': '#7ad7ff', ']': '#9fc0ff', '=': '#ffb347',
+  '/': '#d29bff', ',': '#fff27a' };
+let W = 0, H = 0, TS = 32;            // TS: size of one square on screen
+const cam = { x: 40, y: 11, follow: true };
+let seen = new Array(COLS * 23).fill('');   // the floor, walls and doors you've seen, for under monsters
+let lastLevel = -1, heroCell = null, face = 1;
+const heroVis = { x: 0, y: 0 };
+const monVis = new WeakMap();         // monster → where it's drawn (it slides there)
+let shownMons = new Set();
+let floats = [], poofs = [], hurtFlash = 0, lastHp = null;
+let overlayMarks = null, aiming = false;
+
+function layout() {
+  const r = cv.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+  W = r.width; H = r.height;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  TS = clampTS(store.get('roguish-zoom', 0) || defaultTS());
+}
+const fitTS = () => Math.min(W / COLS, H / ROWS);
+const defaultTS = () => Math.max(fitTS(), Math.min(40, Math.max(26, W / 13)));
+const clampTS = t => Math.max(fitTS(), Math.min(84, t));
+addEventListener('resize', () => { layout(); });
+
+// keep the camera over the map; a map smaller than the screen sits in the middle
+function clampCam() {
+  const hw = W / 2 / TS, hh = H / 2 / TS;
+  cam.x = COLS <= 2 * hw ? COLS / 2 : Math.max(hw, Math.min(COLS - hw, cam.x));
+  cam.y = ROWS <= 2 * hh ? ROWS / 2 : Math.max(hh, Math.min(ROWS - hh, cam.y));
+}
+const toScreen = (cx, cy) => [(cx - cam.x) * TS + W / 2, (cy - cam.y) * TS + H / 2];   // cy counts from map row 0
+const toCell = (sx, sy) => [Math.floor((sx - W / 2) / TS + cam.x), Math.floor((sy - H / 2) / TS + cam.y) + 1];
+
+function resetView() {
+  seen = new Array(COLS * 23).fill(''); shownMons = new Set(); floats = []; poofs = [];
+  const h = Rogue.hero(); heroVis.x = h.x; heroVis.y = h.y; heroCell = h.y * COLS + h.x;
+  cam.follow = true; cam.x = h.x + .5; cam.y = h.y - .5; lastLevel = Rogue.G.level; lastHp = null;
+}
+
+let lastT = 0;
+function frame(t) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(.1, (t - lastT) / 1000 || 0); lastT = t;
+  if (!Rogue.G || $('title').style.display !== 'none') return;
+  draw(dt, t / 1000);
+}
+requestAnimationFrame(frame);
+
+function draw(dt, now) {
+  const G = Rogue.G, h = Rogue.hero(), scr = Rogue.scr;
+  if (G.level !== lastLevel) resetView();
+  const ease = 1 - Math.exp(-dt * 22);
+  // the hero slides from square to square; a jump (teleport, new level) snaps
+  if (Math.abs(h.x - heroVis.x) > 2.5 || Math.abs(h.y - heroVis.y) > 2.5) { heroVis.x = h.x; heroVis.y = h.y; }
+  if (h.x < heroVis.x - .01) face = -1; else if (h.x > heroVis.x + .01) face = 1;
+  heroVis.x += (h.x - heroVis.x) * ease; heroVis.y += (h.y - heroVis.y) * ease;
+  if (h.y * COLS + h.x !== heroCell) { heroCell = h.y * COLS + h.x; cam.follow = true; }
+  if (cam.follow) {
+    const tx = heroVis.x + .5, ty = heroVis.y - .5, k = 1 - Math.exp(-dt * 10);
+    cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k;
+  }
+  clampCam();
+  $('centerBtn').style.display = cam.follow ? 'none' : 'block';
+
+  ctx.fillStyle = '#0e0b12'; ctx.fillRect(0, 0, W, H);
+  const [c0, r0] = toCell(0, 0), [c1, r1] = toCell(W, H);
+  const x0 = Math.max(0, c0), x1 = Math.min(COLS - 1, c1), y0 = Math.max(1, r0), y1 = Math.min(ROWS, r1);
+  const P = Rogue.P, cansee = Rogue.cansee;
+  const creatures = [];
+  if (prefs.classic) ctx.font = `bold ${Math.floor(TS * .8)}px "DejaVu Sans Mono",Menlo,Consolas,monospace`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    let ch = scr[y][x];
+    const mark = overlayMarks && overlayMarks.get(y * COLS + x);
+    if (mark) ch = mark;
+    if (TERRAIN.includes(ch) && Rogue.chat(y, x) === ch) seen[y * COLS + x] = ch;
+    if (ch === ' ') continue;
+    const [sx, sy] = toScreen(x, y - 1);
+    if (prefs.classic) { drawClassic(ch, sx, sy, Rogue.sout[y][x]); continue; }
+    const isMon = ch >= 'A' && ch <= 'Z', isHero = ch === '@' && y === h.y && x === h.x;
+    const bolt = '-|/\\'.includes(ch) && Rogue.chat(y, x) !== ch && !mark;
+    // ground first
+    let ground = TERRAIN.includes(ch) && !bolt ? ch : seen[y * COLS + x] || ((P(y, x).fl & 0x80) ? '#' : '.');
+    if (isHero) { const u = Rogue.chat(y, x); if (TERRAIN.includes(u) && !(u === '^' && !(P(y, x).fl & 0x10))) ground = u; }
+    drawGround(ground, x, y, sx, sy);
+    if (ITEMS.includes(ch)) { const art = mapItemArt(ch, y, x); if (art) ctx.drawImage(sprite(art[0], art[1]), sx, sy, TS, TS); }
+    else if (isHero) { const u = Rogue.chat(y, x), art = ITEMS.includes(u) ? itemArt(u, (Rogue.G.lvl_obj.find(o => o.pos.y === y && o.pos.x === x) || {}).which) : null; if (art) ctx.drawImage(sprite(art[0], art[1]), sx, sy, TS, TS); }
+    else if (bolt) drawBolt(ch, sx, sy, now);
+    else if (!isMon && ch !== '@' && !TERRAIN.includes(ch)) {   // detect-magic marks and the like
+      ctx.font = `bold ${Math.floor(TS * .7)}px monospace`; ctx.fillStyle = '#ffd84a'; ctx.fillText(ch, sx + TS / 2, sy + TS / 2);
+    }
+    if (mark) { ctx.strokeStyle = `rgba(255,216,74,${.5 + .4 * Math.sin(now * 6)})`; ctx.lineWidth = 2; ctx.strokeRect(sx + 1, sy + 1, TS - 2, TS - 2); }
+    if (!isHero && !mark && !cansee(y, x)) { ctx.fillStyle = 'rgba(8,5,14,.5)'; ctx.fillRect(sx, sy, TS + .5, TS + .5); }
+    if (isMon || (ch === '@' && !isHero)) creatures.push([ch, y, x]);
+  }
+  if (!prefs.classic) {
+    drawCreatures(creatures, ease, now, G);
+    drawHero(now);
+    drawEffects(dt);
+  }
+  if (aiming) drawAim(now);
+  if (hurtFlash > 0) {
+    hurtFlash -= dt;
+    const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .3, W / 2, H / 2, Math.max(W, H) * .7);
+    g.addColorStop(0, 'rgba(200,20,30,0)'); g.addColorStop(1, `rgba(200,20,30,${Math.max(0, hurtFlash) * 1.4})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  watchHero();
+}
+const hash = (x, y) => ((x * 73856093) ^ (y * 19349663)) >>> 0;
+function drawGround(ch, x, y, sx, sy) {
+  const v = hash(x, y) % 6;
+  let t;
+  switch (ch) {
+    case '.': t = tile('floor', v); break;
+    case '#': t = tile('passage', v); break;
+    case '-': case '|': t = tile('wall', v); break;
+    case '+': t = tile('door'); break;
+    case '%': t = tile('stairs'); break;
+    case '^': t = tile('trap', v); break;
+    default: t = tile('floor', v);
+  }
+  ctx.drawImage(t, sx, sy, TS + .5, TS + .5);
+}
+function drawClassic(ch, sx, sy, so) {
+  let col = CLASSIC[ch] || '#ddd';
+  if (ch >= 'A' && ch <= 'Z') col = MON_COLORS[ch.charCodeAt(0) % MON_COLORS.length];
+  if (so) { ctx.fillStyle = col; ctx.fillRect(sx, sy, TS, TS); col = '#000'; }
+  ctx.fillStyle = col; ctx.fillText(ch, sx + TS / 2, sy + TS / 2 + 1);
+}
+function drawBolt(ch, sx, sy, now) {
+  const cx = sx + TS / 2, cy = sy + TS / 2, r = TS / 2;
+  const [dx, dy] = { '-': [1, 0], '|': [0, 1], '/': [1, -1], '\\': [1, 1] }[ch];
+  ctx.save(); ctx.lineCap = 'round';
+  for (const [w, col] of [[TS * .45, 'rgba(255,140,40,.35)'], [TS * .22, '#ffb347'], [TS * .08, '#fff6c0']]) {
+    ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath();
+    ctx.moveTo(cx - dx * r, cy - dy * r); ctx.lineTo(cx + dx * r, cy + dy * r); ctx.stroke();
+  }
+  ctx.restore();
+}
+function shadow(sx, sy) {
+  ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath();
+  ctx.ellipse(sx + TS / 2, sy + TS * .9, TS * .32, TS * .1, 0, 0, Math.PI * 2); ctx.fill();
+}
+function drawCreatures(list, ease, now, G) {
+  const nowShown = new Set();
+  for (const [ch, y, x] of list) {
+    const m = Rogue.P(y, x).mon;
+    let rec = m && monVis.get(m);
+    if (m && !rec) { rec = { x, y, hp: m.stats.hpt, hit: 0 }; monVis.set(m, rec); }
+    if (!rec) rec = { x, y, hit: 0 };
+    if (Math.abs(rec.x - x) > 2.5 || Math.abs(rec.y - y) > 2.5 || (m && !shownMons.has(m))) { rec.x = x; rec.y = y; }
+    rec.x += (x - rec.x) * ease; rec.y += (y - rec.y) * ease;
+    if (m) {
+      nowShown.add(m);
+      if (rec.hp !== undefined && m.stats.hpt < rec.hp) { addFloat(rec.x, rec.y, '-' + (rec.hp - m.stats.hpt), '#fff1a8'); rec.hit = .25; }
+      rec.hp = m.stats.hpt;
+    }
+    const [sx, sy0] = toScreen(rec.x, rec.y - 1), sy = sy0 + Math.sin(now * 3 + x) * TS * .03;
+    shadow(sx, sy0);
+    const name = ch === '@' ? 'hero' : ch;
+    ctx.drawImage(sprite(name), sx, sy, TS, TS);
+    if (rec.hit > 0) { rec.hit -= 1 / 60; ctx.globalAlpha = Math.min(1, rec.hit * 4); ctx.drawImage(sprite(name, null, 'flash'), sx, sy, TS, TS); ctx.globalAlpha = 1; }
+  }
+  // a monster that was here and is now gone from the level was beaten
+  for (const m of shownMons) if (!nowShown.has(m) && !G.mlist.includes(m)) {
+    const rec = monVis.get(m); if (rec) poofs.push({ x: rec.x, y: rec.y, t: 0 });
+  }
+  shownMons = nowShown;
+}
+function drawHero(now) {
+  const h = Rogue.hero();
+  if (Rogue.scr[h.y][h.x] !== '@') return;
+  const [sx, sy0] = toScreen(heroVis.x, heroVis.y - 1), sy = sy0 + Math.sin(now * 3) * TS * .025;
+  ctx.fillStyle = 'rgba(255,216,74,.12)'; ctx.beginPath(); ctx.arc(sx + TS / 2, sy0 + TS / 2, TS * .75, 0, Math.PI * 2); ctx.fill();
+  shadow(sx, sy0);
+  ctx.save();
+  if (face < 0) { ctx.translate(sx + TS, sy); ctx.scale(-1, 1); ctx.drawImage(sprite('hero'), 0, 0, TS, TS); }
+  else ctx.drawImage(sprite('hero'), sx, sy, TS, TS);
+  ctx.restore();
+}
+function addFloat(x, y, text, color) { floats.push({ x, y, text, color, t: 0 }); }
+function drawEffects(dt) {
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  floats = floats.filter(f => (f.t += dt) < 1.1);
+  for (const f of floats) {
+    const [sx, sy] = toScreen(f.x + .5, f.y - 1.1 - f.t * .9);
+    ctx.globalAlpha = Math.min(1, (1.1 - f.t) * 3);
+    ctx.font = `bold ${Math.max(13, Math.floor(TS * .45))}px system-ui`;
+    ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText(f.text, sx, sy);
+    ctx.fillStyle = f.color; ctx.fillText(f.text, sx, sy);
+  }
+  ctx.globalAlpha = 1;
+  poofs = poofs.filter(p => (p.t += dt) < .5);
+  for (const p of poofs) {
+    const [sx, sy] = toScreen(p.x + .5, p.y - .5);
+    for (let i = 0; i < 8; i++) {
+      const a = i / 8 * Math.PI * 2, d = TS * (.15 + p.t * 1.1);
+      ctx.fillStyle = `rgba(230,225,240,${1 - p.t * 2})`;
+      const s = TS * .14 * (1 - p.t);
+      ctx.fillRect(sx + Math.cos(a) * d - s / 2, sy + Math.sin(a) * d - s / 2, s, s);
+    }
+  }
+}
+function drawAim(now) {
+  const [sx, sy] = toScreen(heroVis.x + .5, heroVis.y - .5);
+  ctx.save(); ctx.translate(sx, sy);
+  ctx.fillStyle = `rgba(255,216,74,${.55 + .25 * Math.sin(now * 6)})`;
+  for (let i = 0; i < 8; i++) {
+    ctx.save(); ctx.rotate(i * Math.PI / 4); ctx.beginPath();
+    ctx.moveTo(TS * 1.05, -TS * .2); ctx.lineTo(TS * 1.4, 0); ctx.lineTo(TS * 1.05, TS * .2); ctx.fill(); ctx.restore();
+  }
+  ctx.restore();
+}
+// floating numbers and a buzz when you get hurt
+function watchHero() {
+  const s = Rogue.G.player.stats;
+  if (lastHp !== null && s.hpt < lastHp) {
+    addFloat(heroVis.x, heroVis.y, '-' + (lastHp - s.hpt), '#ff6b6b'); hurtFlash = .35;
+    if (prefs.buzz && navigator.vibrate) navigator.vibrate(40);
+  } else if (lastHp !== null && s.hpt >= lastHp + 4) addFloat(heroVis.x, heroVis.y, '+' + (s.hpt - lastHp), '#7dff8a');
+  lastHp = s.hpt;
+}
+
+// ── Touch: tap, swipe, long-press, pinch and drag ───────────────────────────
+const pointers = new Map();
+let gest = null, lastTap = null, tapTimer = null;
+const tipEl = $('tip');
+cv.addEventListener('pointerdown', e => {
+  if (!Rogue.G) return;
+  try { cv.setPointerCapture(e.pointerId); } catch (err) { }
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 1) {
+    gest = { type: 'press', x0: e.clientX, y0: e.clientY, t0: performance.now(), cam0: { x: cam.x, y: cam.y, follow: cam.follow } };
+    gest.long = setTimeout(() => { if (gest && gest.type === 'press') { gest.type = 'long'; showTip(e.clientX, e.clientY); } }, 480);
+  } else if (pointers.size === 2) {
+    if (gest) clearTimeout(gest.long);
+    const [a, b] = [...pointers.values()];
+    gest = { type: 'pinch', d0: Math.hypot(a.x - b.x, a.y - b.y), ts0: TS, mid0: mid(a, b), cam0: { x: cam.x, y: cam.y } };
+  }
+});
+const mid = (a, b) => { const r = cv.getBoundingClientRect(); return { x: (a.x + b.x) / 2 - r.left, y: (a.y + b.y) / 2 - r.top }; };
+cv.addEventListener('pointermove', e => {
+  if (!pointers.has(e.pointerId) || !gest) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (gest.type === 'pinch' && pointers.size >= 2) {
+    const [a, b] = [...pointers.values()], m = mid(a, b);
+    const wx = gest.cam0.x + (gest.mid0.x - W / 2) / gest.ts0, wy = gest.cam0.y + (gest.mid0.y - H / 2) / gest.ts0;
+    TS = clampTS(gest.ts0 * Math.hypot(a.x - b.x, a.y - b.y) / gest.d0);
+    cam.x = wx - (m.x - W / 2) / TS; cam.y = wy - (m.y - H / 2) / TS; cam.follow = false;
+    store.set('roguish-zoom', TS);
+  } else if (gest.type === 'press' || gest.type === 'pan') {
+    const dx = e.clientX - gest.x0, dy = e.clientY - gest.y0;
+    if (gest.type === 'press' && Math.hypot(dx, dy) > 10) { gest.type = 'pan'; clearTimeout(gest.long); }
+    if (gest.type === 'pan') { cam.x = gest.cam0.x - dx / TS; cam.y = gest.cam0.y - dy / TS; cam.follow = false; }
+  }
+});
+function endPointer(e) {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.delete(e.pointerId);
+  if (!gest) return;
+  clearTimeout(gest.long);
+  if (gest.type === 'pinch') { if (!pointers.size) gest = null; return; }
+  const dx = e.clientX - gest.x0, dy = e.clientY - gest.y0, ms = performance.now() - gest.t0;
+  if (gest.type === 'press' && e.type === 'pointerup') tap(e.clientX, e.clientY);
+  else if (gest.type === 'pan' && ms < 280 && Math.hypot(dx, dy) > 40) {
+    // a quick flick is a swipe: run that way (and put the camera back)
+    Object.assign(cam, gest.cam0);
+    swipe(dx, dy);
+  } else if (gest.type === 'long') setTimeout(() => { tipEl.style.display = 'none'; }, 1400);
+  gest = null;
+}
+cv.addEventListener('pointerup', endPointer);
+cv.addEventListener('pointercancel', endPointer);
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+  const wx = cam.x + (mx - W / 2) / TS, wy = cam.y + (my - H / 2) / TS;
+  TS = clampTS(TS * Math.pow(1.0015, -e.deltaY));
+  cam.x = wx - (mx - W / 2) / TS; cam.y = wy - (my - H / 2) / TS; cam.follow = false;
+  store.set('roguish-zoom', TS);
+}, { passive: false });
+cv.addEventListener('contextmenu', e => e.preventDefault());
+$('centerBtn').onclick = () => { cam.follow = true; };
+
+const DIRKEYS = ['l', 'n', 'j', 'b', 'h', 'y', 'k', 'u'];   // east, then clockwise
+const angleDir = (dx, dy) => DIRKEYS[(Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8];
+const dirKey = (dy, dx) => ({ '-1,-1': 'y', '-1,0': 'k', '-1,1': 'u', '0,-1': 'h', '0,1': 'l', '1,-1': 'b', '1,0': 'j', '1,1': 'n' })[dy + ',' + dx];
+
+function tap(cx, cy) {
+  const r = cv.getBoundingClientRect(), x = cx - r.left, y = cy - r.top;
+  if (aiming) {
+    const [hx, hy] = toScreen(heroVis.x + .5, heroVis.y - .5);
+    if (Math.hypot(x - hx, y - hy) > TS * .4) pushKey(angleDir(x - hx, y - hy));
+    return;
+  }
+  if (!Rogue.isPlaying() || modalOpen()) return;
+  // when you've dragged the map away, a double tap brings it back (so the first tap waits a moment)
+  if (!cam.follow) {
+    if (lastTap && performance.now() - lastTap.t < 300 && Math.hypot(cx - lastTap.x, cy - lastTap.y) < 30) {
+      clearTimeout(tapTimer); lastTap = null; cam.follow = true; return;
+    }
+    lastTap = { t: performance.now(), x: cx, y: cy };
+    tapTimer = setTimeout(() => { lastTap = null; tapCell(x, y); }, 260);
+    return;
+  }
+  tapCell(x, y);
+}
+function tapCell(x, y) {
+  const [cx, cy] = toCell(x, y);
+  if (cx < 0 || cx >= COLS || cy < 1 || cy > ROWS) return;
+  const h = Rogue.hero(), dy = cy - h.y, dx = cx - h.x;
+  if (!dx && !dy) { pushKey(actionKey()[0]); return; }
+  if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) { travel = null; pushKey(dirKey(dy, dx)); return; }
+  if (Rogue.scr[cy][cx] === ' ') return;
+  travel = { y: cy, x: cx, sy: h.y, sx: h.x, msgs: Rogue.msgLog().length };
+  pushKey('TRAVEL');
+}
+function swipe(dx, dy) {
+  if (!Rogue.isPlaying() || modalOpen() || aiming) return;
+  travel = null;
+  pushKey(angleDir(dx, dy).toUpperCase());
+}
+
+// long-press: what is that?
+const WHAT = { '.': 'the floor', '#': 'a passage', '+': 'a door', '-': 'a wall', '|': 'a wall', '%': 'stairs down',
+  '^': 'a trap', '*': 'some gold', '!': 'a potion', '?': 'a scroll', ':': 'some food', ')': 'a weapon',
+  ']': 'some armor', '=': 'a ring', '/': 'a wand or staff', ',': 'the Amulet of Yendor', ' ': 'darkness' };
+function showTip(cx, cy) {
+  const r = cv.getBoundingClientRect(), [x, y] = toCell(cx - r.left, cy - r.top);
+  if (x < 0 || x >= COLS || y < 1 || y > ROWS) return;
+  const h = Rogue.hero(), ch = Rogue.scr[y][x];
+  let text = WHAT[ch] || 'something strange';
+  if (y === h.y && x === h.x) text = 'you, ' + Rogue.G.whoami;
+  else if (ch >= 'A' && ch <= 'Z') { const n = Rogue.monsters[ch.charCodeAt(0) - 65].name; text = ('aeiou'.includes(n[0]) ? 'an ' : 'a ') + n; }
+  tipEl.textContent = text;
+  tipEl.style.left = (cx - r.left) + 'px'; tipEl.style.top = (cy - r.top) + 'px'; tipEl.style.display = 'block';
+  if (prefs.buzz && navigator.vibrate) navigator.vibrate(15);
+}
+
+// ── Walking somewhere you tapped: one step at a time along squares you've seen ──
+let travel = null;
+const WALKABLE = '.#+%*!?:)]=/,';
+function travelStep() {
+  const h = Rogue.hero(), scr = Rogue.scr;
+  if (!travel || (h.y === travel.y && h.x === travel.x) || Rogue.msgLog().length !== travel.msgs) { travel = null; return null; }
+  for (let y = h.y - 1; y <= h.y + 1; y++) for (let x = h.x - 1; x <= h.x + 1; x++) {
+    const c = scr[y] && scr[y][x];
+    if (c >= 'A' && c <= 'Z') { travel = null; return null; }   // a monster next to you: stop
+  }
+  const ok = (y, x) => y >= 1 && y <= 22 && x >= 0 && x < 80 && ((y === h.y && x === h.x) || WALKABLE.includes(scr[y][x]) || (y === travel.y && x === travel.x && scr[y][x] !== ' '));
+  const can = (y, x, ny, nx) => ok(ny, nx) && (y === ny || x === nx || (ok(y, nx) && ok(ny, x)));   // no cutting corners, like the original
+  // steps from the target to every square, out as far as you
+  const dist = new Map([[travel.y * 80 + travel.x, 0]]), q = [[travel.y, travel.x]], home = h.y * 80 + h.x;
+  while (q.length && !dist.has(home)) {
+    const [y, x] = q.shift(), d = dist.get(y * 80 + x);
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const ny = y + dy, nx = x + dx, k = ny * 80 + nx;
+      if ((!dy && !dx) || dist.has(k) || !can(y, x, ny, nx)) continue;
+      dist.set(k, d + 1); q.push([ny, nx]);
+    }
+  }
+  if (!dist.has(home)) { travel = null; return null; }
+  // Many ways are equally short (a diagonal step costs the same as a straight one): take the one
+  // nearest the straight line from where the walk began, not always the first one found going up.
+  let best = null, bestOff = Infinity;
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const ny = h.y + dy, nx = h.x + dx;
+    if (dist.get(ny * 80 + nx) !== dist.get(home) - 1 || !can(h.y, h.x, ny, nx)) continue;
+    const off = Math.abs((ny - travel.sy) * (travel.x - travel.sx) - (nx - travel.sx) * (travel.y - travel.sy));
+    if (off < bestOff) { best = dirKey(dy, dx); bestOff = off; }
+  }
+  if (!best) travel = null;
+  return best;
+}
+
+// ── The direction pad: tap an arrow to step, hold it to run; the middle is the big button ──
+const dpad = $('dpad');
+dpad.classList.toggle('off', !prefs.dpad);
+[['y', '↖'], ['k', '↑'], ['u', '↗'], ['h', '←'], ['', '●'], ['l', '→'], ['b', '↙'], ['j', '↓'], ['n', '↘']].forEach(([k, l]) => {
+  const b = document.createElement('button'); b.textContent = l;
+  let held = null, long = false;
+  const ready = () => Rogue.isPlaying() && !modalOpen() && (!aiming || k);   // when aiming, the arrows pick the direction
+  b.addEventListener('pointerdown', () => {
+    long = false;
+    held = setTimeout(() => {
+      long = true;
+      if (!ready() || aiming) return;
+      travel = null;
+      if (k) pushKey(k.toUpperCase());
+      else { pushKey('2'); pushKey('0'); pushKey('s'); }   // like holding the big button
+    }, 450);
+  });
+  b.addEventListener('pointerup', () => {
+    clearTimeout(held);
+    if (long || !ready()) return;
+    travel = null; pushKey(k || actionKey()[0]);
+  });
+  b.addEventListener('pointerleave', () => clearTimeout(held));
+  dpad.appendChild(b);
+});
+
+// ── The action button: whatever makes sense where you stand ─────────────────
+function actionKey() {
+  const h = Rogue.hero(), u = Rogue.chat(h.y, h.x);
+  if (u === '%') return Rogue.G.amulet ? ['<', '⬆ Climb up'] : ['>', '⬇ Go down'];
+  if (ITEMS.includes(u)) return [',', '✋ Pick up'];
+  return ['s', '🔍 Search'];
+}
+const actBtn = $('actBtn');
+{
+  let held = null, long = false;
+  actBtn.addEventListener('pointerdown', () => {
+    long = false;
+    held = setTimeout(() => {   // hold: search (and rest) for 20 turns; anything happening stops it
+      long = true;
+      if (Rogue.isPlaying() && !modalOpen()) { travel = null; pushKey('2'); pushKey('0'); pushKey('s'); }
+    }, 500);
+  });
+  actBtn.addEventListener('pointerup', () => { clearTimeout(held); if (!long && Rogue.isPlaying() && !modalOpen()) { travel = null; pushKey(actionKey()[0]); } });
+  actBtn.addEventListener('pointerleave', () => clearTimeout(held));
+}
+$('packBtn').onclick = () => { if (Rogue.isPlaying() && !modalOpen()) { travel = null; pushKey('i'); } };
+$('menuBtn').onclick = () => { if (Rogue.isPlaying() && !modalOpen()) openMenu(); };
+$('msgbar').onclick = () => { if (Rogue.isPlaying() && !modalOpen()) pushKey('^P'); };
+$('aimCancel').onclick = () => pushKey('\x1b');
+
+// ── Status line ─────────────────────────────────────────────────────────────
+let statSig = '';
+function renderStatus() {
+  const G = Rogue.G; if (!G) return;
+  const s = G.player.stats, arm = G.cur_armor !== null ? G.cur_armor.arm : s.arm;
+  const hunger = ['', 'Hungry', 'Weak', 'Faint'][G.hungry_state];
+  const sig = [s.hpt, s.maxhp, G.level, G.purse, s.str, G.max_stats.str, arm, s.lvl, s.exp, hunger].join(',');
+  if (sig === statSig) return;
+  statSig = sig;
+  const pct = Math.max(0, Math.min(100, s.hpt / s.maxhp * 100));
+  $('stat').innerHTML = `<div id="hp"><div id="hpfill" style="width:${pct}%"></div><div id="hptext">❤ ${s.hpt} / ${s.maxhp}</div></div>
+<span class="chip" title="Dungeon level">⬇ ${G.level}</span><span class="chip" title="Gold">🪙 ${G.purse}</span>
+<span class="chip" title="Strength">💪 ${s.str}${s.str !== G.max_stats.str ? '/' + G.max_stats.str : ''}</span>
+<span class="chip" title="Armor">🛡 ${10 - arm}</span><span class="chip" title="Experience level / points">⭐ ${s.lvl}/${s.exp}</span>
+${hunger ? `<span class="chip ${G.hungry_state > 1 ? 'bad' : 'warn'}">🍖 ${hunger}</span>` : ''}`;
+}
+function renderMessages() {
+  const el = $('msgbar'), m = Rogue.newMsgs();
+  el.innerHTML = m.length ? m.slice(-3).map(esc).join('<br>') : '<span class="old">' + esc(Rogue.msgLog().slice(-1)[0] || '') + '</span>';
+}
+
+// ── Quick bar: 6 slots; pin favourites, the rest fill with food, potions, scrolls and wands ──
+let pins = store.get('roguish-pins', [null, null, null, null, null, null]);
+const savePins = () => store.set('roguish-pins', pins);
+const pinOf = o => ({ c: o.packch, t: o.type, w: o.which });
+function quickSlots() {
+  const pack = Rogue.G.pack, used = new Set(), slots = new Array(6).fill(null);
+  pins.forEach((p, i) => {
+    if (!p) return;
+    const o = pack.find(o => o.packch === p.c && o.type === p.t && o.which === p.w && !used.has(o)) ||
+      pack.find(o => o.type === p.t && o.which === p.w && !used.has(o));
+    if (o) { slots[i] = { o, pinned: true }; used.add(o); }
+  });
+  const order = ':!?/';
+  const auto = pack.filter(o => !used.has(o) && order.includes(o.type))
+    .sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type) || a.packch.localeCompare(b.packch));
+  for (let i = 0; i < 6 && auto.length; i++) if (!slots[i] && !pins[i]) slots[i] = { o: auto.shift(), pinned: false };
+  for (let i = 0; i < 6 && auto.length; i++) if (!slots[i]) slots[i] = { o: auto.shift(), pinned: false };
+  return slots;
+}
+const isWorn = o => { const G = Rogue.G; return o === G.cur_weapon || o === G.cur_armor || o === G.cur_ring[0] || o === G.cur_ring[1]; };
+function slotHTML(s, i) {
+  if (!s) return `<div class="slot empty" data-slot="${i}"></div>`;
+  return `<div class="slot" data-slot="${i}" title="${esc(Rogue.inv_name(s.o, false))}"><img src="${objIcon(s.o)}" alt="">${s.pinned ? '<span class="pin">📌</span>' : ''}${s.o.count > 1 ? `<span class="n">${s.o.count}</span>` : ''}${isWorn(s.o) ? '<span class="n">✓</span>' : ''}</div>`;
+}
+let quickSig = '', quickNow = [];
+function renderQuick() {
+  if (!Rogue.G) return;
+  const slots = quickSlots();
+  const sig = JSON.stringify(pins) + slots.map(s => s ? s.o.packch + s.o.type + s.o.which + s.o.count + isWorn(s.o) + s.pinned : '-').join();
+  if (sig === quickSig) return;
+  quickSig = sig; quickNow = slots;
+  $('quick').innerHTML = slots.map(slotHTML).join('');
+}
+// tapping a slot does the obvious thing with it
+function quickUse(o) {
+  const G = Rogue.G;
+  switch (o.type) {
+    case ':': return doItem('e', o);
+    case '!': return doItem('q', o);
+    case '?': return doItem('r', o);
+    case '/': return doItem('z', o);
+    case ')': return o === G.cur_weapon ? itemSheet(o, true) : doItem([3, 6, 7].includes(o.which) ? 't' : 'w', o);
+    case ']': return doItem(o === G.cur_armor ? 'T' : 'W', o);
+    case '=': return doItem(o === G.cur_ring[0] || o === G.cur_ring[1] ? 'R' : 'P', o);
+  }
+  itemSheet(o, true);
+}
+{
+  const q = $('quick');
+  let held = null, long = false;
+  q.addEventListener('pointerdown', e => {
+    const el = e.target.closest('.slot'); if (!el) return;
+    long = false;
+    held = setTimeout(() => { long = true; const s = quickNow[+el.dataset.slot]; if (s && Rogue.isPlaying() && !modalOpen()) itemSheet(s.o, true); }, 500);
+  });
+  q.addEventListener('pointerup', e => {
+    clearTimeout(held);
+    const el = e.target.closest('.slot'); if (!el || long) return;
+    const s = quickNow[+el.dataset.slot];
+    if (s && Rogue.isPlaying() && !modalOpen()) quickUse(s.o);
+  });
+  q.addEventListener('pointerleave', () => clearTimeout(held));
+}
+setInterval(() => { if (Rogue.G) { renderQuick(); renderStatus(); updateActBtn(); } }, 150);
+let actSig = '';
+function updateActBtn() { const [, label] = actionKey(); if (label !== actSig) { actSig = label; actBtn.textContent = label; } }
+
+// ── Pop-ups ─────────────────────────────────────────────────────────────────
+const modal = $('modal'), mbox = $('mbox');
+let menuOpen = false;
+function openModal(html, drawer) { mbox.innerHTML = html; modal.className = drawer ? 'drawer' : ''; modal.style.display = 'flex'; mbox.scrollTop = 0; }
+function closeModal() { modal.style.display = 'none'; mbox.innerHTML = ''; menuOpen = false; }
+const modalOpen = () => modal.style.display === 'flex';
+mbox.addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (b) pushKey(b.dataset.k); });
+modal.addEventListener('click', e => { if (e.target === modal) { if (menuOpen) closeModal(); else pushKey('\x1b'); } });
+const CANCEL = '<div class="row"><button data-k="\x1b">Cancel</button></div>';
+async function modalKey(valid) {
+  for (;;) { const k = await nextKey(); if (k === '\x1b' || valid(k)) return k; }
+}
+function itemButton(o, dim, attrs = '') {
+  const tag = o === Rogue.G.cur_weapon ? 'in hand' : o === Rogue.G.cur_armor ? 'being worn' :
+    o === Rogue.G.cur_ring[0] ? 'on left hand' : o === Rogue.G.cur_ring[1] ? 'on right hand' : '';
+  return `<button class="item${dim ? ' dim' : ''}${tag ? ' worn' : ''}" ${attrs}><img src="${objIcon(o)}" alt=""><span>${esc(Rogue.inv_name(o, false))}</span></button>`;
+}
+const fitsType = (o, type) => !type || type === o.type || (type === -1 && o.type !== ':' && o.type !== ',') || (type === -2 && (o.type === '=' || o.type === '/'));
+
+// the menu: every command, for anything the buttons don't cover
+const MENU = [
+  ['Moving & fighting', [['f', 'Fight a monster'], ['F', 'Fight to the death'], ['m', 'Step without picking up'], ['.', 'Rest a turn'],
+    ['s', 'Search'], ['>', 'Go down stairs'], ['<', 'Go up stairs'], ['a', 'Do that again']]],
+  ['Items', [['i', 'Pack'], ['t', 'Throw'], ['z', 'Zap a wand'], ['q', 'Drink'], ['r', 'Read'], ['e', 'Eat'], ['w', 'Wield'],
+    ['W', 'Wear armor'], ['T', 'Take off armor'], ['P', 'Put on a ring'], ['R', 'Remove a ring'], ['d', 'Drop'], ['c', 'Name an item']]],
+  ['Information', [['D', 'Discoveries'], ['^P', 'Messages'], ['^', 'What trap is that?'], [')', 'Weapon in hand'],
+    [']', 'Armor worn'], ['=', 'Rings worn'], ['@', 'Your stats'], ['?', 'How to play']]],
+];
+function openMenu() {
+  menuOpen = true;
+  openModal(`<h2>Menu</h2>${MENU.map(([t, list]) => `<p class="sec">${t}</p><div class="menu">${list.map(([k, l]) =>
+    `<button data-menu="${esc(k)}"><b>${esc(k.replace('^P', '^P'))}</b>${l}</button>`).join('')}</div>`).join('')}
+<p class="sec">Settings</p><div class="menu">
+<button id="optClassic">${prefs.classic ? '🧱 Pixel art view' : '🔤 Classic letters view'}</button>
+<button id="optBuzz">${prefs.buzz ? '📳 Buzz: on' : '📴 Buzz: off'}</button>
+<button id="optDpad">${prefs.dpad ? '🕹 Direction pad: on' : '🕹 Direction pad: off'}</button>
+<button id="optQuit">🏳 Quit this game</button></div>
+<div class="row"><button id="menuClose">Close</button></div>`);
+  mbox.querySelectorAll('[data-menu]').forEach(b => b.onclick = () => { closeModal(); travel = null; pushKey(b.dataset.menu); });
+  $('optClassic').onclick = () => { prefs.classic = !prefs.classic; store.set('roguish-prefs', prefs); closeModal(); };
+  $('optBuzz').onclick = () => { prefs.buzz = !prefs.buzz; store.set('roguish-prefs', prefs); closeModal(); };
+  $('optDpad').onclick = () => { prefs.dpad = !prefs.dpad; store.set('roguish-prefs', prefs); dpad.classList.toggle('off', !prefs.dpad); closeModal(); };
+  $('optQuit').onclick = () => { closeModal(); pushKey('Q'); };
+  $('menuClose').onclick = closeModal;
+}
+
+// one item up close, with the things you can do with it
+const ACTS = {
+  ':': o => [['e', '🍖 Eat'], ['t', '🎯 Throw'], ['d', '⬇ Drop']],
+  '!': o => [['q', '🧪 Drink'], ['t', '🎯 Throw'], ['d', '⬇ Drop'], ['c', '🏷 Name']],
+  '?': o => [['r', '📜 Read'], ['t', '🎯 Throw'], ['d', '⬇ Drop'], ['c', '🏷 Name']],
+  ')': o => [o === Rogue.G.cur_weapon ? null : ['w', '⚔ Wield'], ['t', '🎯 Throw'], ['d', '⬇ Drop']],
+  ']': o => [o === Rogue.G.cur_armor ? ['T', '👕 Take off'] : ['W', '🛡 Wear'], ['t', '🎯 Throw'], ['d', '⬇ Drop']],
+  '=': o => [o === Rogue.G.cur_ring[0] || o === Rogue.G.cur_ring[1] ? ['R', '✋ Remove'] : ['P', '💍 Put on'], ['d', '⬇ Drop'], ['c', '🏷 Name']],
+  '/': o => [['z', '✨ Zap'], ['t', '🎯 Throw'], ['d', '⬇ Drop'], ['c', '🏷 Name']],
+  ',': o => [['d', '⬇ Drop']],
+};
+// standalone: opened from the quick bar (not from inside the game's own pack screen)
+function itemSheet(o, standalone) {
+  const pinned = pins.findIndex(p => p && p.c === o.packch && p.t === o.type && p.w === o.which);
+  const acts = (ACTS[o.type] || (() => []))(o).filter(Boolean);
+  openModal(`<div class="sheet"><img src="${objIcon(o)}" alt=""><div><h2 style="margin:0">${esc(Rogue.inv_name(o, false))}</h2>
+<p style="color:#9a90aa">${isWorn(o) ? 'In use' : 'In your pack'} · ${esc(o.packch)})</p></div></div>
+<div class="acts">${acts.map(([k, l]) => `<button data-act="${k}">${l}</button>`).join('')}
+<button data-pin="1">${pinned >= 0 ? '📌 Unpin from quick bar' : '📌 Pin to quick bar'}</button></div>
+<div class="row"><button data-back="1">${standalone ? 'Close' : '◀ Back'}</button></div>`);
+  menuOpen = standalone;
+  return new Promise(res => {
+    mbox.querySelectorAll('[data-act]').forEach(b => b.onclick = () => { if (standalone) closeModal(); res(['act', b.dataset.act]); if (standalone) doItem(b.dataset.act, o); });
+    mbox.querySelector('[data-pin]').onclick = () => {
+      if (pinned >= 0) pins[pinned] = null;
+      else { let i = pins.findIndex(p => !p); if (i < 0) i = 5; pins[i] = pinOf(o); }
+      savePins(); renderQuick();
+      if (standalone) closeModal(); res(['back']);
+    };
+    mbox.querySelector('[data-back]').onclick = () => { if (standalone) closeModal(); res(['back']); };
+  });
+}
+
+// the pack: a grid of pictures; tap one for what you can do, or drag it onto the quick bar
+async function packScreen() {
+  for (;;) {
+    const pack = Rogue.G.pack, slots = quickSlots();
+    openModal(`<h2>🎒 Your pack</h2>
+<p style="font-size:12px;color:#9a90aa;margin-bottom:6px">Quick bar — drag an item onto a slot to pin it there, tap a 📌 slot to unpin</p>
+<div class="mini">${slots.map(slotHTML).join('')}</div>
+<div class="items">${pack.length ? pack.map((o, i) => itemButton(o, false, `data-i="${i}"`)).join('') : '<p>You are empty handed</p>'}</div>
+<div class="row"><button data-close="1">Close</button></div>`);
+    const res = await new Promise(resolve => {
+      mbox.querySelector('[data-close]').onclick = () => resolve(['close']);
+      mbox.querySelectorAll('.mini .slot').forEach(el => el.onclick = () => {
+        const i = +el.dataset.slot; if (pins[i]) { pins[i] = null; savePins(); renderQuick(); resolve(['again']); }
+      });
+      waitKey(resolve);
+      mbox.querySelectorAll('.item').forEach(el => dragOrTap(el, pack[+el.dataset.i], resolve));
+    });
+    keyWaiter = null;   // stop listening for Escape here, so the next key goes to the game
+    if (res[0] === 'close' || res[0] === 'esc') { closeModal(); return; }
+    if (res[0] === 'sheet') {
+      const r = await itemSheet(res[1], false);
+      if (r[0] === 'act') { closeModal(); pending = { cmd: r[1], letter: res[1].packch, armed: false }; pushKey(r[1]); return; }
+    }
+  }
+}
+// Escape (or tapping outside) closes whichever pack screen is up
+let keyResolve = null;
+function waitKey(resolve) {
+  keyResolve = resolve;
+  (async () => { const k = await modalKey(() => false); if (keyResolve === resolve) resolve(['esc']); })();
+}
+function dragOrTap(el, o, resolve) {
+  const ghost = $('ghost');
+  el.addEventListener('pointerdown', e => {
+    const x0 = e.clientX, y0 = e.clientY; let dragging = false;
+    try { el.setPointerCapture(e.pointerId); } catch (err) { }
+    const move = ev => {
+      if (!dragging && Math.hypot(ev.clientX - x0, ev.clientY - y0) > 10) { dragging = true; ghost.src = objIcon(o); ghost.style.display = 'block'; }
+      if (!dragging) return;
+      ghost.style.left = ev.clientX + 'px'; ghost.style.top = ev.clientY + 'px';
+      mbox.querySelectorAll('.mini .slot').forEach(s => { const r = s.getBoundingClientRect(); s.classList.toggle('hot', ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom); });
+    };
+    const up = ev => {
+      el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
+      ghost.style.display = 'none';
+      if (!dragging) { if (ev.type === 'pointerup') resolve(['sheet', o]); return; }
+      const hot = mbox.querySelector('.mini .slot.hot');
+      if (hot) {
+        const i = +hot.dataset.slot;
+        pins = pins.map(p => p && p.c === o.packch && p.t === o.type && p.w === o.which ? null : p);
+        pins[i] = pinOf(o); savePins(); renderQuick(); resolve(['again']);
+      }
+    };
+    el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  });
+}
+
+// ── What the game asks of the screen ────────────────────────────────────────
+const UI = {
+  messages: renderMessages,
+  readchar: async () => {
+    renderMessages(); renderStatus(); renderQuick();
+    for (;;) {
+      if (travel && !keyq.length) { const s = travelStep(); if (s) { await sleep(70); return s; } }
+      const k = await nextKey();
+      if (k === 'TRAVEL') { const s = travelStep(); if (s) return s; continue; }
+      if (pending) { if (pending.armed || k !== pending.cmd) pending = null; else pending.armed = true; }
+      return k;
+    }
+  },
+  flash: ms => sleep(Math.max(ms, 45)),
+  pickItem: async (prompt, type) => {
+    const pack = Rogue.G.pack;
+    if (pending && pack.some(o => o.packch === pending.letter)) { const l = pending.letter; pending = null; return l; }
+    openModal(`<h2>${esc(prompt)}</h2><div class="items">${pack.map(o => itemButton(o, !fitsType(o, type), `data-k="${o.packch}"`)).join('')}</div>${CANCEL}`);
+    const letters = pack.map(o => o.packch);
+    const k = await modalKey(k => letters.includes(k) || k === '*');
+    closeModal(); return k === '*' ? '\x1b' : k;
+  },
+  direction: async prompt => {
+    aiming = true;
+    $('aimtext').textContent = prompt.replace('Which direction?', 'Tap where to aim');
+    $('aimbar').style.display = 'flex';
+    const k = await modalKey(k => 'hjklyubnHJKLYUBN'.includes(k) && k.length === 1);
+    aiming = false; $('aimbar').style.display = 'none';
+    return k;
+  },
+  choose: async (prompt, opts) => {
+    openModal(`<h2>${esc(prompt)}</h2><div class="row">${opts.map(([k, l]) => `<button data-k="${k}">${esc(l)}</button>`).join('')}</div>${CANCEL}`);
+    const k = await modalKey(k => opts.some(o => o[0] === k.toLowerCase()));
+    closeModal(); return k === '\x1b' ? k : k.toLowerCase();
+  },
+  confirm: async prompt => (await UI.choose(prompt, [['y', 'Yes'], ['n', 'No']])) === 'y',
+  ask: (prompt, def = '') => new Promise(res => {
+    openModal(`<h2>${esc(prompt)}</h2><input id="askIn" maxlength="40" autocomplete="off" value="${esc(def)}"><div class="row"><button id="askOk">OK</button><button id="askSkip">Skip</button></div>`);
+    const inp = $('askIn'); inp.focus();
+    const done = v => { closeModal(); res(v.trim()); };
+    $('askOk').onclick = () => done(inp.value);
+    $('askSkip').onclick = () => done('');
+    inp.onkeydown = e => { if (e.key === 'Enter') done(inp.value); else if (e.key === 'Escape') done(''); e.stopPropagation(); };
+  }),
+  showPanel: async (html, drawer) => {
+    openModal(html + '<div class="row"><button data-k=" ">Close</button></div>', drawer);
+    await nextKey(); closeModal();
+  },
+  inventory: packScreen,
+  discoveries: () => UI.showPanel('<h2>Discoveries</h2>' + Rogue.discoveries().map(([t, rows]) =>
+    `<p class="sec">${t}</p>` + rows.map(r => `<p>${esc(r)}</p>`).join('')).join('')),
+  log: () => UI.showPanel('<h2>Messages</h2>' + (Rogue.msgLog().slice(-60).map(m => `<p>${esc(m)}</p>`).join('') || '<p>No messages yet</p>'), true),
+  help: () => UI.showPanel(`<h2>How to play Roguish</h2><p>Find the Amulet of Yendor on level 26 or deeper, then climb all the way back up with it. It began as the original 1980 Rogue with pictures and phone controls, and its rules are changing: Rogue+ is the true-to-the-original version.</p>
+<p class="sec">Moving</p><p>Tap a square to walk there. Tap next to you to step — or to attack a monster. Flick (swipe) to run that way.
+Or use the direction pad in the corner: tap an arrow to step, hold it to run; its middle does what the big button does (☰ Menu turns the pad off).
+Pinch to zoom, drag to look around; ◎ or a double tap brings the view back to you. Press and hold anything to see what it is.</p>
+<p class="sec">The big button</p><p>It does what fits where you stand: Go down on stairs, Pick up on an item, otherwise Search. Hold it to search and rest for 20 turns (a monster showing up stops it).</p>
+<p class="sec">Items</p><p>🎒 Pack shows your things — tap one to use it. The quick bar under the map fills itself with food, potions, scrolls and wands; tap a slot to use it, hold for more. Drag items onto the quick bar in your pack to pin favourites. When a wand or throw needs aiming, tap toward the target or press an arrow on the pad.</p>
+<p class="sec">Keyboard</p><p class="mono">Arrows or h j k l y u b n (Shift runs), and all the original letter commands — see ☰ Menu.</p>
+<p class="sec">The map</p><p>Unknown potions show their real colour, rings their stone, wands and staffs their wood or metal. Dimmed squares are places you remember but can't see right now.</p>
+<p class="sec">About</p><p>Ported from Rogue 5.4.4 by Michael Toy, Glenn Wichman and Ken Arnold (1980–1985), under the BSD license — see <a href="LICENSE.TXT" target="_blank" style="color:#9be564">LICENSE.TXT</a>. Pixel art made for this arcade. Your game saves itself after every move.</p>`),
+  overlay: async (marks, text) => {
+    overlayMarks = new Map(marks.map(([y, x, c]) => [y * 80 + x, c]));
+    $('msgbar').textContent = text + '  (tap to continue)';
+    cam.follow = false;
+    // zoom out to show the whole map while the marks are up
+    const ts0 = TS; TS = fitTS(); cam.x = COLS / 2; cam.y = ROWS / 2;
+    await new Promise(r => {
+      let done = false;
+      const go = e => {
+        if (e && e.stopPropagation) e.stopPropagation();   // this tap only closes the marks
+        if (done) return; done = true; removeEventListener('pointerdown', go, true); r();
+      };
+      setTimeout(() => { if (!done) addEventListener('pointerdown', go, true); }, 300);
+      nextKey().then(go);
+    });
+    keyWaiter = null;
+    TS = ts0; cam.follow = true;
+    overlayMarks = null;
+  },
+  gameOver: info => {
+    renderMessages(); renderStatus();
+    const year = new Date().getFullYear();
+    let html;
+    if (info.won) {
+      html = `<div class="won">🏆 You made it out alive! 🏆</div><p>You escaped the Dungeons of Doom with the Amulet of Yendor, sold your loot and joined the Fighters' Guild.</p>
+<p class="sec">Worth  Item</p>${info.rows.map(([c, w, n]) => `<p class="mono">${c}) ${String(w).padStart(5)}  ${esc(n)}</p>`).join('')}
+<p class="mono">   ${String(info.gold).padStart(5)}  Gold pieces</p><p class="sec">Total: ${info.total} gold</p>`;
+    } else {
+      html = `<div class="stone"><div class="rip">REST<br>IN<br>PEACE</div><div>${esc(info.name)}</div><div>${info.gold} Au</div>
+<div>${info.quit ? 'quit' : 'killed by ' + esc(info.killer)}</div><div>on level ${info.level}</div><div>${year}</div></div>`;
+    }
+    openModal(html + '<p class="sec">Top Rogues</p><div id="topten"><p>Loading…</p></div><div class="row" style="justify-content:center"><button id="againBtn">Play again</button></div>');
+    $('againBtn').onclick = () => { closeModal(); showTitle(); };
+    // like the original, every finished game goes on the scoreboard
+    const mine = { name: info.name.slice(0, 16), score: info.won ? info.total : info.gold };
+    const shown = list => {
+      const el = $('topten'); if (!el) return;
+      let hi = false;
+      el.innerHTML = list.length ? list.slice(0, 10).map((s, i) => {
+        const me = !hi && s.name === mine.name && s.score === mine.score; if (me) hi = true;
+        return `<p class="mono"${me ? ' style="color:#ffd84a"' : ''}>${String(i + 1).padStart(2)}. ${String(s.score).padStart(6)}  ${esc(s.name)}</p>`;
+      }).join('') : '<p>No scores yet.</p>';
+    };
+    (mine.score > 0
+      ? fetch('/scores/roguish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mine) })
+      : fetch('/scores/roguish')).then(r => r.json()).then(shown).catch(() => shown([]));
+  },
+};
+
+// ── Title screen ────────────────────────────────────────────────────────────
+const titleEl = $('title');
+function titleArt() {
+  const c = document.createElement('canvas'); c.width = 16 * 12; c.height = 16 * 5;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  for (let y = 0; y < 5; y++) for (let x = 0; x < 12; x++) {
+    const wall = y === 0 || y === 4 || x === 0 || x === 11;
+    g.drawImage(wall ? tile('wall', (x + y) % 6) : tile('floor', (x * 3 + y) % 6), x * 16, y * 16);
+  }
+  g.drawImage(tile('door'), 11 * 16, 2 * 16); g.drawImage(tile('stairs'), 9 * 16, 3 * 16);
+  const put = (n, x, y, t) => g.drawImage(sprite(n, t), x * 16, y * 16);
+  put('hero', 2, 2); put('B', 4, 1); put('D', 7, 2); put('gold', 3, 3); put('potion', 9, 1, '#e02828');
+  put('S', 5, 3); put('amulet', 10, 2); put('scroll', 6, 1);
+  return c;
+}
+function showTitle() {
+  const saved = Rogue.hasSave();
+  const name = store.get('roguish-name', 'Rogue');
+  titleEl.innerHTML = `<h1>ROGUISH</h1><div class="sub">Exploring the Dungeons of Doom</div><div id="artHere"></div>
+${saved ? '<button id="contBtn">Continue your game ▶</button>' : ''}
+<div><input id="nameIn" maxlength="20" value="${esc(name)}" aria-label="Your name"></div>
+<button id="newBtn">${saved ? 'Start a new game' : 'Start ▶'}</button>
+<div class="credit">Based on Rogue 5.4.4 by Michael Toy, Glenn Wichman and Ken Arnold, 1980–1985, with new pixel art, touch controls and changed rules. BSD license — <a href="LICENSE.TXT" target="_blank">LICENSE.TXT</a>.<br>Press ☰ Menu → How to play in the game for help.</div>`;
+  $('artHere').appendChild(titleArt());
+  titleEl.style.display = 'flex';
+  if (saved) $('contBtn').onclick = () => start(false);
+  $('newBtn').onclick = () => {
+    if (saved && !confirm('Start over? Your saved game will be lost.')) return;
+    start(true);
+  };
+}
+async function start(fresh) {
+  const name = ($('nameIn').value || 'Rogue').trim().slice(0, 20) || 'Rogue';
+  store.set('roguish-name', name);
+  titleEl.style.display = 'none';
+  keyq.length = 0; travel = null; pending = null;
+  if (fresh || !Rogue.load_game()) { Rogue.new_game(name); pins = [null, null, null, null, null, null]; savePins(); }
+  else Rogue.G.whoami = Rogue.G.whoami || name;
+  quickSig = statSig = actSig = '';
+  layout(); resetView(); renderMessages(); renderStatus(); renderQuick(); updateActBtn();
+  await Rogue.playit();
+}
+showTitle();
+</script>
+</body>
+</html>
