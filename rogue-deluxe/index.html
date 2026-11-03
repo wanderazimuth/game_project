@@ -997,18 +997,34 @@ Pinch to zoom, drag to look around; ◎ or a double tap brings the view back to 
       html = `<div class="stone"><div class="rip">REST<br>IN<br>PEACE</div><div>${esc(info.name)}</div><div>${info.gold} Au</div>
 <div>${info.quit ? 'quit' : 'killed by ' + esc(info.killer)}</div><div>on level ${info.level}</div><div>${year}</div></div>`;
     }
-    openModal(html + '<p class="sec">Top Rogues</p><div id="topten"><p>Loading…</p></div><div class="row" style="justify-content:center"><button id="againBtn">Play again</button></div>');
-    $('againBtn').onclick = () => { closeModal(); showTitle(); };
+    // after a death you can look through your pack, everything named for what it really was
+    const things = info.won ? [] : Rogue.reveal_pack();
+    let list = null;
+    const stone = () => {
+      openModal(html + '<p class="sec">Top Rogues</p><div id="topten"><p>Loading…</p></div><div class="row" style="justify-content:center">' +
+        (things.length ? '<button id="seeBtn">🎒 See what you had</button>' : '') + '<button id="againBtn">Play again</button></div>');
+      $('againBtn').onclick = () => { closeModal(); showTitle(); };
+      if (things.length) $('seeBtn').onclick = seePack;
+      if (list) shown(list);
+    };
+    const seePack = () => {
+      openModal(`<h2>What you had</h2><div class="items">${things.map(({ o, cursed }) => itemButton(o, false).replace('</span></button>',
+        cursed ? '<span class="tag" style="color:#ff6a5a">cursed</span></span></button>' : '</span></button>')).join('')}</div>
+<div class="row" style="justify-content:center"><button id="backBtn">Back</button></div>`);
+      $('backBtn').onclick = stone;
+    };
     // like the original, every finished game goes on the scoreboard
     const mine = { name: info.name.slice(0, 16), score: info.won ? info.total : info.gold };
-    const shown = list => {
+    const shown = l => {
+      list = l;
       const el = $('topten'); if (!el) return;
       let hi = false;
-      el.innerHTML = list.length ? list.slice(0, 10).map((s, i) => {
+      el.innerHTML = l.length ? l.slice(0, 10).map((s, i) => {
         const me = !hi && s.name === mine.name && s.score === mine.score; if (me) hi = true;
-        return `<p class="mono"${me ? ' style="color:#ffd84a"' : ''}>${String(i + 1).padStart(2)}. ${String(s.score).padStart(6)}  ${esc(s.name)}</p>`;
+        return `<p class="mono"${me ? ' style="color:#ffd84a"' : ''}>${String(i + 1).padStart(2)}. ${esc(String(s.score).padStart(6))}  ${esc(s.name)}</p>`;
       }).join('') : '<p>No scores yet.</p>';
     };
+    stone();
     (mine.score > 0
       ? fetch('/scores/rogue-deluxe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mine) })
       : fetch('/scores/rogue-deluxe')).then(r => r.json()).then(shown).catch(() => shown([]));

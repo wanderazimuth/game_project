@@ -3,6 +3,7 @@
 
 import base64
 import hashlib
+import html
 import http.server
 import json
 import os
@@ -106,11 +107,14 @@ def get_scores(game):
     with SCORES_LOCK:
         return list(_load_scores().get(game, []))
 
-def add_score(game, name, score):
+def add_score(game, name, score, label=None):
     with SCORES_LOCK:
         data = _load_scores()
         bucket = data.get(game, [])
-        bucket.append({"name": name[:16], "score": int(score)})
+        entry = {"name": name[:16], "score": int(score)}
+        if label:
+            entry["label"] = label[:24]   # shown instead of the number (Roguish: depth and gold)
+        bucket.append(entry)
         bucket.sort(key=lambda x: x["score"], reverse=True)
         data[game] = bucket[:10]
         _save_scores(data)
@@ -255,6 +259,9 @@ if ("serviceWorker" in navigator && isSecureContext) navigator.serviceWorker.reg
 </html>
 """
 
+def score_text(s):
+    return html.escape(s["label"]) if s.get("label") else f'{s["score"]:,}'
+
 def build_scores_html(game_key):
     scores = get_scores(game_key)[:3]
     if not scores:
@@ -262,8 +269,8 @@ def build_scores_html(game_key):
     rows = "".join(
         f'<div class="score-row">'
         f'<span class="s-rank">#{i+1}</span>'
-        f'<span class="s-name">{s["name"]}</span>'
-        f'<span class="s-pts">{s["score"]:,}</span>'
+        f'<span class="s-name">{html.escape(s["name"])}</span>'
+        f'<span class="s-pts">{score_text(s)}</span>'
         f'</div>'
         for i, s in enumerate(scores)
     )
@@ -292,8 +299,8 @@ def build_score_sections(keys):
             rows = "".join(
                 f'<div class="row">'
                 f'<span class="rank">#{i+1}</span>'
-                f'<span class="name">{s["name"]}</span>'
-                f'<span class="pts">{s["score"]:,}</span>'
+                f'<span class="name">{html.escape(s["name"])}</span>'
+                f'<span class="pts">{score_text(s)}</span>'
                 f'</div>'
                 for i, s in enumerate(scores)
             )
@@ -556,7 +563,8 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
                 body = json.loads(self.rfile.read(length))
                 name = str(body.get("name", "ANON")).strip()[:16] or "ANON"
                 score = int(body.get("score", 0))
-                updated = add_score(game, name, score)
+                label = str(body.get("label") or "").strip()
+                updated = add_score(game, name, score, label)
                 resp = json.dumps(updated).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")

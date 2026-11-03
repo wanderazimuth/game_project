@@ -2590,6 +2590,18 @@ function total_winner() {
   UI.gameOver({ won: true, rows, gold: G.purse, total, name: G.whoami });
 }
 
+// After you die: everything you carried, named for what it really was (Rogue+'s "See what you had").
+// Only once the game is over, so it can't give anything away.
+function reveal_pack() {
+  if (playing) return [];
+  for (const obj of G.pack) {
+    obj.flags |= ISKNOW;
+    const tbl = { [POTION]: I().pot_info, [SCROLL]: I().scr_info, [RING]: I().ring_info, [STICK]: I().ws_info }[obj.type];
+    if (tbl) tbl[obj.which].know = true;
+  }
+  return G.pack.map(o => ({ o, cursed: !!(o.flags & ISCURSED) }));
+}
+
 // ── Saving (comfort: the game saves itself before every command) ─────────────
 // Rogue+ shares this file and sets ROGUE_SAVE_KEY first, so the two games keep separate saves
 const SAVE_KEY = (typeof ROGUE_SAVE_KEY === 'string' && ROGUE_SAVE_KEY) || 'rogue-save-v1';
@@ -2664,7 +2676,7 @@ async function playit() {
   while (playing) await command();
 }
 const Rogue = { new_game, load_game, playit, hasSave: () => { try { return !!localStorage.getItem(SAVE_KEY); } catch (e) { return false; } },
-  get G() { return G; }, scr, sout, statusText, discoveries, inv_name, monsters, msgLog: () => msgLog, newMsgs: () => newMsgs,
+  get G() { return G; }, scr, sout, statusText, discoveries, inv_name, reveal_pack, monsters, msgLog: () => msgLog, newMsgs: () => newMsgs,
   hero: () => hero, chat, P, NUMLINES, NUMCOLS, isPlaying: () => playing,
   // for Rogue Deluxe's drawing: what you can see right now (read only, changes nothing)
   cansee, blind: () => on(player, ISBLIND), halluc: () => on(player, ISHALU) };

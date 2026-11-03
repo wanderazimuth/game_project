@@ -960,7 +960,7 @@ const UI = {
     `<p class="sec">${t}</p>` + rows.map(r => `<p>${esc(r)}</p>`).join('')).join('')),
   log: () => UI.showPanel('<h2>Messages</h2>' + (Rogue.msgLog().slice(-60).map(m => `<p>${esc(m)}</p>`).join('') || '<p>No messages yet</p>'), true),
   help: () => UI.showPanel(`<h2>How to play Roguish</h2><p>Find the Amulet of Yendor on level 26 or deeper, then climb all the way back up with it. It began as the original 1980 Rogue with pictures and phone controls, and its rules are changing: Rogue+ is the true-to-the-original version.</p>
-<p class="sec">What's different</p><p>The dungeon is squarer: 42 wide and 40 tall instead of 80 by 22, so more of it fits on a phone. Rooms are as tall as they are wide.</p>
+<p class="sec">What's different</p><p>The dungeon is squarer: 42 wide and 40 tall instead of 80 by 22, so more of it fits on a phone. Rooms are as tall as they are wide.</p><p>The high scores rank how deep you got (the deepest level you reached), with gold breaking ties; getting out with the Amulet beats any depth.</p>
 <p class="sec">Moving</p><p>Tap a square to walk there (in the dark too: with no known way there, you head straight for it until something's in the way). Tap next to you to step — or to attack a monster. Flick (swipe) to run that way.
 Or use the direction pad under the map: tap an arrow to step, hold it to run; its middle does what the big button does (☰ Menu turns the pad off).
 Pinch to zoom, drag to look around; ◎ or a double tap brings the view back to you. Press and hold anything to see what it is.</p>
@@ -990,7 +990,7 @@ Pinch to zoom, drag to look around; ◎ or a double tap brings the view back to 
   },
   gameOver: info => {
     renderMessages(); renderStatus();
-    const year = new Date().getFullYear();
+    const year = new Date().getFullYear(), deep = Rogue.G.max_level;
     let html;
     if (info.won) {
       html = `<div class="won">🏆 You made it out alive! 🏆</div><p>You escaped the Dungeons of Doom with the Amulet of Yendor, sold your loot and joined the Fighters' Guild.</p>
@@ -998,23 +998,38 @@ Pinch to zoom, drag to look around; ◎ or a double tap brings the view back to 
 <p class="mono">   ${String(info.gold).padStart(5)}  Gold pieces</p><p class="sec">Total: ${info.total} gold</p>`;
     } else {
       html = `<div class="stone"><div class="rip">REST<br>IN<br>PEACE</div><div>${esc(info.name)}</div><div>${info.gold} Au</div>
-<div>${info.quit ? 'quit' : 'killed by ' + esc(info.killer)}</div><div>on level ${info.level}</div><div>${year}</div></div>`;
+<div>${info.quit ? 'quit' : 'killed by ' + esc(info.killer)}</div><div>on level ${info.level}</div>${deep > info.level ? `<div>after reaching level ${deep}</div>` : ''}<div>${year}</div></div>`;
     }
-    openModal(html + '<p class="sec">Top Rogues</p><div id="topten"><p>Loading…</p></div><div class="row" style="justify-content:center"><button id="againBtn">Play again</button></div>');
-    $('againBtn').onclick = () => { closeModal(); showTitle(); };
-    // like the original, every finished game goes on the scoreboard
-    const mine = { name: info.name.slice(0, 16), score: info.won ? info.total : info.gold };
-    const shown = list => {
+    // after a death you can look through your pack, everything named for what it really was
+    const things = info.won ? [] : Rogue.reveal_pack();
+    let list = null;
+    const stone = () => {
+      openModal(html + '<p class="sec">Top Rogues</p><div id="topten"><p>Loading…</p></div><div class="row" style="justify-content:center">' +
+        (things.length ? '<button id="seeBtn">🎒 See what you had</button>' : '') + '<button id="againBtn">Play again</button></div>');
+      $('againBtn').onclick = () => { closeModal(); showTitle(); };
+      if (things.length) $('seeBtn').onclick = seePack;
+      if (list) shown(list);
+    };
+    const seePack = () => {
+      openModal(`<h2>What you had</h2><div class="items">${things.map(({ o, cursed }) => itemButton(o, false).replace('</span></button>',
+        cursed ? '<span class="tag" style="color:#ff6a5a">cursed</span></span></button>' : '</span></button>')).join('')}</div>
+<div class="row" style="justify-content:center"><button id="backBtn">Back</button></div>`);
+      $('backBtn').onclick = stone;
+    };
+    // Roguish ranks by how deep you got, gold breaking ties; getting out with the Amulet beats any depth
+    const mine = { name: info.name.slice(0, 16), score: info.won ? 1e9 + info.total : deep * 1e6 + Math.min(info.gold, 999999),
+      label: info.won ? `🏆 ${info.total} Au` : `Lvl ${deep} · ${info.gold} Au` };
+    const shown = l => {
+      list = l;
       const el = $('topten'); if (!el) return;
       let hi = false;
-      el.innerHTML = list.length ? list.slice(0, 10).map((s, i) => {
+      el.innerHTML = l.length ? l.slice(0, 10).map((s, i) => {
         const me = !hi && s.name === mine.name && s.score === mine.score; if (me) hi = true;
-        return `<p class="mono"${me ? ' style="color:#ffd84a"' : ''}>${String(i + 1).padStart(2)}. ${String(s.score).padStart(6)}  ${esc(s.name)}</p>`;
+        return `<p class="mono"${me ? ' style="color:#ffd84a"' : ''}>${String(i + 1).padStart(2)}. ${esc(String(s.label || s.score).padStart(15))}  ${esc(s.name)}</p>`;
       }).join('') : '<p>No scores yet.</p>';
     };
-    (mine.score > 0
-      ? fetch('/scores/roguish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mine) })
-      : fetch('/scores/roguish')).then(r => r.json()).then(shown).catch(() => shown([]));
+    stone();
+    fetch('/scores/roguish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mine) }).then(r => r.json()).then(shown).catch(() => shown([]));
   },
 };
 
