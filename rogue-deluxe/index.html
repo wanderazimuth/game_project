@@ -22,34 +22,36 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0e0b12;color:#e8e2d
 .chip.bad{background:#6a1420;border-color:#e04848;color:#fff}
 #mapwrap{flex:1;position:relative;min-height:0;overflow:hidden}
 #map{position:absolute;inset:0;width:100%;height:100%;display:block}
-#dpad{position:absolute;left:8px;bottom:8px;display:grid;grid-template-columns:repeat(3,46px);grid-template-rows:repeat(3,46px);gap:4px}
-#dpad button{font-size:20px;background:rgba(42,34,52,.55);border-color:rgba(106,90,128,.6);touch-action:none}
-#dpad button:active{background:rgba(90,72,112,.85)}
-#dpad.off{display:none}
 #centerBtn{position:absolute;right:10px;bottom:10px;width:46px;height:46px;border-radius:23px;font-size:22px;display:none;opacity:.9}
 #aimbar{position:absolute;left:0;right:0;top:0;display:none;justify-content:center;align-items:center;gap:10px;padding:8px;background:rgba(20,10,30,.88);font-size:15px;color:#ffd84a;flex-wrap:wrap}
 #aimbar button{padding:6px 14px}
 #tip{position:absolute;display:none;background:rgba(20,14,28,.95);border:1px solid #6a5a80;border-radius:8px;padding:5px 9px;font-size:14px;pointer-events:none;white-space:nowrap;transform:translate(-50%,-190%)}
-#side{background:#17121e;border-top:2px solid #2a2234;padding:6px 8px 8px;display:flex;flex-direction:column;gap:6px}
-#quick{display:grid;grid-template-columns:repeat(6,1fr);gap:5px}
-#quick,#btns{width:100%;max-width:640px;margin:0 auto}
-.slot{position:relative;height:50px;border-radius:9px;background:#221a2c;border:2px solid #3a2f46;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:none}
+#side{background:#17121e;border-top:2px solid #2a2234;padding:6px 8px 8px;display:flex;justify-content:center;gap:8px}
+#dpad{display:grid;grid-template-columns:repeat(3,46px);grid-template-rows:repeat(3,46px);gap:4px;flex:none}
+#dpad button{font-size:20px;touch-action:none}
+#dpad.off{display:none}
+#ctl{flex:1;min-width:0;max-width:480px;display:flex;flex-direction:column;justify-content:space-between;gap:6px}
+#quick{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.slot{position:relative;height:46px;border-radius:9px;background:#221a2c;border:2px solid #3a2f46;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:none}
 .slot img{width:38px;height:38px;image-rendering:pixelated;pointer-events:none}
 .slot .n{position:absolute;right:3px;bottom:1px;font-size:11px;font-weight:bold;color:#fff;text-shadow:0 1px 2px #000}
 .slot .pin{position:absolute;left:3px;top:0;font-size:9px}
 .slot.empty{opacity:.4;cursor:default}
 .slot:active{background:#3a2f46}
-#btns{display:grid;grid-template-columns:1fr 1.6fr 1fr;gap:6px}
+#btns{display:grid;grid-template-columns:1fr 1.3fr 1fr;gap:5px}
 button{font:inherit;color:#eee;background:#2a2234;border:1px solid #4a3d5a;border-radius:10px;cursor:pointer;touch-action:manipulation}
 button:active{background:#3e3250}
-#btns button{height:50px;font-size:15px;display:flex;align-items:center;justify-content:center;gap:6px}
-#actBtn{background:#4a3a14;border-color:#c8a040;color:#ffe9a8;font-weight:bold;font-size:16px!important}
+#btns button{height:42px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:3px;padding:0 3px;white-space:nowrap;overflow:hidden}
+#actBtn{background:#4a3a14;border-color:#c8a040;color:#ffe9a8;font-weight:bold;font-size:14px!important}
 #actBtn:active{background:#6a5420}
 @media (orientation:landscape) and (max-height:560px){
   #app{flex-direction:row}
-  #side{width:212px;border-top:none;border-left:2px solid #2a2234;justify-content:flex-end}
-  #quick{grid-template-columns:repeat(3,1fr)}
+  #side{width:212px;border-top:none;border-left:2px solid #2a2234;flex-direction:column;justify-content:flex-end;align-items:center}
+  #ctl{flex:none;width:100%;justify-content:flex-end}
+  #dpad{order:1;grid-template-columns:repeat(3,42px);grid-template-rows:repeat(3,42px)}
+  .slot{height:40px}
   #btns{grid-template-columns:1fr 1fr}
+  #btns button{height:38px}
   #actBtn{grid-column:1 / span 2;order:-1}
   #msgbar{min-height:2.6em}
 }
@@ -108,16 +110,18 @@ pre.mono,.mono{font-family:"DejaVu Sans Mono",Menlo,Consolas,monospace;white-spa
       <canvas id="map"></canvas>
       <div id="aimbar"><span id="aimtext"></span><button id="aimCancel">✖ Cancel</button></div>
       <div id="tip"></div>
-      <div id="dpad"></div>
       <button id="centerBtn" title="Back to you">◎</button>
     </div>
   </div>
   <div id="side">
-    <div id="quick"></div>
-    <div id="btns">
-      <button id="packBtn">🎒 Pack</button>
-      <button id="actBtn"></button>
-      <button id="menuBtn">☰ Menu</button>
+    <div id="dpad"></div>
+    <div id="ctl">
+      <div id="quick"></div>
+      <div id="btns">
+        <button id="packBtn">🎒 Pack</button>
+        <button id="actBtn"></button>
+        <button id="menuBtn">☰ Menu</button>
+      </div>
     </div>
   </div>
 </div>
@@ -922,10 +926,10 @@ const UI = {
   log: () => UI.showPanel('<h2>Messages</h2>' + (Rogue.msgLog().slice(-60).map(m => `<p>${esc(m)}</p>`).join('') || '<p>No messages yet</p>'), true),
   help: () => UI.showPanel(`<h2>How to play Rogue+</h2><p>Find the Amulet of Yendor on level 26 or deeper, then climb all the way back up with it. It's the original 1980 Rogue — same monsters, same magic, same rules — with pictures and phone controls.</p>
 <p class="sec">Moving</p><p>Tap a square to walk there. Tap next to you to step — or to attack a monster. Flick (swipe) to run that way.
-Or use the direction pad in the corner: tap an arrow to step, hold it to run; its middle does what the big button does (☰ Menu turns the pad off).
+Or use the direction pad under the map: tap an arrow to step, hold it to run; its middle does what the big button does (☰ Menu turns the pad off).
 Pinch to zoom, drag to look around; ◎ or a double tap brings the view back to you. Press and hold anything to see what it is.</p>
 <p class="sec">The big button</p><p>It does what fits where you stand: Go down on stairs, Pick up on an item, otherwise Search. Hold it to search and rest for 20 turns (a monster showing up stops it).</p>
-<p class="sec">Items</p><p>🎒 Pack shows your things — tap one to use it. The quick bar under the map fills itself with food, potions, scrolls and wands; tap a slot to use it, hold for more. Drag items onto the quick bar in your pack to pin favourites. When a wand or throw needs aiming, tap toward the target or press an arrow on the pad.</p>
+<p class="sec">Items</p><p>🎒 Pack shows your things — tap one to use it. The quick slots under the map fills itself with food, potions, scrolls and wands; tap a slot to use it, hold for more. Drag items onto the quick bar in your pack to pin favourites. When a wand or throw needs aiming, tap toward the target or press an arrow on the pad.</p>
 <p class="sec">Keyboard</p><p class="mono">Arrows or h j k l y u b n (Shift runs), and all the original letter commands — see ☰ Menu.</p>
 <p class="sec">The map</p><p>Unknown potions show their real colour, rings their stone, wands and staffs their wood or metal. Dimmed squares are places you remember but can't see right now.</p>
 <p class="sec">About</p><p>Ported from Rogue 5.4.4 by Michael Toy, Glenn Wichman and Ken Arnold (1980–1985), under the BSD license — see <a href="../rogue/LICENSE.TXT" target="_blank" style="color:#9be564">LICENSE.TXT</a>. Pixel art made for this arcade. Your game saves itself after every move.</p>`),
