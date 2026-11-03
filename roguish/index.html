@@ -874,6 +874,18 @@ function dragOrTap(el, o, resolve) {
   });
 }
 
+// Going down is for good (stairs only lead up once you have the Amulet), and the big button,
+// the pad's middle and a tap on yourself all go down on stairs: ask first.
+async function sureToGoDown() {
+  const h = Rogue.hero();
+  if (Rogue.G.amulet || Rogue.chat(h.y, h.x) !== '%') return true;
+  openModal(`<h2>Go down to level ${Rogue.G.level + 1}?</h2><p>You can't come back to this level: stairs only lead up once you have the Amulet of Yendor.</p>
+<div class="row"><button data-k="y">⬇ Go down</button><button data-k="n">Stay here</button></div>`);
+  const k = await modalKey(k => k === 'y' || k === 'n' || k === '>');
+  closeModal();
+  return k === 'y' || k === '>';
+}
+
 // ── What the game asks of the screen ────────────────────────────────────────
 const UI = {
   messages: renderMessages,
@@ -883,6 +895,7 @@ const UI = {
       if (travel && !keyq.length) { const s = travelStep(); if (s) { await sleep(70); return s; } }
       const k = await nextKey();
       if (k === 'TRAVEL') { const s = travelStep(); if (s) return s; continue; }
+      if (k === '>' && !(await sureToGoDown())) continue;
       if (pending) { if (pending.armed || k !== pending.cmd) pending = null; else pending.armed = true; }
       return k;
     }
@@ -931,7 +944,7 @@ const UI = {
 <p class="sec">Moving</p><p>Tap a square to walk there. Tap next to you to step — or to attack a monster. Flick (swipe) to run that way.
 Or use the direction pad under the map: tap an arrow to step, hold it to run; its middle does what the big button does (☰ Menu turns the pad off).
 Pinch to zoom, drag to look around; ◎ or a double tap brings the view back to you. Press and hold anything to see what it is.</p>
-<p class="sec">The big button</p><p>It does what fits where you stand: Go down on stairs, Pick up on an item, otherwise Search. Hold it to search and rest for 20 turns (a monster showing up stops it).</p>
+<p class="sec">The big button</p><p>It does what fits where you stand: Go down on stairs (it asks first, since you can't come back), Pick up on an item, otherwise Search. Hold it to search and rest for 20 turns (a monster showing up stops it).</p>
 <p class="sec">Items</p><p>🎒 Pack shows your things — tap one to use it. The quick slots under the map fills itself with food, potions, scrolls and wands; tap a slot to use it, hold for more. Drag items onto the quick bar in your pack to pin favourites. When a wand or throw needs aiming, tap toward the target or press an arrow on the pad.</p>
 <p class="sec">Keyboard</p><p class="mono">Arrows or h j k l y u b n (Shift runs), and all the original letter commands — see ☰ Menu.</p>
 <p class="sec">The map</p><p>Unknown potions show their real colour, rings their stone, wands and staffs their wood or metal. Dimmed squares are places you remember but can't see right now.</p>
