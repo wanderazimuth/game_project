@@ -18,7 +18,10 @@
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const MAXROOMS = 9, MAXOBJ = 9, MAXPACK = 23, MAXTRAPS = 10, AMULETLEVEL = 26;
-const NUMTHINGS = 7, MAXPASS = 13, NUMLINES = 24, NUMCOLS = 80, BORE_LEVEL = 50;
+// Roguish: a squarer dungeon, 42 wide and 40 tall (the original was 80×22, for an 80×24
+// terminal), so it fits a phone screen better. Line 0 was the message line and the last the status
+// line, so 42 lines. The 3×3 grid of rooms becomes cells of 14×14 instead of 26×8.
+const NUMTHINGS = 7, MAXPASS = 13, NUMLINES = 42, NUMCOLS = 42, BORE_LEVEL = 50;
 
 const PASSAGE = '#', DOOR = '+', FLOOR = '.', PLAYER = '@', TRAP = '^', STAIRS = '%';
 const GOLD = '*', POTION = '!', SCROLL = '?', MAGIC = '$', FOOD = ':', WEAPON = ')';
@@ -501,6 +504,10 @@ function do_passages() {
   }
   passnum();
 }
+// Roguish: a maze's far edge can have no passage on it at all in a 14-square maze (the original's
+// were 26 wide, where that hardly ever happens), and the search for one never ended. Then a spot
+// an even step from the maze's corner is made a passage: the maze always has one right beside it.
+const mazeSide = (pos, max) => pos + 2 * (rnd(idiv(max - 2, 2)) + 1);
 function conn(r1, r2) {
   let rm, direc;
   if (r1 < r2) { rm = r1; direc = r1 + 1 === r2 ? 'r' : 'd'; }
@@ -510,9 +517,12 @@ function conn(r1, r2) {
   if (direc === 'd') {
     rpt = G.rooms[rm + 3]; del = { x: 0, y: 1 };
     spos = { x: rpf.pos.x, y: rpf.pos.y }; epos = { x: rpt.pos.x, y: rpt.pos.y };
-    if (!(rpf.flags & ISGONE))
+    if (!(rpf.flags & ISGONE)) {
+      let tries = 0;
       do { spos.x = rpf.pos.x + rnd(rpf.max.x - 2) + 1; spos.y = rpf.pos.y + rpf.max.y - 1; }
-      while ((rpf.flags & ISMAZE) && !(flat(spos.y, spos.x) & F_PASS));
+      while ((rpf.flags & ISMAZE) && !(flat(spos.y, spos.x) & F_PASS) && ++tries < 1000);
+      if (tries === 1000) { spos.x = mazeSide(rpf.pos.x, rpf.max.x); putpass(spos); }
+    }
     if (!(rpt.flags & ISGONE))
       do epos.x = rpt.pos.x + rnd(rpt.max.x - 2) + 1;
       while ((rpt.flags & ISMAZE) && !(flat(epos.y, epos.x) & F_PASS));
@@ -522,9 +532,12 @@ function conn(r1, r2) {
   } else {
     rpt = G.rooms[rm + 1]; del = { x: 1, y: 0 };
     spos = { x: rpf.pos.x, y: rpf.pos.y }; epos = { x: rpt.pos.x, y: rpt.pos.y };
-    if (!(rpf.flags & ISGONE))
+    if (!(rpf.flags & ISGONE)) {
+      let tries = 0;
       do { spos.x = rpf.pos.x + rpf.max.x - 1; spos.y = rpf.pos.y + rnd(rpf.max.y - 2) + 1; }
-      while ((rpf.flags & ISMAZE) && !(flat(spos.y, spos.x) & F_PASS));
+      while ((rpf.flags & ISMAZE) && !(flat(spos.y, spos.x) & F_PASS) && ++tries < 1000);
+      if (tries === 1000) { spos.y = mazeSide(rpf.pos.y, rpf.max.y); putpass(spos); }
+    }
     if (!(rpt.flags & ISGONE))
       do epos.y = rpt.pos.y + rnd(rpt.max.y - 2) + 1;
       while ((rpt.flags & ISMAZE) && !(flat(epos.y, epos.x) & F_PASS));

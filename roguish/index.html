@@ -128,7 +128,8 @@ pre.mono,.mono{font-family:"DejaVu Sans Mono",Menlo,Consolas,monospace;white-spa
 <div id="modal"><div class="box" id="mbox"></div></div>
 <img id="ghost" alt="">
 <div id="title"></div>
-<script>const ROGUE_SAVE_KEY = 'roguish-save-v1';</script>
+<script>const ROGUE_SAVE_KEY = 'roguish-save-v2';   // v2: the 42×40 map (a v1 game was 80×22)
+try { localStorage.removeItem('roguish-save-v1'); } catch (e) { }</script>
 <script src="rogue.js"></script>
 <script src="sprites.js"></script>
 <script>
@@ -216,7 +217,7 @@ const objIcon = o => iconURL(itemArt(o.type, o.which) || ['scroll']);
 
 // ── The map ─────────────────────────────────────────────────────────────────
 const cv = $('map'), ctx = cv.getContext('2d');
-const COLS = 80, ROWS = 22;           // screen lines 1–22 are the dungeon
+const COLS = Rogue.NUMCOLS, ROWS = Rogue.NUMLINES - 2;   // screen lines 1 to ROWS are the dungeon
 const TERRAIN = '.#+-|%^';
 const ITEMS = '*!?:)]=/,';
 const MON_COLORS = ['#ff6b6b', '#ff9f43', '#ffd166', '#06d6a0', '#4cc9f0', '#f72585', '#b5179e', '#e9c46a', '#90e0ef', '#ff8fab'];
@@ -225,7 +226,7 @@ const CLASSIC = { '@': '#ffd84a', '-': '#c8a26a', '|': '#c8a26a', '.': '#5c5c5c'
   '/': '#d29bff', ',': '#fff27a' };
 let W = 0, H = 0, TS = 32;            // TS: size of one square on screen
 const cam = { x: 40, y: 11, follow: true };
-let seen = new Array(COLS * 23).fill('');   // the floor, walls and doors you've seen, for under monsters
+let seen = new Array(COLS * (ROWS + 1)).fill('');   // the floor, walls and doors you've seen, for under monsters
 let lastLevel = -1, heroCell = null, face = 1;
 const heroVis = { x: 0, y: 0 };
 const monVis = new WeakMap();         // monster → where it's drawn (it slides there)
@@ -256,7 +257,7 @@ const toScreen = (cx, cy) => [(cx - cam.x) * TS + W / 2, (cy - cam.y) * TS + H /
 const toCell = (sx, sy) => [Math.floor((sx - W / 2) / TS + cam.x), Math.floor((sy - H / 2) / TS + cam.y) + 1];
 
 function resetView() {
-  seen = new Array(COLS * 23).fill(''); shownMons = new Set(); floats = []; poofs = [];
+  seen = new Array(COLS * (ROWS + 1)).fill(''); shownMons = new Set(); floats = []; poofs = [];
   const h = Rogue.hero(); heroVis.x = h.x; heroVis.y = h.y; heroCell = h.y * COLS + h.x;
   cam.follow = true; cam.x = h.x + .5; cam.y = h.y - .5; lastLevel = Rogue.G.level; lastHp = null;
 }
@@ -572,14 +573,14 @@ function travelStep() {
     const c = scr[y] && scr[y][x];
     if (c >= 'A' && c <= 'Z') { travel = null; return null; }   // a monster next to you: stop
   }
-  const ok = (y, x) => y >= 1 && y <= 22 && x >= 0 && x < 80 && ((y === h.y && x === h.x) || WALKABLE.includes(scr[y][x]) || (y === travel.y && x === travel.x && scr[y][x] !== ' '));
+  const ok = (y, x) => y >= 1 && y <= ROWS && x >= 0 && x < COLS && ((y === h.y && x === h.x) || WALKABLE.includes(scr[y][x]) || (y === travel.y && x === travel.x && scr[y][x] !== ' '));
   const can = (y, x, ny, nx) => ok(ny, nx) && (y === ny || x === nx || (ok(y, nx) && ok(ny, x)));   // no cutting corners, like the original
   // steps from the target to every square, out as far as you
-  const dist = new Map([[travel.y * 80 + travel.x, 0]]), q = [[travel.y, travel.x]], home = h.y * 80 + h.x;
+  const dist = new Map([[travel.y * COLS + travel.x, 0]]), q = [[travel.y, travel.x]], home = h.y * COLS + h.x;
   while (q.length && !dist.has(home)) {
-    const [y, x] = q.shift(), d = dist.get(y * 80 + x);
+    const [y, x] = q.shift(), d = dist.get(y * COLS + x);
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-      const ny = y + dy, nx = x + dx, k = ny * 80 + nx;
+      const ny = y + dy, nx = x + dx, k = ny * COLS + nx;
       if ((!dy && !dx) || dist.has(k) || !can(y, x, ny, nx)) continue;
       dist.set(k, d + 1); q.push([ny, nx]);
     }
@@ -590,7 +591,7 @@ function travelStep() {
   let best = null, bestOff = Infinity;
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
     const ny = h.y + dy, nx = h.x + dx;
-    if (dist.get(ny * 80 + nx) !== dist.get(home) - 1 || !can(h.y, h.x, ny, nx)) continue;
+    if (dist.get(ny * COLS + nx) !== dist.get(home) - 1 || !can(h.y, h.x, ny, nx)) continue;
     const off = Math.abs((ny - travel.sy) * (travel.x - travel.sx) - (nx - travel.sx) * (travel.y - travel.sy));
     if (off < bestOff) { best = dirKey(dy, dx); bestOff = off; }
   }
@@ -926,6 +927,7 @@ const UI = {
     `<p class="sec">${t}</p>` + rows.map(r => `<p>${esc(r)}</p>`).join('')).join('')),
   log: () => UI.showPanel('<h2>Messages</h2>' + (Rogue.msgLog().slice(-60).map(m => `<p>${esc(m)}</p>`).join('') || '<p>No messages yet</p>'), true),
   help: () => UI.showPanel(`<h2>How to play Roguish</h2><p>Find the Amulet of Yendor on level 26 or deeper, then climb all the way back up with it. It began as the original 1980 Rogue with pictures and phone controls, and its rules are changing: Rogue+ is the true-to-the-original version.</p>
+<p class="sec">What's different</p><p>The dungeon is squarer: 42 wide and 40 tall instead of 80 by 22, so more of it fits on a phone. Rooms are as tall as they are wide.</p>
 <p class="sec">Moving</p><p>Tap a square to walk there. Tap next to you to step — or to attack a monster. Flick (swipe) to run that way.
 Or use the direction pad under the map: tap an arrow to step, hold it to run; its middle does what the big button does (☰ Menu turns the pad off).
 Pinch to zoom, drag to look around; ◎ or a double tap brings the view back to you. Press and hold anything to see what it is.</p>
@@ -935,7 +937,7 @@ Pinch to zoom, drag to look around; ◎ or a double tap brings the view back to 
 <p class="sec">The map</p><p>Unknown potions show their real colour, rings their stone, wands and staffs their wood or metal. Dimmed squares are places you remember but can't see right now.</p>
 <p class="sec">About</p><p>Ported from Rogue 5.4.4 by Michael Toy, Glenn Wichman and Ken Arnold (1980–1985), under the BSD license — see <a href="LICENSE.TXT" target="_blank" style="color:#9be564">LICENSE.TXT</a>. Pixel art made for this arcade. Your game saves itself after every move.</p>`),
   overlay: async (marks, text) => {
-    overlayMarks = new Map(marks.map(([y, x, c]) => [y * 80 + x, c]));
+    overlayMarks = new Map(marks.map(([y, x, c]) => [y * COLS + x, c]));
     $('msgbar').textContent = text + '  (tap to continue)';
     cam.follow = false;
     // zoom out to show the whole map while the marks are up
