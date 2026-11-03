@@ -757,11 +757,15 @@ function updateActBtn() { const [, label] = actionKey(); if (label !== actSig) {
 // ── Pop-ups ─────────────────────────────────────────────────────────────────
 const modal = $('modal'), mbox = $('mbox');
 let menuOpen = false;
-function openModal(html, drawer) { mbox.innerHTML = html; modal.className = drawer ? 'drawer' : ''; modal.style.display = 'flex'; mbox.scrollTop = 0; }
+// On a phone the click that follows lifting your finger comes a moment later, and lands on whatever
+// is there by then: a dialog the big button just opened. Ignore clicks right after a dialog opens.
+let modalAt = 0;
+const ghost = () => performance.now() - modalAt < 400;
+function openModal(html, drawer) { modalAt = performance.now(); mbox.innerHTML = html; modal.className = drawer ? 'drawer' : ''; modal.style.display = 'flex'; mbox.scrollTop = 0; }
 function closeModal() { modal.style.display = 'none'; mbox.innerHTML = ''; menuOpen = false; }
 const modalOpen = () => modal.style.display === 'flex';
-mbox.addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (b) pushKey(b.dataset.k); });
-modal.addEventListener('click', e => { if (e.target === modal) { if (menuOpen) closeModal(); else pushKey('\x1b'); } });
+mbox.addEventListener('click', e => { if (ghost()) return; const b = e.target.closest('[data-k]'); if (b) pushKey(b.dataset.k); });
+modal.addEventListener('click', e => { if (e.target === modal && !ghost()) { if (menuOpen) closeModal(); else pushKey('\x1b'); } });
 const CANCEL = '<div class="row"><button data-k="\x1b">Cancel</button></div>';
 async function modalKey(valid) {
   for (;;) { const k = await nextKey(); if (k === '\x1b' || valid(k)) return k; }
