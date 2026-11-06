@@ -49,6 +49,7 @@ const CANHUH = 0o1, CANSEE = 0o2, ISBLIND = 0o4, ISCANC = 0o10, ISLEVIT = 0o10,
 // map flags
 const F_PASS = 0x80, F_SEEN = 0x40, F_DROPPED = 0x20, F_LOCKED = 0x20, F_REAL = 0x10,
   F_PNUM = 0x0f, F_TMASK = 0x07;
+const F_WALKED = 0x100;  // Roguish: you've stood here on this level (see explore())
 // traps
 const T_DOOR = 0, T_ARROW = 1, T_SLEEP = 2, T_BEAR = 3, T_TELEP = 4, T_DART = 5, T_RUST = 6,
   T_MYST = 7, NTRAPS = 8;
@@ -1746,7 +1747,7 @@ async function quaff() {
     case P_BLIND: do_pot(P_BLIND, true); break;
     case P_LEVIT: do_pot(P_LEVIT, true); break;
   }
-  await call_it(pi[obj.which]);
+  named(pi[obj.which], 'potion');
 }
 function is_magic(obj) {
   switch (obj.type) {
@@ -1898,7 +1899,7 @@ async function read_scroll() {
   }
   obj = orig;
   look(true);
-  await call_it(si[obj.which]);
+  named(si[obj.which], 'scroll');
 }
 
 // ── Wands and staffs (sticks.c) ──────────────────────────────────────────────
@@ -2193,13 +2194,6 @@ async function get_dir() {
     do delta = { y: rnd(3) - 1, x: rnd(3) - 1 }; while (delta.y === 0 && delta.x === 0);
   return true;
 }
-// after using something unknown you may give it a name, like "called healing?"
-async function call_it(op) {
-  if (op.know) { op.guess = null; return; }
-  if (op.guess) return;
-  const s = await UI.ask('What do you want to call it?');
-  if (s) op.guess = s;
-}
 function rnd_thing() {
   const list = [POTION, SCROLL, RING, STICK, FOOD, WEAPON, ARMOR, STAIRS, GOLD, AMULET];
   return list[rnd(G.level >= AMULETLEVEL ? list.length : list.length - 1)];
@@ -2342,6 +2336,7 @@ async function command() {
     if (ISRING(h, R_SEARCH)) search();
     else if (ISRING(h, R_TELEPORT) && rnd(50) === 0) teleport();
   }
+  explore(); notice();
   G.turns++;
 }
 async function execute(ch) {
@@ -2428,6 +2423,47 @@ function current(cur, how, where) {
   after = false;
   if (cur !== null) msg(how + ' ' + inv_name(cur, true) + (where ? ' ' + where : ''));
   else msg(how + ' nothing' + (where ? ' ' + where : ''));
+}
+// Roguish: a secret door or passage next to you is noticed on its own, 1 turn in NOTICE,
+// so walking along a wall finds most of them. Searching still finds them faster, and traps only that way.
+const NOTICE = 4;
+function notice() {
+  if (on(player, ISBLIND)) return;
+  let found = false;
+  for (let y = hero.y - 1; y <= hero.y + 1; y++)
+    for (let x = hero.x - 1; x <= hero.x + 1; x++) {
+      if (y < 0 || y >= NUMLINES || x < 0 || x >= NUMCOLS || (y === hero.y && x === hero.x)) continue;
+      const pp = P(y, x);
+      if (pp.fl & F_REAL) continue;
+      if (pp.ch === '|' || pp.ch === '-') {
+        if (rnd(NOTICE) !== 0) continue;
+        pp.ch = DOOR; msg('you notice a secret door');
+      } else if (pp.ch === ' ') {
+        if (rnd(NOTICE) !== 0) continue;
+        pp.ch = PASSAGE; msg('you notice a hidden passage');
+      } else continue;
+      found = true; pp.fl |= F_REAL; G.count = 0; running = false;
+    }
+  if (found) look(false);
+}
+// Roguish: each square you stand on for the first time on a level heals a little, a full heal
+// every EXPLORE_HEAL new squares (Desktop Dungeons), so pushing on beats resting in a corner.
+const EXPLORE_HEAL = 150;
+function explore() {
+  const pp = P(hero.y, hero.x);
+  if (pp.fl & F_WALKED) return;
+  pp.fl |= F_WALKED;
+  if (pstats.hpt >= pstats.maxhp) return;
+  G.explored = (G.explored || 0) + pstats.maxhp;
+  const n = idiv(G.explored, EXPLORE_HEAL);
+  if (n) { pstats.hpt = Math.min(pstats.maxhp, pstats.hpt + n); G.explored -= n * EXPLORE_HEAL; }
+}
+// Roguish: a potion or scroll is named once you've used it (Pixel Dungeon), instead of
+// "What do you want to call it?" for the ones whose effect didn't give them away.
+function named(op, kind) {
+  if (op.know) { op.guess = null; return; }
+  op.know = true; op.guess = null;
+  msg(`(that was a ${kind} of ${op.name})`);
 }
 function search() {
   const probinc = (on(player, ISHALU) ? 3 : 0) + (on(player, ISBLIND) ? 2 : 0);
