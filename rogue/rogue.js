@@ -1551,7 +1551,7 @@ function fall(obj, pr) {
     G.lvl_obj.push(obj);
     return;
   }
-  if (pr) { if (has_hit) { endmsg(); has_hit = false; } msg('the ' + weap_info[obj.which].name + ' vanishes as it hits the ground'); }
+  if (pr) { if (has_hit) { endmsg(); has_hit = false; } msg((obj.type === WEAPON ? 'the ' + weap_info[obj.which].name : inv_name(obj, true)) + ' vanishes as it hits the ground'); }
 }
 function init_weapon(weap, which) {
   const iw = init_dam[which];
