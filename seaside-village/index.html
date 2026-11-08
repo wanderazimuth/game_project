@@ -209,7 +209,8 @@ const dirty=()=>saveDirty=true;
 const occ=new Int32Array(W*H);
 function rebuildOcc(){occ.fill(-1);S.objs.forEach((o,k)=>{const b=BUILD[o.t];for(let y=0;y<b.h;y++)for(let x=0;x<b.w;x++)occ[(o.y+y)*W+o.x+x]=k})}
 rebuildOcc();
-const objAt=i=>occ[i]>=0?S.objs[occ[i]]:null;
+let ignoreObj=null; // the building being moved doesn't get in its own way
+const objAt=i=>{const o=occ[i]>=0?S.objs[occ[i]]:null;return o===ignoreObj?null:o};
 const inShip=(x,y)=>x>=SHIP.x&&x<SHIP.x+SHIP.w&&y>=SHIP.y&&y<SHIP.y+SHIP.h;
 function walkable(x,y){
   if(!inMap(x,y))return false;const i=y*W+x,o=objAt(i);
@@ -542,7 +543,7 @@ function checkGoals(){
 }
 
 // ── Building ─────────────────────────────────────────────────────────────────
-let mode='play',tool='hand',ghost=null;
+let mode='play',tool='hand',ghost=null,lifted=null;
 function canPlace(t,x,y){
   const b=BUILD[t];
   for(let j=0;j<b.h;j++)for(let i=0;i<b.w;i++){const X=x+i,Y=y+j,k=Y*W+X;
@@ -585,6 +586,17 @@ function removeObj(o){
   finish();
 }
 
+function moveObj(o,x,y){
+  ignoreObj=o;const why=canPlace(o.t,x,y);ignoreObj=null;
+  if(why){toast(why);return false}
+  const b=BUILD[o.t];o.x=x;o.y=y;rebuildOcc();
+  for(let j=0;j<b.h;j++)for(let i=0;i<b.w;i++)forageAt.delete((y+j)*W+x+i);
+  if(o.t==='coop'||o.t==='barn')spawnAnimals();
+  unstick(player);for(const v of villagers)unstick(v);
+  dirty();return true;
+}
+function pickTool(t){tool=t;lifted=null;ghost=null;refreshTray()}
+
 // ── Bottom tray ──────────────────────────────────────────────────────────────
 const tray=document.getElementById('tray'),modeBtn=document.getElementById('modeBtn');
 function iconFor(t){
@@ -605,17 +617,18 @@ function refreshTray(){
     for(const k in CROPS){const cr=CROPS[k];if(cr.rare&&!S.found.includes(k))continue;
       chip(`<span class="e">${cr.e}</span>${cr.n}<span class="p">${cr.seed?'🪙'+cr.seed:'Free'}</span>`,S.sel===k,S.coins<cr.seed,()=>{S.sel=k;dirty();refreshTray();toast(`${cr.e} ${cr.n}: grows in ${cr.grow}s, sells for 🪙${priceOf(k)}`)})}
   }else{
-    chip('<span class="e">✋</span>Move map',tool==='hand',false,()=>{tool='hand';refreshTray()});
-    chip('<span class="e">🧹</span>Remove<span class="p">½ back</span>',tool==='remove',false,()=>{tool='remove';refreshTray();toast('Tap something you built to remove it')});
+    chip('<span class="e">✋</span>Move map',tool==='hand',false,()=>pickTool('hand'));
+    chip('<span class="e">↔️</span>Move<span class="p">Free</span>',tool==='move',false,()=>{pickTool('move');toast('Tap something you built to pick it up')});
+    chip('<span class="e">🧹</span>Remove<span class="p">½ back</span>',tool==='remove',false,()=>{pickTool('remove');toast('Tap something you built to remove it')});
     for(const t of BUILD_ORDER){const b=BUILD[t];
-      const d=chip(`${b.n}<span class="p">${b.cost?'🪙'+b.cost:'Free'}</span>`,tool===t,S.coins<b.cost,()=>{tool=t;refreshTray();toast(`${b.n}: ${b.d}`)});
+      const d=chip(`${b.n}<span class="p">${b.cost?'🪙'+b.cost:'Free'}</span>`,tool===t,S.coins<b.cost,()=>{pickTool(t);toast(`${b.n}: ${b.d}`)});
       icons[t]=icons[t]||iconFor(t);const ic=icons[t].cloneNode();ic.getContext('2d').drawImage(icons[t],0,0);d.prepend(ic)}
   }
 }
 let lastCoins=-1;
 function setMode(m){
-  mode=m;ghost=null;modeBtn.textContent=m==='play'?'🔨 Build':'▶ Play';
-  if(m==='build'){tool=tool==='hand'||tool==='remove'?tool:'hand';player.path=[];player.target=null;player.steer=null}
+  mode=m;ghost=null;lifted=null;modeBtn.textContent=m==='play'?'🔨 Build':'▶ Play';
+  if(m==='build'){tool=BUILD[tool]?'hand':tool;player.path=[];player.target=null;player.steer=null}
   refreshTray();
 }
 modeBtn.onclick=()=>setMode(mode==='play'?'build':'play');
@@ -624,21 +637,27 @@ document.getElementById('zOut').onclick=()=>userZoom=Math.max(.45,userZoom/1.2);
 
 // ── Input ────────────────────────────────────────────────────────────────────
 const ptrs=new Map();let drag=null,pinch=null,lastPaint=-1;
-function ghostAt(sx,sy){const w=toWorld(sx,sy),b=BUILD[tool];ghost={x:Math.floor(w.x/T-(b.w-1)/2),y:Math.floor(w.y/T-(b.h-1)/2)}}
+function ghostAt(sx,sy){const w=toWorld(sx,sy),b=BUILD[lifted?lifted.t:tool];ghost={x:Math.floor(w.x/T-(b.w-1)/2),y:Math.floor(w.y/T-(b.h-1)/2)}}
 cv.addEventListener('pointerdown',e=>{
   if(busy())return;try{cv.setPointerCapture(e.pointerId)}catch(_){}ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
   if(ptrs.size===2){const[a,b]=[...ptrs.values()];pinch={d:Math.hypot(a.x-b.x,a.y-b.y),z:userZoom};drag=null;return}
   drag={sx:e.clientX,sy:e.clientY,t:performance.now(),moved:false,cx:cam.x,cy:cam.y};
   if(mode==='build'&&BUILD[tool]){ghostAt(e.clientX,e.clientY);lastPaint=-1;if(BUILD[tool].paint)paint()}
+  if(mode==='build'&&tool==='move'){
+    if(lifted)ghostAt(e.clientX,e.clientY);
+    else{const w=toWorld(e.clientX,e.clientY),tg=pickAt(w.x,w.y),o=tg.k==='obj'?tg.o:tg.k==='ground'&&objAt(tg.y*W+tg.x);
+      if(o){lifted=o;drag.lifted=true;ghost={x:o.x,y:o.y}}}
+  }
 });
 function paint(){if(!ghost)return;const k=ghost.y*W+ghost.x;if(k===lastPaint)return;lastPaint=k;place(tool,ghost.x,ghost.y,lastPaint!==-1&&drag&&drag.moved)}
 cv.addEventListener('pointermove',e=>{
   if(ptrs.has(e.pointerId))ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
   if(pinch&&ptrs.size===2){const[a,b]=[...ptrs.values()];userZoom=Math.max(.45,Math.min(2.2,pinch.z*Math.hypot(a.x-b.x,a.y-b.y)/pinch.d));return}
-  if(!drag){if(mode==='build'&&BUILD[tool]&&e.pointerType==='mouse')ghostAt(e.clientX,e.clientY);return}
+  if(!drag){if(mode==='build'&&(BUILD[tool]||lifted)&&e.pointerType==='mouse')ghostAt(e.clientX,e.clientY);return}
   const dx=e.clientX-drag.sx,dy=e.clientY-drag.sy;if(Math.hypot(dx,dy)>9)drag.moved=true;
   if(mode==='build'){
     if(BUILD[tool]){ghostAt(e.clientX,e.clientY);if(BUILD[tool].paint)paint()}
+    else if(lifted)ghostAt(e.clientX,e.clientY);
     else if(drag.moved){cam.x=drag.cx-dx/zoom();cam.y=drag.cy-dy/zoom()}
   }else if(drag.moved||performance.now()-drag.t>300){player.steer=toWorld(e.clientX,e.clientY);player.path=[];player.target=null}
 });
@@ -649,13 +668,18 @@ function endPtr(e){
   const quick=!d.moved&&performance.now()-d.t<450,w=toWorld(e.clientX,e.clientY);
   if(mode==='build'){
     if(BUILD[tool]){if(!BUILD[tool].paint&&ghost)place(tool,ghost.x,ghost.y);if(e.pointerType!=='mouse')ghost=null}
+    else if(tool==='move'){
+      if(lifted&&d.lifted&&!d.moved)toast(`Now tap where the ${BUILD[lifted.t].n} should go`);
+      else if(lifted&&ghost){if(moveObj(lifted,ghost.x,ghost.y)){lifted=null;ghost=null}}
+      else if(quick)toast('Tap something you built to pick it up');
+    }
     else if(quick){const tg=pickAt(w.x,w.y);
       if(tool==='remove'){if(tg.k==='obj')removeObj(tg.o);else if(tg.k==='ground'&&objAt(tg.y*W+tg.x))removeObj(objAt(tg.y*W+tg.x))}
       else if(tg.k==='obj')toast(`${BUILD[tg.o.t].n}: ${BUILD[tg.o.t].d}`)}
   }else if(quick)goToTarget(pickAt(w.x,w.y));
 }
 cv.addEventListener('pointerup',endPtr);cv.addEventListener('pointercancel',endPtr);
-cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')ghost=null});
+cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'&&!lifted)ghost=null});
 cv.addEventListener('wheel',e=>{e.preventDefault();userZoom=Math.max(.45,Math.min(2.2,userZoom*(e.deltaY<0?1.1:1/1.1)))},{passive:false});
 const keys=new Set();
 addEventListener('keydown',e=>{
@@ -663,7 +687,7 @@ addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();keys.add(k);
   if(k===' '||k==='e'){e.preventDefault();if(mode==='play')useNearest()}
   if(k==='b')setMode(mode==='play'?'build':'play');
-  if(k==='escape'&&mode==='build'){tool='hand';refreshTray()}
+  if(k==='escape'&&mode==='build')pickTool('hand');
 });
 addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
 addEventListener('blur',()=>keys.clear());
@@ -740,7 +764,7 @@ function update(dt){
 }
 function refreshPoor(){
   const chips=tray.querySelectorAll('.cat');let k=0;
-  if(mode==='build'){k=2;for(const t of BUILD_ORDER){if(chips[k])chips[k].classList.toggle('poor',S.coins<BUILD[t].cost);k++}}
+  if(mode==='build'){k=3;for(const t of BUILD_ORDER){if(chips[k])chips[k].classList.toggle('poor',S.coins<BUILD[t].cost);k++}}
   else{k=1;for(const c in CROPS){if(CROPS[c].rare&&!S.found.includes(c))continue;if(chips[k])chips[k].classList.toggle('poor',S.coins<CROPS[c].seed);k++}}
 }
 function nightness(){
@@ -925,8 +949,11 @@ function draw(t){
   // Where you're walking to
   if(player.path.length){const j=player.path[player.path.length-1];ctx.strokeStyle='rgba(255,255,255,.7)';ctx.lineWidth=2;ctx.beginPath();ctx.ellipse((j%W)*T+16,(j/W|0)*T+22,8+Math.sin(t*6)*1.5,4,0,0,Math.PI*2);ctx.stroke()}
   // Building preview
-  if(mode==='build'&&ghost&&BUILD[tool]){const b=BUILD[tool],ok=!canPlace(tool,ghost.x,ghost.y)&&S.coins>=b.cost;
-    ctx.globalAlpha=.6;drawObj(ctx,{t:tool,x:ghost.x,y:ghost.y,id:S.nextId,last:Date.now()},t,true);ctx.globalAlpha=1;
+  if(mode==='build'&&lifted){const b=BUILD[lifted.t];ctx.strokeStyle='#ffcf4a';ctx.lineWidth=2;ctx.setLineDash([5,4]);
+    ctx.strokeRect(lifted.x*T+1,lifted.y*T+1,b.w*T-2,b.h*T-2);ctx.setLineDash([])}
+  const gt=lifted?lifted.t:tool;
+  if(mode==='build'&&ghost&&BUILD[gt]){const b=BUILD[gt];ignoreObj=lifted;const ok=!canPlace(gt,ghost.x,ghost.y)&&(lifted||S.coins>=b.cost);ignoreObj=null;
+    ctx.globalAlpha=.6;drawObj(ctx,{t:gt,x:ghost.x,y:ghost.y,id:lifted?lifted.id:S.nextId,last:Date.now()},t,true);ctx.globalAlpha=1;
     ctx.fillStyle=ok?'rgba(80,255,120,.25)':'rgba(255,60,60,.3)';ctx.fillRect(ghost.x*T,ghost.y*T,b.w*T,b.h*T);
     ctx.strokeStyle=ok?'#5f5':'#f55';ctx.lineWidth=2;ctx.strokeRect(ghost.x*T+1,ghost.y*T+1,b.w*T-2,b.h*T-2)}
   // Fog over the parts of the island you haven't seen
