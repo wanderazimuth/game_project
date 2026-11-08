@@ -38,6 +38,7 @@ GAMES = {
     "rogue-deluxe": ("rogue-deluxe", "Rogue+", "Classic Rogue with pixel art, pinch zoom and easy phone controls"),
     "roguish": ("roguish", "Roguish", "Rogue+ with new rules: the Dungeons of Doom, reworked"),
     "zombie-apocalypse": ("zombie-apocalypse", "Zombie Apocalypse", "Zombies invade the town! Shoot them, grab coins and buy better guns at the shop."),
+    "seaside-village": ("seaside-village", "Seaside Village", "Shipwrecked on an island! Grow crops, ship them for coins and build a seaside village."),
 }
 
 # What makes the arcade an installable app: url_path -> (file in app/, content type).
@@ -80,7 +81,7 @@ def game_files():
 TWO_PLAYER_GAMES = {"brick-runner", "magma-runner", "fish-off", "td"}
 
 # Games with no high scores; the landing page and All Scores page leave them out.
-UNSCORED_GAMES = {"dream-house"}
+UNSCORED_GAMES = {"dream-house", "seaside-village"}
 
 # ── Score management ──────────────────────────────────────────────────────────
 SCORES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scores.json")
