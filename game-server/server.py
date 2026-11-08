@@ -469,7 +469,7 @@ RELAY_ROOMS = {
 # code. The host opens /ws/<game>/<code>?host=1 and the friend joins /ws/<game>/<code>.
 CODE_ROOMS = {}
 CODE_LOCK = threading.Lock()
-CODE_PATH = re.compile(r"^/ws/(castle-siege|zombie-apocalypse)/(\d{3})(\?host=1)?$")
+CODE_PATH = re.compile(r"^/ws/(castle-siege|zombie-apocalypse|seaside-village)/(\d{3})(\?host=1)?$")
 
 
 class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
