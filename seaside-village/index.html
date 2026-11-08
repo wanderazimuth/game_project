@@ -19,7 +19,7 @@ button{font:inherit;cursor:pointer;border:none}
 .mode{background:#ffcf4a;color:#3a2a00;border-radius:10px;padding:8px 11px;font-size:14px;font-weight:800;white-space:nowrap}
 @media (max-width:560px){#top .title{display:none}#top a{margin-right:auto}.pill{padding:6px 6px;font-size:13px}}
 #goal{position:fixed;left:8px;top:58px;z-index:4;max-width:min(330px,calc(100vw - 70px));background:rgba(255,250,232,.94);color:#5a3d10;
-  border-radius:12px;padding:7px 11px;font-size:13px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.18);pointer-events:none}
+  border-radius:12px;padding:7px 11px;font-size:13px;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.18);cursor:pointer}
 #goal b{color:#b5651d}
 #zoom{position:fixed;right:10px;top:58px;display:flex;flex-direction:column;gap:6px;z-index:5}
 #zoom button{width:44px;height:44px;border-radius:12px;background:rgba(14,60,92,.85);color:#fff;font-size:24px;font-weight:800}
@@ -153,13 +153,20 @@ const chestAt=new Int16Array(W*H).fill(-1);
 let SPAWN,SHIP,chests=[],landTotal=0;
 const inMap=(x,y)=>x>=0&&y>=0&&x<W&&y<H;
 const N4=[[1,0],[-1,0],[0,1],[0,-1]],N8=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
-function genIsland(){
-  const r=rngFrom(20261108),n1=noise(r,9),n2=noise(r,4),n3=noise(r,7),nf=noise(r,5);
+const HOME_SEED=20261108;
+let curSeed=HOME_SEED;
+function genIsland(seed=HOME_SEED){
+  feat.fill(0);chestAt.fill(-1);chests=[];landTotal=0;curSeed=seed;
+  // each new island gets its own size, lakes and forests; the home island keeps the ones it always had
+  const v=seed===HOME_SEED?null:rngFrom(seed^0x5bd1e995);
+  const P=v?{rx:.36+v()*.12,ry:.34+v()*.12,lake:.66+v()*.14,forest:.52+v()*.16,trees:.5+v()*.35,palms:.06+v()*.08,rocks:.04+v()*.04}
+    :{rx:.45,ry:.43,lake:.72,forest:.6,trees:.7,palms:.09,rocks:.055};
+  const r=rngFrom(seed),n1=noise(r,9),n2=noise(r,4),n3=noise(r,7),nf=noise(r,5);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-    const i=y*W+x,dx=(x+.5-W/2)/(W*.45),dy=(y+.5-H/2)/(H*.43);
+    const i=y*W+x,dx=(x+.5-W/2)/(W*P.rx),dy=(y+.5-H/2)/(H*P.ry);
     const h=1-Math.hypot(dx,dy)+(n1(x,y)-.5)*.6+(n2(x,y)-.5)*.25;
     ter[i]=h<.12?WATER:h<.25?SAND:GRASS;
-    if(ter[i]===GRASS&&h>.5&&n3(x,y)>.72)ter[i]=WATER;
+    if(ter[i]===GRASS&&h>.5&&n3(x,y)>P.lake)ter[i]=WATER;
     if(x<2||y<2||x>=W-2||y>=H-2)ter[i]=WATER;
   }
   // Keep only the biggest piece of land so everywhere can be walked to
@@ -177,8 +184,8 @@ function genIsland(){
   for(let y=SPAWN.y-2;y<=SPAWN.y;y++)for(let x=SPAWN.x-3;x<=SPAWN.x+3;x++)if(ter[y*W+x]===WATER)ter[y*W+x]=SAND;
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
     const i=y*W+x,q=r();
-    if(ter[i]===GRASS){if(nf(x,y)>.6&&q<.7||q<.03)feat[i]=TREE;else if(q<.055)feat[i]=ROCK}
-    else if(ter[i]===SAND){const shore=N4.some(([a,b])=>ter[(y+b)*W+x+a]===WATER);if(shore&&q<.09)feat[i]=PALM;else if(q<.012)feat[i]=ROCK}
+    if(ter[i]===GRASS){if(nf(x,y)>P.forest&&q<P.trees||q<.03)feat[i]=TREE;else if(q<P.rocks)feat[i]=ROCK}
+    else if(ter[i]===SAND){const shore=N4.some(([a,b])=>ter[(y+b)*W+x+a]===WATER);if(shore&&q<P.palms)feat[i]=PALM;else if(q<.012)feat[i]=ROCK}
     if(Math.hypot(x-SPAWN.x,y-SPAWN.y)<4.5)feat[i]=0;
   }
   for(let i=0;i<W*H;i++)if(ter[i]!==WATER)landTotal++;
@@ -195,8 +202,15 @@ function genIsland(){
     feat[i]=0;chestAt[i]=chests.length;chests.push({x,y,loot:loot[chests.length]});
   }
 }
-genIsland();
-const featOrig=feat.slice();
+// Your islands: the home island is saved under SAVE_KEY, the others under SAVE_KEY-<id>
+const ISLES_KEY='seaside-village-isles',MAX_ISLES=12;
+function loadIsles(){try{const r=JSON.parse(localStorage.getItem(ISLES_KEY));if(r&&r.list)return r}catch(e){}return{cur:0,next:1,list:[{id:0,name:'Home Island',seed:HOME_SEED}]}}
+let isles=loadIsles();
+const isleKey=id=>id?SAVE_KEY+'-'+id:SAVE_KEY;
+const curIsle=()=>isles.list.find(i=>i.id===isles.cur)||isles.list[0];
+function saveIsles(){try{localStorage.setItem(ISLES_KEY,JSON.stringify(isles))}catch(e){}}
+genIsland(curIsle().seed);
+let featOrig=feat.slice();
 
 // ── Saved game ───────────────────────────────────────────────────────────────
 let S;
@@ -207,10 +221,10 @@ function freshState(){
     stats:{planted:0,harvested:0,shipped:0,chests:0,helped:0},px:SPAWN.x*T+T/2,py:SPAWN.y*T+T/2+6,intro:0};
 }
 function load(){
-  try{const s=JSON.parse(localStorage.getItem(SAVE_KEY));if(s&&s.objs)return Object.assign(freshState(),s)}catch(e){}
+  try{const s=JSON.parse(localStorage.getItem(isleKey(isles.cur)));if(s&&s.objs)return Object.assign(freshState(),s)}catch(e){}
   return freshState();
 }
-S=load();
+S=load();S.seed=S.seed||curSeed;
 for(const i of S.cut)feat[i]=0;
 const rev=new Uint8Array(W*H);
 for(let i=0;i<S.rev.length;i++)if(S.rev[i]==='1')rev[i]=1;
@@ -218,7 +232,7 @@ let saveDirty=false,netDirty=false;
 function saveNow(){
   if(guestMode)return; // a friend's island is saved on their device; yours stays as it was
   S.rev=Array.from(rev).join('');const o=inside?outPos:player;S.px=o.x;S.py=o.y;
-  try{localStorage.setItem(SAVE_KEY,JSON.stringify(S))}catch(e){}
+  try{localStorage.setItem(isleKey(isles.cur),JSON.stringify(S))}catch(e){}
   saveDirty=false;
 }
 const dirty=()=>{saveDirty=true;netDirty=true};
@@ -440,7 +454,7 @@ function fieldOf(o){
 function tapField(o,sel){
   const field=fieldOf(o),ripe=field.filter(p=>p.c&&cropProgress(p)>=1);
   if(ripe.length){
-    const got={};for(const p of ripe){got[p.c.k]=(got[p.c.k]||0)+1;give(p.c.k,1);p.c=null}
+    const got={};for(const p of ripe){got[p.c.k]=(got[p.c.k]||0)+1;give(p.c.k,1);tally('harvest:'+p.c.k);p.c=null}
     S.stats.harvested+=ripe.length;
     const who=actor||player;floatAt(who.x,who.y-40,Object.entries(got).map(([k,n])=>`+${n} ${CROPS[k].e}`).join(' '));
     toast('Harvested! Put them in the shipping bin for coins 🪙');return;
@@ -450,7 +464,7 @@ function tapField(o,sel){
     const n=cr.seed?Math.min(empty.length,Math.floor(S.coins/cr.seed)):empty.length;
     if(!n){toast(`${cr.e} ${cr.n} seeds cost 🪙${cr.seed} — pick cheaper seeds below`);return}
     for(let k=0;k<n;k++)empty[k].c={k:CROPS[sel]?sel:'carrot',at:now()};
-    S.coins-=n*cr.seed;S.stats.planted+=n;dirty();
+    S.coins-=n*cr.seed;S.stats.planted+=n;tally('plant',n);dirty();
     toast(`Planted ${n} ${cr.e}${cr.seed?` for 🪙${n*cr.seed}`:''}${n<empty.length?' (not enough coins for more)':''}`);return;
   }
   let left=1e9;for(const p of field){const sp=wellNear(p.x,p.y)?2:1;left=Math.min(left,(CROPS[p.c.k].grow*1000-(now()-p.c.at)*sp)/sp)}
@@ -484,18 +498,74 @@ function openChest(ci){
   S.opened.push(ci);S.stats.chests++;dirty();const l=chests[ci].loot;
   if(typeof l==='number'){S.coins+=l;floatAt(chests[ci].x*T+16,chests[ci].y*T,`+🪙${l}`);
     openModal(`<h2>🎁 Treasure!</h2><p style="font-size:40px;text-align:center">🪙</p><p>You found <b>${l} coins</b> in an old chest!</p><div class="btns"><button class="btn" data-a="close">Yay!</button></div>`)}
+  else if(S.found.includes(l)){S.coins+=150;floatAt(chests[ci].x*T+16,chests[ci].y*T,'+🪙150');
+    openModal(`<h2>🎁 Treasure!</h2><p style="font-size:40px;text-align:center">🪙</p><p>You found <b>150 coins</b> in an old chest!</p><div class="btns"><button class="btn" data-a="close">Yay!</button></div>`)}
   else{S.found.push(l);const cr=CROPS[l];
     openModal(`<h2>🎁 Treasure!</h2><p style="font-size:40px;text-align:center">${cr.e}</p><p>You found <b>${cr.n} seeds</b>! You can plant them now — they sell for 🪙${cr.sell} each.</p><div class="btns"><button class="btn" data-a="close">Yay!</button></div>`);
     refreshTray()}
 }
 function shipModal(){
-  if(S.ship>=SHIP_STAGES.length){openModal('<h2>⛵ Your Ship</h2><p>Your ship is all fixed and ready to sail! But the island is home now — your villagers would miss you too much. 💛</p><div class="btns"><button class="btn" data-a="close">Stay home</button></div>');return}
+  if(S.ship>=SHIP_STAGES.length){sailModal();return}
   const st=SHIP_STAGES[S.ship];
-  let h=`<h2>🚢 The Shipwreck</h2><p>This is the ship that crashed on the island. Fix it up, one piece at a time! (${S.ship}/3 done)</p>`;
+  let h=`<h2>🚢 The Shipwreck</h2><p>This is the ship that crashed on the island. Fix it up, one piece at a time! (${S.ship}/3 done)</p><p>⛵ Once it's fixed, you can sail it to new islands!</p>`;
   h+=`<div class="irow"><span class="ie">🔧</span><span class="in">${st.n}<br><span class="ip">${st.d}</span></span></div>`;
   h+=`<div class="btns"><button class="btn" data-a="fix" ${S.coins<st.cost?'disabled':''}>Fix it (🪙${st.cost})</button><button class="btn gray" data-a="close">Later</button></div>`;
   openModal(h,{fix:()=>{closeModal();doAct('fix',{stage:S.ship})}});
 }
+// ── Sailing to other islands ─────────────────────────────────────────────────
+const ISLE_NAMES=['Coconut Cove','Sunny Shores','Turtle Bay','Mango Island','Seashell Isle','Palm Paradise','Starfish Point','Pirate Rock',
+  'Rainbow Reef','Breezy Beach','Pelican Point','Dolphin Isle','Banana Bay','Pearl Island','Sandy Toes','Lagoon Land'];
+const cleanName=n=>String(n||'').replace(/[<>&"]/g,'').trim().slice(0,20);
+function setTitle(){document.querySelector('#top .title').textContent=guestMode?'Seaside Village':curIsle().name}
+function sailModal(){
+  if(guestMode){openModal('<h2>⛵ The Ship</h2><p>This is your friend\'s ship — only they can sail it.</p><div class="btns"><button class="btn" data-a="close">OK</button></div>');return}
+  let h='<h2>⛵ Where to, captain?</h2><p>Sail to one of your islands, or discover a brand new one and give it a name! Your coins and your bag come with you.</p>';
+  for(const i of isles.list){const here=i.id===isles.cur;
+    h+=`<div class="irow"><span class="ie">${i.id?'🏝️':'🏠'}</span><span class="in">${cleanName(i.name)}${here?'<br><span class="ip">You are here</span>':''}</span>
+      <button class="btn gray" data-a="ren" data-v="${i.id}" style="padding:0 10px">✏️</button>${here?'':`<button class="btn blue" data-a="go" data-v="${i.id}">Sail</button>`}</div>`}
+  h+=`<div class="btns">${isles.list.length<MAX_ISLES?'<button class="btn" data-a="new">✨ Discover a new island</button>':''}<button class="btn gray" data-a="close">Stay here</button></div>`;
+  openModal(h,{go:id=>{closeModal();sailTo(+id)},ren:id=>nameModal(+id),new:()=>nameModal(null)});
+}
+// name a new island (id null), or rename one of yours
+function nameModal(id,suggest){
+  const isle=isles.list.find(i=>i.id===id),used=isles.list.map(i=>i.name),fresh=ISLE_NAMES.filter(n=>!used.includes(n));
+  const name=suggest||(isle?isle.name:fresh[Math.random()*fresh.length|0]||'New Island');
+  openModal(`<h2>${isle?'✏️ Rename your island':'✨ A new island!'}</h2><p>${isle?'What should this island be called?':'Far across the sea there\'s an island nobody has ever seen. What will you call it?'}</p>
+    <input id="codeIn" maxlength="20" autocomplete="off" style="letter-spacing:0;font-size:20px;width:250px" value="${cleanName(name)}">
+    <div class="btns">${isle?'':'<button class="btn gray" data-a="dice">🎲 Another name</button>'}<button class="btn" data-a="ok">${isle?'Save':'⛵ Set sail!'}</button><button class="btn gray" data-a="back">Back</button></div>`,
+    {dice:()=>nameModal(null,fresh[Math.random()*fresh.length|0]),back:sailModal,ok:()=>{
+      const inp=document.getElementById('codeIn'),n=cleanName(inp.value);if(!n){inp.style.borderColor='#e74c3c';return}
+      if(isle){isle.name=n;saveIsles();setTitle();sailModal();return}
+      closeModal();if(net){toast('Stop playing together (👥) before sailing');return}
+      const nid=isles.next++;isles.list.push({id:nid,name:n,seed:1+(Math.random()*2147483000|0)});saveIsles();sailTo(nid)}});
+  const inp=document.getElementById('codeIn');inp.focus();inp.select();inp.onkeydown=e=>{if(e.key==='Enter')modalActs.ok()};
+}
+function sailTo(id){
+  const to=isles.list.find(i=>i.id===id);if(!to||id===isles.cur)return;
+  if(net){toast('Stop playing together (👥) before sailing');return}
+  saveNow();
+  const carry={};for(const k of['coins','inv','found','sel','goal','job','jobN','cnt','stats'])carry[k]=S[k]; // what you bring along
+  let ns=null;try{ns=JSON.parse(localStorage.getItem(isleKey(id)))}catch(e){}
+  genIsland(to.seed);
+  if(ns&&ns.objs)ns=Object.assign(freshState(),ns);
+  else{ns=freshState();ns.seed=to.seed;ns.ship=3;ns.intro=1} // never been there: your ship is moored on the beach
+  Object.assign(ns,carry);isles.cur=id;saveIsles();
+  enterIsland(ns);saveNow();
+  sleepFade=1.2;setTitle();toast(`⛵ Welcome to ${cleanName(to.name)}!`,3000);
+}
+// set everything up for the island in ns (its land is already made by genIsland)
+function enterIsland(ns){
+  S=ns;S.seed=curSeed;featOrig=feat.slice();for(const i of S.cut)feat[i]=0;drawTerrain();
+  landRev=0;for(let i=0;i<W*H;i++){rev[i]=S.rev[i]==='1'?1:0;fogImg.data[i*4+3]=rev[i]?0:255;if(rev[i]&&ter[i]!==WATER)landRev++}fogX.putImageData(fogImg,0,0);
+  rebuildOcc();roomCache.clear();petAt.clear();guestAt.clear();
+  if(S.day!==dayNow())newDay(true);else if(S.fg)loadForage();else genForage();
+  villagers=[];S.villagers.forEach(spawnVillager);spawnAnimals();
+  inside=false;visit=null;hostPos=null;outPos=null;
+  Object.assign(player,{x:S.px,y:S.py,path:[],target:null,act:null,steer:null});unstick(player);
+  cam.x=player.x;cam.y=player.y;lastTile=-1;lastCoins=-1;
+  reveal(Math.floor(player.x/T),Math.floor(player.y/T),6);setMode('play');
+}
+
 function makeRequest(){
   const pool=Object.keys(CROPS).filter(k=>!CROPS[k].rare||S.found.includes(k));
   if(count('coop'))pool.push('egg');if(count('barn'))pool.push('milk');if(count('hive'))pool.push('honey');if(count('dock'))pool.push('fish');
@@ -554,9 +624,90 @@ const GOALS=[
   ['Fix the whole ship ⛵',()=>S.ship>=3,500],
 ];
 const goalEl=document.getElementById('goal');
+goalEl.onclick=()=>{if(busy())return;if(S.goal<GOALS.length){toast(`🎯 ${GOALS[S.goal][0]} — you get 🪙${GOALS[S.goal][2]}`,3000);return}if(S.job)jobModal()};
+
+// ── Jobs: once the goals are done, there's always another job ───────────────
+function tally(k,n=1){S.cnt=S.cnt||{};S.cnt[k]=(S.cnt[k]||0)+n}
+const cntOf=k=>(S.cnt&&S.cnt[k])||0;
+const JOB_DECOR={flowers:[3,8,'Flowers'],path:[5,12,'Paths'],fence:[4,12,'Fences'],lamp:[1,3,'Lamp Posts'],bench:[1,2,'Benches']};
+const treesLeft=()=>feat.reduce((a,f)=>a+(f===TREE||f===PALM),0),rocksLeft=()=>feat.reduce((a,f)=>a+(f===ROCK),0);
+// jobs that can be done on the island as it is now, getting bigger the more jobs you've done
+function jobPool(){
+  const L=S.jobN||0,V=60+L*20,cl=(x,a,b)=>Math.max(a,Math.min(b,Math.round(x))),pool=[];
+  for(const k in CROPS)if(!CROPS[k].rare||S.found.includes(k))pool.push({t:'harvest',k,n:cl(V/CROPS[k].sell,2,40)});
+  pool.push({t:'plant',n:cl(6+L*1.5,6,60)},{t:'earn',n:cl(V/5,5,400)*10});
+  if(count('coop'))pool.push({t:'collect',k:'egg',n:cl(V/25,2,20)});
+  if(count('barn'))pool.push({t:'collect',k:'milk',n:cl(V/60,2,12)});
+  if(count('hive'))pool.push({t:'collect',k:'honey',n:cl(V/80,2,10)});
+  if(count('dock'))pool.push({t:'fish',n:cl(V/40,2,12)});
+  const nc=cl(3+L/3,3,10),nm=cl(2+L/4,2,8);
+  if(treesLeft()>=nc*2)pool.push({t:'chop',n:nc});if(rocksLeft()>=nm*2)pool.push({t:'mine',n:nm});
+  if(S.villagers.length)pool.push({t:'help',n:cl(1+L/8,1,3)});
+  if(S.villagers.length&&count('myhouse'))pool.push({t:'visit',n:cl(1+L/10,1,3)});
+  if(pets().length)pool.push({t:'feed',n:Math.min(pets().length*2,cl(2+L/8,1,6))});
+  for(const k of['shell','mushroom','flower'])pool.push({t:'forage',k,n:cl(3+L/5,3,8)});
+  const dk=Object.keys(JOB_DECOR)[Math.random()*5|0],[a,b]=JOB_DECOR[dk];pool.push({t:'build',k:dk,n:a+(Math.random()*(b-a+1)|0)});
+  if(explored()<95)pool.push({t:'explore',n:Math.min(100,explored()+5)});
+  return pool;
+}
+const jobKey=j=>({harvest:'harvest:',collect:'collect:',forage:'forage:',build:'build:'}[j.t]||'')+(j.k&&j.t!=='explore'?j.k:j.t);
+function newJob(){
+  const last=S.job&&S.job.t,pool=jobPool().filter(j=>j.t!==last),j=pool[Math.random()*pool.length|0];
+  j.base=cntOf(jobKey(j));
+  const v={harvest:()=>CROPS[j.k].sell*j.n*.5,plant:()=>j.n*3,earn:()=>j.n*.25,collect:()=>ITEMS[j.k].sell*j.n*.5,fish:()=>j.n*15,chop:()=>j.n*8,mine:()=>j.n*10,
+    help:()=>j.n*60,visit:()=>j.n*40,feed:()=>j.n*20,forage:()=>j.n*8,build:()=>BUILD[j.k].cost*j.n+j.n*6,explore:()=>40}[j.t];
+  j.reward=Math.round(v()+20+(S.jobN||0)*3);S.job=j;dirty();
+}
+function jobProgress(j){return j.t==='explore'?explored():cntOf(jobKey(j))-j.base}
+function jobProgressText(j){return j.t==='explore'?`${explored()}%`:`${Math.min(j.n,jobProgress(j))}/${j.n}`}
+// a job that can't be finished any more (say, the coop was removed) gets swapped for another
+function jobPossible(j){
+  const left=j.n-jobProgress(j);
+  switch(j.t){
+    case'collect':return!!count({egg:'coop',milk:'barn',honey:'hive'}[j.k]);
+    case'fish':return!!count('dock');
+    case'chop':return treesLeft()>=left;
+    case'mine':return rocksLeft()>=left;
+    case'help':return S.villagers.length>0;
+    case'visit':return S.villagers.length>0&&!!count('myhouse');
+    case'feed':return pets().length>0;
+  }
+  return true;
+}
+function jobText(j){
+  const it=ITEMS[j.k],s=j.n>1?'s':'';
+  switch(j.t){
+    case'harvest':return`Harvest ${j.n} ${it.e} ${it.n}`;
+    case'plant':return`Plant ${j.n} crops 🌱`;
+    case'earn':return`Earn 🪙${j.n} at the 📦 shipping bin`;
+    case'collect':return`Collect ${j.n} ${it.e} ${it.n}`;
+    case'fish':return`Catch ${j.n} 🐟 fish at a dock`;
+    case'chop':return`Chop ${j.n} trees 🪓`;
+    case'mine':return`Mine ${j.n} rocks ⛏️`;
+    case'help':return`Help ${j.n} villager${s} who ha${j.n>1?'ve':'s'} a ❗`;
+    case'visit':return`Have ${j.n} villager${s} visit Your House 📨`;
+    case'feed':return`Feed your pets ${j.n} time${s} 🐾`;
+    case'forage':return`Find ${j.n} ${it.e} ${it.n}${s}`;
+    case'build':return`Build ${j.n} ${j.n>1?JOB_DECOR[j.k][2]:BUILD[j.k].n} 🔨`;
+    case'explore':return`Explore ${j.n}% of the island 🧭`;
+  }
+  return'';
+}
+function jobModal(){
+  const j=S.job;
+  openModal(`<h2>📋 Job ${(S.jobN||0)+1}</h2><div class="irow"><span class="in">${jobText(j)}<br><span class="ip">Done so far: ${jobProgressText(j)}</span></span><span class="ip" style="font-size:16px">🪙${j.reward}</span></div>
+    <p style="font-size:13px">There's always another job — they get a little bigger (and pay more) as you go.</p>
+    <div class="btns"><button class="btn" data-a="skip">🔄 Different job</button><button class="btn gray" data-a="close">OK</button></div>`,
+    {skip:()=>{closeModal();doAct('skipJob',{})}});
+}
 function checkGoals(){
   while(!guestMode&&S.goal<GOALS.length&&GOALS[S.goal][1]()){const g=GOALS[S.goal];S.coins+=g[2];S.goal++;dirty();toast(`✅ Goal done! +🪙${g[2]}`,2600)}
-  const txt=S.goal<GOALS.length?`<b>Goal:</b> ${GOALS[S.goal][0]}`:'🌟 All goals done! Keep growing your village.';
+  if(!guestMode&&S.goal>=GOALS.length){
+    if(!S.job||!jobPossible(S.job))newJob();
+    if(jobProgress(S.job)>=S.job.n){const r=S.job.reward;S.coins+=r;S.jobN=(S.jobN||0)+1;dirty();toast(`✅ Job done! +🪙${r}`,2600);floatAt(player.x,player.y-40,`+🪙${r}`);newJob()}
+  }
+  const j=S.job,txt=S.goal<GOALS.length?`<b>Goal:</b> ${GOALS[S.goal][0]}`:
+    j?`<b>Job ${(S.jobN||0)+1}:</b> ${jobText(j)} <b>(${jobProgressText(j)})</b> · 🪙${j.reward}`:'🌟 All goals done!';
   if(goalEl.innerHTML!==txt)goalEl.innerHTML=txt;
 }
 
@@ -582,7 +733,7 @@ function place(t,x,y,quiet){
 function doPlace(t,x,y){
   const b=BUILD[t],why=placeWhy(t,x,y);
   if(why){toast(why);return false}
-  S.coins-=b.cost;
+  S.coins-=b.cost;tally('build:'+t);
   const o={id:S.nextId++,t,x,y};if(PRODUCE[t])o.last=now();
   S.objs.push(o);rebuildOcc();
   for(let j=0;j<b.h;j++)for(let i=0;i<b.w;i++)takeForage((y+j)*W+x+i);
@@ -633,28 +784,29 @@ function doMove(o,x,y){
 }
 const byId=id=>S.objs.find(o=>o.id===id);
 const ACT={
-  forage({i}){const fi=forageAt.get(i);if(fi===undefined)return;const it=forage[fi].k;takeForage(i);give(it,1);floatAt((i%W)*T+16,(i/W|0)*T,`+1 ${ITEMS[it].e}`)},
-  feat({i}){const kind=feat[i],X=(i%W)*T+16,Y=(i/W|0)*T;if(!kind)return;feat[i]=0;S.cut.push(i);dirty();
+  forage({i}){const fi=forageAt.get(i);if(fi===undefined)return;const it=forage[fi].k;takeForage(i);give(it,1);tally('forage:'+it);floatAt((i%W)*T+16,(i/W|0)*T,`+1 ${ITEMS[it].e}`)},
+  feat({i}){const kind=feat[i],X=(i%W)*T+16,Y=(i/W|0)*T;if(!kind)return;feat[i]=0;S.cut.push(i);tally(kind===ROCK?'mine':'chop');dirty();
     if(kind===ROCK){give('stone',1);if(Math.random()<.12){give('gem',1);floatAt(X,Y-14,'+1 💎');toast('Ooh, a gem! 💎')}else floatAt(X,Y,'+1 🪨')}
     else{give('wood',2);floatAt(X,Y,'+2 🪵')}},
   chest({c}){if(chests[c])openChest(c)},
   field({id,sel}){const o=byId(id);if(o&&o.t==='farm')tapField(o,sel)},
   collect({id}){const o=byId(id),p=o&&PRODUCE[o.t];if(!p)return;const n=produced(o),X=o.x*T+BUILD[o.t].w*T/2,Y=o.y*T;
     if(!n){const left=Math.ceil((p.every-(now()-o.last)%p.every)/1000);toast(`${ITEMS[p.item].e} Nothing yet — ready in ${left}s`);return}
-    o.last=n>=p.cap?now():o.last+n*p.every;give(p.item,n);floatAt(X,Y,`+${n} ${ITEMS[p.item].e}`)},
+    o.last=n>=p.cap?now():o.last+n*p.every;give(p.item,n);tally('collect:'+p.item,n);floatAt(X,Y,`+${n} ${ITEMS[p.item].e}`)},
   fish({id}){const o=byId(id);if(!o||o.t!=='dock')return;if(!produced(o)){toast('🎣 Your friend got that fish first!');return}
-    o.last=now();give('fish',1);floatAt(o.x*T+16,o.y*T,'+1 🐟')},
+    o.last=now();give('fish',1);tally('fish');floatAt(o.x*T+16,o.y*T,'+1 🐟')},
   ship({keys,bin}){const b=byId(bin);let got=0;
     for(const k of keys||[]){if(!S.inv[k]||!ITEMS[k])continue;got+=priceOf(k)*S.inv[k];S.stats.shipped+=S.inv[k];delete S.inv[k]}
-    if(!got)return;S.coins+=got;dirty();if(b)floatAt(b.x*T+16,b.y*T-4,`+🪙${got}`);refreshTray()},
+    if(!got)return;S.coins+=got;tally('earn',got);dirty();if(b)floatAt(b.x*T+16,b.y*T-4,`+🪙${got}`);refreshTray()},
   fix({stage}){const st=SHIP_STAGES[S.ship];if(!st||stage!==S.ship)return;if(S.coins<st.cost){toast(`Need 🪙${st.cost}`);return}
     S.coins-=st.cost;S.ship++;dirty();shipConfetti();netSend({t:'confetti'});
     const msg=S.ship>=3?'⛵ The ship is fixed! Hooray!':`🔧 ${st.n} — done!`;toast(msg,3000);if(actor){actor=null;toast(msg,3000)}},
   give({name}){const v=S.villagers.find(v=>v.name===name),r=v&&v.req;if(!r)return;
     if((S.inv[r.k]||0)<r.n){toast(`You need ${r.n} ${ITEMS[r.k].e}`);return}
-    S.inv[r.k]-=r.n;if(!S.inv[r.k])delete S.inv[r.k];S.coins+=r.reward;S.stats.helped++;v.req=null;dirty();refreshTray();
+    S.inv[r.k]-=r.n;if(!S.inv[r.k])delete S.inv[r.k];S.coins+=r.reward;S.stats.helped++;tally('help');v.req=null;dirty();refreshTray();
     const vw=villagers.find(w=>w.v===v);if(vw)floatAt(vw.x,vw.y-44,`+🪙${r.reward}`);toast(`💛 ${v.name}: “Thank you so much!”`)},
   place({t,x,y}){if(BUILD[t])doPlace(t,x,y)},
+  skipJob(){if(S.job){newJob();toast('🔄 Here\'s a different job!')}},
   homePlace({k,x,y}){const F=FURN[k];if(!F)return;const why=furnWhy(k,x,y,null,S.home.items)||(S.coins<F.cost?`Need 🪙${F.cost} for ${F.n}`:'');if(why){toast(why);return}
     S.coins-=F.cost;S.home.items.push({id:S.home.next++,k,x,y,c:0});if(F.cost)floatAt((x+F.w/2)*T,y*T,`-🪙${F.cost}`);
     if(inside)unstick(player,inWalkable);dirty()},
@@ -671,7 +823,7 @@ const ACT={
   petFeed({id}){const p=pets().find(p=>p.id===id);if(!p)return;const P=PETS[p.k],food=P.food,q=petPos(p);
     if(!hungry(p)){toast(`${p.name} is full! ❤️`);return}
     if(!S.inv[food]){toast(`${p.name} is hungry — ${P.pl} eat ${ITEMS[food].e} ${ITEMS[food].n}`,2800);return}
-    S.inv[food]--;if(!S.inv[food])delete S.inv[food];p.fed=S.day;p.hearts=Math.min(5,p.hearts+1);dirty();refreshTray();
+    S.inv[food]--;if(!S.inv[food])delete S.inv[food];p.fed=S.day;p.hearts=Math.min(5,p.hearts+1);tally('feed');dirty();refreshTray();
     floatAt(q.x,q.y-30,'❤️');
     if(p.hearts>=5&&Math.random()<.5){S.coins+=25;floatAt(q.x,q.y-46,'+🪙25');toast(`${p.name} found 🪙25 under the sofa for you!`,2800)}
     else toast(`${p.name} loved the ${ITEMS[food].n.toLowerCase()}! ${'❤️'.repeat(p.hearts)}`)},
@@ -680,7 +832,7 @@ const ACT={
     pets().splice(k,1);S.coins+=back;toast(`👋 ${p.name} went to a lovely new home`);dirty()},
   invite({name}){if(!count('myhouse'))return;const v=S.villagers.find(v=>v.name===name);if(!v||isGuest(name))return;
     if(guests().length>=MAX_GUESTS){toast('Your house is full of visitors! 🎉');return}
-    guests().push({name,until:now()+VISIT_MS});dirty();toast(`🔔 Knock knock! ${name} is here!`)},
+    guests().push({name,until:now()+VISIT_MS});tally('visit');dirty();toast(`🔔 Knock knock! ${name} is here!`)},
   homeWall({i}){if(WALLPAPERS[i]){S.home.wall=i;dirty()}},
   homeFloor({i}){if(FLOORS[i]){S.home.floor=i;dirty()}},
   sleep(){const tod=((now()-S.t0)%DAY_MS)/DAY_MS;if(tod<.6){toast('😴 You\'re not sleepy yet — come back in the evening');return}
@@ -1207,7 +1359,7 @@ function visitorsComeAndGo(){
   const d=S.home.drop;
   if(d&&now()>=d.at){S.home.drop=null;dirty();
     if(count('myhouse')&&S.villagers.some(v=>v.name===d.name)&&!isGuest(d.name)&&guests().length<MAX_GUESTS){
-      guests().push({name:d.name,until:now()+VISIT_MS});toast(`🔔 Ding dong! ${d.name} came to visit your house`,3000)}}
+      guests().push({name:d.name,until:now()+VISIT_MS});tally('visit');toast(`🔔 Ding dong! ${d.name} came to visit your house`,3000)}}
   if(!guests().some(g=>g.until<=now()))return;
   const gifted=S.home.gifted||(S.home.gifted={});
   S.home.guests=guests().filter(g=>{if(g.until>now())return true;
@@ -1640,6 +1792,7 @@ let lastTraySig='';
 function applySnap(m){
   const first=!guestMode,old=S;
   clockOff=m.now-Date.now();S=m.s;
+  if((S.seed||HOME_SEED)!==curSeed){genIsland(S.seed||HOME_SEED);featOrig=feat.slice();drawTerrain();roomCache.clear()}
   feat.set(featOrig);for(const i of S.cut)feat[i]=0;
   landRev=0;
   for(let i=0;i<W*H;i++){const r=S.rev[i]==='1'||!first&&rev[i]?1:0;rev[i]=r;fogImg.data[i*4+3]=r?0:255;if(r&&ter[i]!==WATER)landRev++}
@@ -1671,7 +1824,7 @@ function netTick(dt){
 // ── Start ────────────────────────────────────────────────────────────────────
 S.villagers.forEach(spawnVillager);spawnAnimals();
 reveal(Math.floor(player.x/T),Math.floor(player.y/T),6);
-setMode('play');
+setMode('play');setTitle();
 if(!S.intro){
   openModal(`<h2>🌊 Shipwrecked!</h2><p>A big storm crashed your ship on a little island. Nobody lives here… yet!</p>
     <p>🥕 Carrot seeds are free. Tap <b>🔨 Build</b> to place farmland, then plant, harvest and put your crops in the <b>📦 shipping bin</b> for coins.</p>
