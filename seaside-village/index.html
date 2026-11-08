@@ -93,7 +93,8 @@ const ITEMS={...CROPS,
 const BUILD={
   farm:{n:'Farmland',cost:0,w:1,h:1,walk:1,flat:1,paint:1,d:'Plant crops here'},
   path:{n:'Path',cost:2,w:1,h:1,walk:1,flat:1,paint:1,d:'A nice path'},
-  fence:{n:'Fence',cost:3,w:1,h:1,paint:1,tall:8,d:'Keeps things tidy'},
+  fence:{n:'Fence',cost:3,w:1,h:1,paint:1,tall:8,d:'Keeps animals in'},
+  gate:{n:'Gate',cost:8,w:1,h:1,walk:1,tall:8,d:'People can walk through — animals can\'t'},
   flowers:{n:'Flowers',cost:5,w:1,h:1,walk:1,paint:1,d:'Pretty flowers'},
   bench:{n:'Bench',cost:25,w:1,h:1,d:'Have a sit'},
   lamp:{n:'Lamp Post',cost:20,w:1,h:1,tall:18,d:'Lights up the night'},
@@ -108,7 +109,7 @@ const BUILD={
   fountain:{n:'Fountain',cost:400,w:2,h:2,d:'Makes the village sparkle'},
   lighthouse:{n:'Lighthouse',cost:2500,w:2,h:2,tall:80,d:'Shows the whole island'},
 };
-const BUILD_ORDER=['farm','path','fence','flowers','bench','lamp','well','house','coop','hive','dock','barn','bin','market','fountain','lighthouse'];
+const BUILD_ORDER=['farm','path','fence','gate','flowers','bench','lamp','well','house','coop','hive','dock','barn','bin','market','fountain','lighthouse'];
 const PRODUCE={coop:{item:'egg',every:90000,cap:6},barn:{item:'milk',every:150000,cap:4},hive:{item:'honey',every:180000,cap:3},dock:{item:'fish',every:20000,cap:1}};
 const SHIP_STAGES=[
   {n:'Patch the hull',cost:400,d:'Plug the big hole so the ship floats again.'},
@@ -279,11 +280,15 @@ function spawnVillager(v){
   const h=S.objs.find(o=>o.id===v.house);if(!h)return;
   const vw={v,x:(h.x+1)*T,y:(h.y+2)*T+6,path:[],wait:1+Math.random()*3,dir:'down',walk:0,talkT:0};unstick(vw);villagers.push(vw);
 }
+// Hens and cows can go where people can, except through gates
+function animalOk(x,y){const tx=Math.floor(x/T),ty=Math.floor(y/T);if(!walkable(tx,ty))return false;const o=objAt(ty*W+tx);return!(o&&o.t==='gate')}
 function spawnAnimals(){
   animals=[];
   for(const o of S.objs){
     const n=o.t==='coop'?3:o.t==='barn'?2:0;
-    for(let k=0;k<n;k++)animals.push({o,kind:o.t==='coop'?'hen':'cow',x:(o.x+BUILD[o.t].w/2)*T,y:(o.y+BUILD[o.t].h)*T+12,tx:0,ty:0,wait:Math.random()*2,dir:1})
+    for(let k=0;k<n;k++){const a={o,kind:o.t==='coop'?'hen':'cow',x:(o.x+BUILD[o.t].w/2)*T,y:(o.y+BUILD[o.t].h)*T+12,tx:0,ty:0,wait:Math.random()*2,dir:1};
+      if(!animalOk(a.x,a.y))find:for(let r=1;r<6;r++)for(let y=-r;y<=r;y++)for(let x=-r;x<=r;x++)if(animalOk(a.x+x*T,a.y+y*T)){a.x+=x*T;a.y+=y*T;break find}
+      a.tx=a.x;a.ty=a.y;animals.push(a)}
   }
 }
 
@@ -741,12 +746,16 @@ function update(dt){
     const gx=h.x+1+Math.round((Math.random()-.5)*10),gy=h.y+2+Math.round((Math.random()-.3)*8),t=tileOf(v);
     if(walkable(gx,gy)&&rev[gy*W+gx]){const r=findPath(t.x,t.y,(x,y)=>x===gx&&y===gy,null);if(r&&r.path.length<16)v.path=r.path}
   }
-  // Hens and cows mill about in front of their homes
+  // Hens and cows wander around their homes, but fences and gates stop them
   for(const a of animals){
     const b=BUILD[a.o.t];
-    if((a.wait-=dt)<=0){a.wait=1+Math.random()*3;a.tx=(a.o.x-.5+Math.random()*(b.w+1))*T;a.ty=(a.o.y+b.h+.2+Math.random()*1.2)*T}
-    const dx=a.tx-a.x,dy=a.ty-a.y,d=Math.hypot(dx,dy),s=(a.kind==='hen'?28:16)*dt;
-    if(d>2){a.x+=dx/d*Math.min(s,d);a.y+=dy/d*Math.min(s,d);a.dir=dx<0?-1:1;a.moving=true}else a.moving=false;
+    if((a.wait-=dt)<=0){a.wait=1+Math.random()*3;a.tx=(a.o.x+b.w/2+(Math.random()-.5)*7)*T;a.ty=(a.o.y+b.h+(Math.random()-.25)*5)*T}
+    const dx=a.tx-a.x,dy=a.ty-a.y,d=Math.hypot(dx,dy),s=Math.min((a.kind==='hen'?28:16)*dt,d);
+    if(d>2){const nx=a.x+dx/d*s,ny=a.y+dy/d*s;
+      // an animal stuck somewhere it can't be (say, a fence was built on it) may walk out
+      if(animalOk(nx,ny)||!animalOk(a.x,a.y)){a.x=nx;a.y=ny;a.dir=dx<0?-1:1;a.moving=true}
+      else{a.tx=a.x;a.ty=a.y;a.moving=false}}
+    else a.moving=false;
   }
   for(const f of floats)f.t+=dt;floats=floats.filter(f=>f.t<1.6);
   for(const p of confetti){p.t+=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=300*dt}confetti=confetti.filter(p=>p.t<2.5);
@@ -787,10 +796,22 @@ function drawObj(c,o,t,icon){
   case'flowers':{const cols=['#ff6b8b','#ffd23f','#b980ff','#ff8c42','#fff'];
     for(let k=0;k<5;k++){const a=hash(o.x*3+k,o.y*5+k*2),fx=X+5+a*22,fy=Y+8+(a*61%1)*18;c.fillStyle='#4f9a3a';c.fillRect(fx-1,fy,2,6);
       const col=cols[(o.id+k)%5];for(let p=0;p<5;p++)ell(c,fx+Math.cos(p*1.26)*3,fy+Math.sin(p*1.26)*3,2.4,2.4,col);ell(c,fx,fy,1.8,1.8,'#ffcf3a')}break}
-  case'fence':{const has=(dx,dy)=>{if(icon)return dx!==0&&!dy;const n=inMap(o.x+dx,o.y+dy)&&objAt((o.y+dy)*W+o.x+dx);return n&&n.t==='fence'};
+  case'fence':{const has=(dx,dy)=>{if(icon)return dx!==0&&!dy;const n=inMap(o.x+dx,o.y+dy)&&objAt((o.y+dy)*W+o.x+dx);return n&&(n.t==='fence'||n.t==='gate')};
     c.fillStyle='#b98549';if(has(-1,0)){c.fillRect(X,Y+10,16,4);c.fillRect(X,Y+19,16,4)}if(has(1,0)){c.fillRect(X+16,Y+10,16,4);c.fillRect(X+16,Y+19,16,4)}
     if(has(0,-1))c.fillRect(X+14,Y-6,4,14);if(has(0,1))c.fillRect(X+14,Y+20,4,14);
     rect(c,X+12,Y+2,8,24,'#d6a160',2);rect(c,X+12,Y+2,8,4,'#e8bd7d',2);break}
+  case'gate':{const nb=(dx,dy)=>{if(icon)return!dy;const n=inMap(o.x+dx,o.y+dy)&&objAt((o.y+dy)*W+o.x+dx);return n&&(n.t==='fence'||n.t==='gate')};
+    const open=!icon&&gateOpen(o);
+    if(!nb(-1,0)&&!nb(1,0)&&(nb(0,-1)||nb(0,1))){ // gate in a fence that runs up and down
+      rect(c,X+12,Y-6,8,6,'#d6a160',2);rect(c,X+12,Y+24,8,6,'#d6a160',2);
+      if(open)rect(c,X+13,Y,6,7,'#a8763f',2);
+      else{rect(c,X+13,Y,6,24,'#c99a5b',2);c.fillStyle='#a8763f';for(let k=1;k<4;k++)c.fillRect(X+13,Y+k*6,6,1.5)}
+    }else{
+      rect(c,X,Y+2,5,24,'#d6a160',2);rect(c,X+27,Y+2,5,24,'#d6a160',2);rect(c,X,Y+2,5,4,'#e8bd7d',2);rect(c,X+27,Y+2,5,4,'#e8bd7d',2);
+      if(open){rect(c,X+5,Y+6,6,20,'#c99a5b',2);c.fillStyle='#a8763f';c.fillRect(X+5,Y+12,6,1.5);c.fillRect(X+5,Y+19,6,1.5)}
+      else{c.fillStyle='#c99a5b';c.fillRect(X+5,Y+9,22,4);c.fillRect(X+5,Y+19,22,4);for(let k=0;k<4;k++)c.fillRect(X+7+k*5.5,Y+9,2.5,14);
+        c.strokeStyle='#a8763f';c.lineWidth=2.5;c.beginPath();c.moveTo(X+6,Y+22);c.lineTo(X+26,Y+10);c.stroke()}
+    }break}
   case'bench':rect(c,X+4,Y+20,4,8,'#5a3b1e');rect(c,X+24,Y+20,4,8,'#5a3b1e');rect(c,X+2,Y+16,28,6,'#b0743c',2);rect(c,X+2,Y+6,28,5,'#c4864a',2);rect(c,X+4,Y+10,3,6,'#8a5a2c');rect(c,X+25,Y+10,3,6,'#8a5a2c');break;
   case'lamp':rect(c,X+11,Y+24,10,5,'#3b3f52',2);rect(c,X+14,Y-8,4,33,'#4a4f66');rect(c,X+9,Y-18,14,12,night>.2?'#fff2a8':'#f6e3a0',3);rect(c,X+8,Y-20,16,4,'#3b3f52',2);break;
   case'well':ell(c,X+16,Y+22,14,8,'#8f96a3');ell(c,X+16,Y+20,10,5,'#1f5f8f');rect(c,X+3,Y-2,3,22,'#7a5230');rect(c,X+26,Y-2,3,22,'#7a5230');
@@ -827,6 +848,7 @@ function drawObj(c,o,t,icon){
   if(PRODUCE[o.t]&&produced(o)){const n=produced(o);bubble(c,X+BUILD[o.t].w*T/2,Y-(o.t==='hive'?0:o.t==='dock'?-4:4),o.t==='dock'?'🎣':ITEMS[PRODUCE[o.t].item].e);
     if(n>1){c.font='bold 11px sans-serif';c.fillStyle='#b5651d';c.fillText(n,X+BUILD[o.t].w*T/2+14,Y-24)}}
 }
+function gateOpen(o){const gx=o.x*T+16,gy=o.y*T+20;return[player,...villagers].some(e=>Math.hypot(e.x-gx,e.y-gy)<34)}
 function drawCrop(c,o,t){
   const p=cropProgress(o),cr=CROPS[o.c.k],X=o.x*T+16,Y=o.y*T+26,k=o.c.k;
   const leaf=(dx,h,w)=>{c.fillStyle='#3f9a3a';c.beginPath();c.ellipse(X+dx,Y-h/2,w,h/2,dx*.06,0,Math.PI*2);c.fill()};
