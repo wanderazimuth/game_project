@@ -841,7 +841,10 @@ const ACT={
     S.coins-=F.cost;S.home.items.push({id:S.home.next++,k,x,y,c:0});if(F.cost)floatAt((x+F.w/2)*T,y*T,`-🪙${F.cost}`);
     if(inside)unstick(player,inWalkable);dirty()},
   homeRemove({id}){const H=S.home,k=H.items.findIndex(f=>f.id===id);if(k<0)return;const F=FURN[H.items[k].k],f=H.items[k],back=Math.floor(F.cost/2);
-    H.items.splice(k,1);S.coins+=back;if(back)floatAt((f.x+F.w/2)*T,f.y*T,`+🪙${back}`);dirty()},
+    H.items.splice(k,1);S.coins+=back;if(back)floatAt((f.x+F.w/2)*T,f.y*T,`+🪙${back}`);
+    if(f.store){for(const it in f.store)give(it,f.store[it]);toast('🧰 Everything in the chest went back in your bag')}dirty()},
+  chestMove({id,k,n,out}){const f=S.home.items.find(f=>f.id===id&&f.k==='chest');if(!f||!ITEMS[k])return;const st=f.store||(f.store={}),from=out?st:S.inv,to=out?S.inv:st;
+    n=Math.min(Math.floor(+n)||0,from[k]||0);if(n<=0)return;from[k]-=n;if(!from[k])delete from[k];to[k]=(to[k]||0)+n;dirty();refreshTray()},
   homeMove({id,x,y}){const f=S.home.items.find(f=>f.id===id);if(!f)return;const why=furnWhy(f.k,x,y,f,S.home.items);if(why){toast(why);return}
     f.x=x;f.y=y;if(inside)unstick(player,inWalkable);dirty()},
   homeColor({id}){const f=S.home.items.find(f=>f.id===id);if(f&&FURN[f.k].col){f.c=((f.c||0)+1)%FCOLS.length;dirty()}},
@@ -1384,6 +1387,7 @@ const FURN={
   toybox:{n:'Toy Box',cost:15,w:1,h:1,e:'🧸',say:'🪀 So many toys!'},
   fishbowl:{n:'Fishbowl',cost:30,w:1,h:1,tall:12,e:'🐠',say:'🐠 Blub blub!'},
   teddy:{n:'Teddy',cost:10,w:1,h:1,e:'🧸',say:'🧸 A big hug!'},
+  chest:{n:'Chest',cost:30,w:1,h:1,tall:4,e:'🧰',say:'chest'},
   window:{n:'Window',cost:20,w:1,h:2,wall:1,e:'🪟',say:'What a view!'},
   painting:{n:'Painting',cost:15,w:1,h:2,wall:1,e:'🖼️',say:'🖼️ A painting of the sea'},
   clock:{n:'Clock',cost:15,w:1,h:2,wall:1,e:'🕰️',say:'clock'},
@@ -1553,8 +1557,25 @@ function useFurn(f){
   const F=FURN[f.k],b=furnBox(f);facePoint((b.x+b.w/2)*T,(b.y+b.h/2)*T);
   if(F.say==='sleep'){if(visit){const vw=hostVw();toast(`That's ${vw?vw.v.name+'\'s':'their'} bed — no napping! 😄`)}else doAct('sleep',{})}
   else if(F.say==='music'){for(let k=0;k<4;k++)setTimeout(()=>floats.push({x:(b.x+1)*T+(Math.random()-.5)*30,y:b.y*T-30,txt:['🎵','🎶'][k%2],t:0}),k*250);toast('🎹 La la la!')}
+  else if(F.say==='chest'){if(visit){const vw=hostVw();toast(`🧰 That's ${vw?vw.v.name+'\'s':'their'} chest — no peeking!`)}else chestModal(f.id)}
   else if(F.say==='clock'){const tod=((now()-S.t0)%DAY_MS)/DAY_MS,mins=Math.floor(tod*1440)+360,h=Math.floor(mins/60)%24;toast(`🕰️ It's ${h%12||12} o'clock${h<12?' in the morning':h<18?' in the afternoon':' at night'} on day ${S.day}`)}
   else toast(`${F.e} ${F.say}`);
+}
+function chestModal(id){
+  const f=S.home.items.find(f=>f.id===id);if(!f){closeModal();return}
+  const st=f.store||{},inChest=Object.keys(st).filter(k=>st[k]>0),inBag=Object.keys(S.inv).filter(k=>S.inv[k]>0&&ITEMS[k]);
+  const row=(k,n,out)=>`<div class="irow"><span class="ie">${ITEMS[k].e}</span><span class="in">${ITEMS[k].n} ×${n}</span>
+    <button class="btn gray" data-a="${out?'take':'put'}" data-v="${k}:1" style="padding:0 10px">${out?'Take':'Put'} 1</button><button class="btn${out?' blue':''}" data-a="${out?'take':'put'}" data-v="${k}:${n}" style="padding:0 10px">All</button></div>`;
+  let h='<h2>🧰 Chest</h2><p style="font-size:13px">Keep things safe in here — they won\'t get shipped, and they stay on this island.</p>';
+  h+='<p><b>In the chest</b></p>'+(inChest.length?inChest.map(k=>row(k,st[k],true)).join(''):'<p style="font-size:13px;opacity:.7">It\'s empty.</p>');
+  h+='<p style="margin-top:10px"><b>In your bag</b></p>'+(inBag.length?inBag.map(k=>row(k,S.inv[k],false)).join(''):'<p style="font-size:13px;opacity:.7">Your bag is empty.</p>');
+  h+=`<div class="btns">${inBag.length?'<button class="btn" data-a="all">Put everything in</button>':''}${inChest.length?'<button class="btn blue" data-a="out">Take everything out</button>':''}<button class="btn gray" data-a="close">Close</button></div>`;
+  // after moving things, show the chest again (a friend's screen waits a moment for the island to come back)
+  const again=()=>setTimeout(()=>{if(busy())chestModal(id)},guestMode?300:0);
+  const mv=(v,out)=>{const[k,n]=v.split(':');doAct('chestMove',{id,k,n:+n,out});again()};
+  openModal(h,{put:v=>mv(v,false),take:v=>mv(v,true),
+    all:()=>{for(const k of inBag)doAct('chestMove',{id,k,n:S.inv[k],out:false});again()},
+    out:()=>{for(const k of inChest)doAct('chestMove',{id,k,n:st[k],out:true});again()}});
 }
 function inTray(chip){
   if(mode==='play'){
@@ -1635,6 +1656,8 @@ function drawFurn(c,f,t,icon){
   case'toybox':rect(c,X+4,Y+8,24,20,'#3d9be0',3);rect(c,X+3,Y+5,26,6,'#2f80c9',3);ell(c,X+11,Y+4,4,4,'#e74c3c');poly(c,'#ffd23f',X+20,Y-4,X+23,Y+3,X+17,Y+3);rect(c,X+13,Y+14,6,6,'#ffd23f',1);break;
   case'fishbowl':rect(c,X+7,Y+12,18,16,'#b07b45',2);ell(c,X+16,Y+2,11,11,'rgba(190,232,255,.85)');ell(c,X+16,Y-1,10,4,'rgba(255,255,255,.4)');
     {const fx=X+16+(icon?0:Math.sin(t*1.5)*5);ell(c,fx,Y+4,4,2.6,'#ff8c2a');poly(c,'#ff8c2a',fx-3,Y+4,fx-7,Y+1,fx-7,Y+7)}break;
+  case'chest':rect(c,X+4,Y+10,24,17,'#9a5b2a',3);rect(c,X+3,Y+4,26,9,'#b56f33',4);rect(c,X+4,Y+12,24,2,'#6b3a18');
+    rect(c,X+8,Y+4,3,23,'#c9a24a');rect(c,X+21,Y+4,3,23,'#c9a24a');rect(c,X+13,Y+11,6,6,'#e0b13c',1);ell(c,X+16,Y+15,1.2,1.4,'#5a3418');break;
   case'teddy':ell(c,X+16,Y+18,9,9,'#b07b45');ell(c,X+16,Y+20,5,5,'#d6a46b');ell(c,X+16,Y+4,7.5,7.5,'#b07b45');ell(c,X+10,Y-2,3,3,'#b07b45');ell(c,X+22,Y-2,3,3,'#b07b45');
     ell(c,X+16,Y+6,3,2.4,'#d6a46b');c.fillStyle='#222';c.fillRect(X+13,Y+2,2,2);c.fillRect(X+18,Y+2,2,2);rect(c,X+10,Y+10,12,3,'#e74c3c',1);break;
   case'window':{const n=icon?0:nightness();rect(c,X+3,Y+10,26,32,'#fff',3);rect(c,X+6,Y+13,20,26,n>.3?'#1d2b5a':'#9fd8ff',2);
