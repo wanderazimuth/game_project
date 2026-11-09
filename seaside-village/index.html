@@ -175,7 +175,7 @@ function genIsland(seed=HOME_SEED,kind=''){
   feat.fill(0);chestAt.fill(-1);chests=[];landTotal=0;curSeed=seed;curKind=kind;VOLCANO=null;
   // each new island gets its own size, lakes and forests; the home island keeps the ones it always had
   const v=seed===HOME_SEED?null:rngFrom(seed^0x5bd1e995);
-  const P=kind==='volcano'?{rx:.42,ry:.42,lake:2,forest:.8,trees:.25,palms:.05,rocks:.15}:v?{rx:.36+v()*.12,ry:.34+v()*.12,lake:.66+v()*.14,forest:.52+v()*.16,trees:.5+v()*.35,palms:.06+v()*.08,rocks:.04+v()*.04}
+  const P=kind==='volcano'?{rx:.42,ry:.42,lake:2,forest:2,trees:0,palms:0,lone:0,rocks:.22,sandRocks:.12}:v?{rx:.36+v()*.12,ry:.34+v()*.12,lake:.66+v()*.14,forest:.52+v()*.16,trees:.5+v()*.35,palms:.06+v()*.08,rocks:.04+v()*.04}
     :{rx:.45,ry:.43,lake:.72,forest:.6,trees:.7,palms:.09,rocks:.055};
   const r=rngFrom(seed),n1=noise(r,9),n2=noise(r,4),n3=noise(r,7),nf=noise(r,5);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
@@ -200,8 +200,8 @@ function genIsland(seed=HOME_SEED,kind=''){
   for(let y=SPAWN.y-2;y<=SPAWN.y;y++)for(let x=SPAWN.x-3;x<=SPAWN.x+3;x++)if(ter[y*W+x]===WATER)ter[y*W+x]=SAND;
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
     const i=y*W+x,q=r();
-    if(ter[i]===GRASS){if(nf(x,y)>P.forest&&q<P.trees||q<.03)feat[i]=TREE;else if(q<P.rocks)feat[i]=ROCK}
-    else if(ter[i]===SAND){const shore=N4.some(([a,b])=>ter[(y+b)*W+x+a]===WATER);if(shore&&q<P.palms)feat[i]=PALM;else if(q<.012)feat[i]=ROCK}
+    if(ter[i]===GRASS){if(nf(x,y)>P.forest&&q<P.trees||q<(P.lone??.03))feat[i]=TREE;else if(q<P.rocks)feat[i]=ROCK}
+    else if(ter[i]===SAND){const shore=N4.some(([a,b])=>ter[(y+b)*W+x+a]===WATER);if(shore&&q<P.palms)feat[i]=PALM;else if(q<(P.sandRocks??.012))feat[i]=ROCK}
     if(Math.hypot(x-SPAWN.x,y-SPAWN.y)<4.5)feat[i]=0;
   }
   for(let i=0;i<W*H;i++)if(ter[i]!==WATER)landTotal++;
@@ -309,7 +309,7 @@ const terC=document.createElement('canvas');terC.width=W*T;terC.height=H*T;
 function drawTerrain(){
   const c=terC.getContext('2d');
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;
-    c.fillStyle=depth[i]===1?'#56b9e3':depth[i]===2?'#42a2da':'#2f88c9';c.fillRect(x*T,y*T,T,T)}
+    c.fillStyle=curKind==='volcano'?(depth[i]===1?'#ff8a1f':depth[i]===2?'#ef5a16':'#c63a12'):depth[i]===1?'#56b9e3':depth[i]===2?'#42a2da':'#2f88c9';c.fillRect(x*T,y*T,T,T)}
   const blob=(col,test,grow)=>{c.fillStyle=col;for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(test(y*W+x)){c.beginPath();c.roundRect(x*T-grow,y*T-grow,T+grow*2,T+grow*2,grow+6);c.fill()}};
   const V=curKind==='volcano',PAL=V?{s1:'#3e393a',s2:'#4a4446',g:'#6e6159',g2:'#655850',g3:'#564a43',sd:'#2f2b2c'}:{s1:'#efd79a',s2:'#f4e0a8',g:'#7cc35d',g2:'#73b955',g3:'#5fa647',sd:'#e1c47f'};
   blob(PAL.s1,i=>ter[i]!==WATER,5);
@@ -848,6 +848,7 @@ function canPlace(t,x,y){
     if(!inMap(X,Y)||!rev[k])return'Explore there first';
     if(objAt(k)||feat[k]||chestHere(k)||inShip(X,Y))return'Something is in the way';
     if(b.one&&S.objs.some(o=>o.t===t&&o!==ignoreObj))return`You can only have one ${b.n}`;
+    if(b.on==='shore'&&curKind==='volcano')return'No fish in lava!';
     if(b.on==='shore'){if(ter[k]!==WATER||!N4.some(([a,c])=>inMap(X+a,Y+c)&&ter[(Y+c)*W+X+a]!==WATER))return'Docks go in the water, next to the beach'}
     else if(b.on==='water'){if(ter[k]!==WATER)return'Bridges go over water'}
     else if(ter[k]===WATER)return'Can\'t build on water';
@@ -1399,6 +1400,7 @@ function drawAnimal(c,a,t){
     rect(c,x+9*s-(s<0?8:0),y-21-b*.5,9,9,'#fff',3);rect(c,x+11*s-(s<0?6:0)+(s<0?-1:1),y-15-b*.5,7,4,'#f4b6c2',2);c.fillStyle='#222';c.fillRect(x+12*s-.6,y-19-b*.5,1.4,1.4)}
 }
 function drawWater(c,x0,y0,x1,y1,t){
+  if(curKind==='volcano'){drawLava(c,x0,y0,x1,y1,t);return}
   for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){const i=y*W+x;if(ter[i]!==WATER||objAt(i)&&BUILD[objAt(i).t].on)continue;
     const h=hash(x,y),X=x*T,Y=y*T;
     if(depth[i]===1){const a=.25+.25*Math.sin(t*2+h*6);c.fillStyle=`rgba(255,255,255,${a})`;
@@ -1408,10 +1410,22 @@ function drawWater(c,x0,y0,x1,y1,t){
       c.beginPath();const wx=X+6+h*40%18,wy=Y+10+h*70%14;c.moveTo(wx,wy);c.quadraticCurveTo(wx+4,wy-3,wx+8,wy);c.quadraticCurveTo(wx+12,wy+3,wx+16,wy);c.stroke()}
   }
 }
+// Volcano Island's sea is lava: glowing edges, dark crust and bubbles
+function drawLava(c,x0,y0,x1,y1,t){
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){const i=y*W+x;if(ter[i]!==WATER||objAt(i)&&BUILD[objAt(i).t].on)continue;
+    const h=hash(x,y),X=x*T,Y=y*T;
+    if(depth[i]===1){const a=.35+.3*Math.sin(t*2.5+h*6);c.fillStyle=`rgba(255,230,90,${a})`;
+      for(const[a2,b2]of N4){if(!inMap(x+a2,y+b2)||ter[(y+b2)*W+x+a2]===WATER)continue;
+        if(a2===1)c.fillRect(X+T-5,Y,4,T);if(a2===-1)c.fillRect(X+1,Y,4,T);if(b2===1)c.fillRect(X,Y+T-5,T,4);if(b2===-1)c.fillRect(X,Y+1,T,4)}}
+    if(h>.55){c.fillStyle='rgba(70,20,10,.35)';c.beginPath();c.ellipse(X+8+h*30%16,Y+8+h*70%14,7,4,h*3,0,Math.PI*2);c.fill()} // cooling crust
+    if(h<.3){const p=(t*.6+h*5)%1,r=1+p*5;c.strokeStyle=`rgba(255,220,80,${.7*(1-p)})`;c.lineWidth=1.5;
+      c.beginPath();c.arc(X+6+h*60%20,Y+6+h*90%20,r,0,Math.PI*2);c.stroke()} // a bubble popping
+  }
+}
 function draw(t){
   if(inside){drawInside(t);return}
   const z=zoom(),s=z*dpr;
-  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#2f88c9';ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=curKind==='volcano'?'#c63a12':'#2f88c9';ctx.fillRect(0,0,cv.width,cv.height);
   const sh=shake>0?shake*5:0,shx=(Math.random()-.5)*sh,shy=(Math.random()-.5)*sh; // the ground shakes when the volcano blows
   ctx.setTransform(s,0,0,s,(cssW/2-cam.x*z+shx)*dpr,(cssH/2-cam.y*z+shy)*dpr);
   ctx.imageSmoothingEnabled=false;ctx.drawImage(terC,0,0);
