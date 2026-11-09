@@ -1011,9 +1011,9 @@ function refreshTray(){
     chip('<span class="e">✋</span>Move map',tool==='hand',false,()=>pickTool('hand'));
     chip('<span class="e">↔️</span>Move<span class="p">Free</span>',tool==='move',false,()=>{pickTool('move');toast('Tap something you built to pick it up')});
     chip('<span class="e">🧹</span>Remove<span class="p">½ back</span>',tool==='remove',false,()=>{pickTool('remove');toast('Tap something you built to remove it')});
-    for(const t of BUILD_ORDER){const b=BUILD[t];
-      const d=chip(`${b.n}<span class="p">${b.cost?'🪙'+b.cost:'Free'}</span>`,tool===t,S.coins<b.cost,()=>{pickTool(t);toast(`${b.n}: ${b.d}`)});
-      icons[t]=icons[t]||iconFor(t);const ic=icons[t].cloneNode();ic.getContext('2d').drawImage(icons[t],0,0);d.prepend(ic)}
+    for(const t of BUILD_ORDER){const b=BUILD[t],ik=curKind+t;
+      const d=chip(`${bname(t)}<span class="p">${b.cost?'🪙'+b.cost:'Free'}</span>`,tool===t,S.coins<b.cost,()=>{pickTool(t);toast(`${bname(t)}: ${b.d}`)});
+      icons[ik]=icons[ik]||iconFor(t);const ic=icons[ik].cloneNode();ic.getContext('2d').drawImage(icons[ik],0,0);d.prepend(ic)}
   }
 }
 let lastCoins=-1;
@@ -1071,7 +1071,7 @@ function endPtr(e){
     }
     else if(quick){const tg=pickAt(w.x,w.y);
       if(tool==='remove'){if(tg.k==='obj')removeObj(tg.o);else if(tg.k==='ground'&&objAt(tg.y*W+tg.x))removeObj(objAt(tg.y*W+tg.x))}
-      else if(tg.k==='obj')toast(`${BUILD[tg.o.t].n}: ${BUILD[tg.o.t].d}`)}
+      else if(tg.k==='obj')toast(`${bname(tg.o.t)}: ${BUILD[tg.o.t].d}`)}
   }else if(quick)goToTarget(pickAt(w.x,w.y));
 }
 cv.addEventListener('pointerup',endPtr);cv.addEventListener('pointercancel',endPtr);
@@ -1183,10 +1183,49 @@ function nightness(){
 function ell(c,x,y,rx,ry,col){c.fillStyle=col;c.beginPath();c.ellipse(x,y,rx,ry,0,0,Math.PI*2);c.fill()}
 function rect(c,x,y,w,h,col,r){c.fillStyle=col;c.beginPath();c.roundRect(x,y,w,h,r||0);c.fill()}
 function poly(c,col,...p){c.fillStyle=col;c.beginPath();c.moveTo(p[0],p[1]);for(let i=2;i<p.length;i+=2)c.lineTo(p[i],p[i+1]);c.closePath();c.fill()}
-function bubble(c,x,y,txt){rect(c,x-13,y-26,26,24,'rgba(255,255,255,.95)',8);poly(c,'rgba(255,255,255,.95)',x-4,y-3,x+4,y-3,x,y+3);
+// ── Volcano Island's own version of everything you build ─────────────────────
+const VNAMES={farm:'Ash Farmland',myhouse:'Your Volcano House',path:'Obsidian Path',fence:'Basalt Fence',gate:'Basalt Gate',hedge:'Fire Hedge',bridge:'Obsidian Bridge',
+  flowers:'Fire Flowers',tree:'Fire Tree',bench:'Stone Bench',lamp:'Lava Lamp',campfire:'Lava Pit',picnic:'Stone Table',statue:'Obsidian Statue',playground:'Rock Playground',
+  windmill:'Steam Mill',well:'Magma Well',house:'Basalt House',cabin:'Stone Cabin',coop:'Stone Coop',hive:'Fire Hive',dock:'Dock',barn:'Basalt Barn',pond:'Lava Pond',
+  pigpen:'Mud Pen',bakery:'Lava Oven Bakery',creamery:'Stone Creamery',greenhouse:'Glowhouse',bin:'Stone Bin',market:'Ember Market',fountain:'Lava Fountain',lighthouse:'Fire Beacon'};
+const bname=t=>curKind==='volcano'&&VNAMES[t]||BUILD[t].n;
+let themed=false; // true while drawing Volcano Island's version of something
+const volcCache=new Map();
+// wood turns to charred basalt, water and glass to glowing lava, plants to fire, white to ash
+function volc(col){
+  if(volcCache.has(col))return volcCache.get(col);
+  let r,g,b,a=1,m;
+  if((m=/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(col))){let h=m[1];if(h.length===3)h=h.replace(/./g,'$&$&');r=parseInt(h.slice(0,2),16);g=parseInt(h.slice(2,4),16);b=parseInt(h.slice(4,6),16)}
+  else if((m=/^rgba?\(([^)]+)\)$/.exec(col))){[r,g,b,a=1]=m[1].split(',').map(Number)}
+  else{volcCache.set(col,col);return col}
+  r/=255;g/=255;b/=255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b);let l=(mx+mn)/2,s=0,h=0;
+  if(mx!==mn){const d=mx-mn;s=l>.5?d/(2-mx-mn):d/(mx+mn);h=(mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4)*60}
+  if(l>.86||s<.15){s=.06;l=.16+l*.48}                       // white and grey: ash and basalt
+  else if(h>=175&&h<265){h=24;s=.95;l=Math.min(.62,.42+l*.22)}  // water, sky and glass: lava glow
+  else if(h>=70&&h<175){h=10;s=.85;l=l*.85}                  // leaves: fire
+  else if(h>=265&&h<330){s*=.5;l*=.7}
+  else if(h>=15&&h<50&&!(s>.65&&l>.45)){h=12;s*=.3;l=.13+l*.42} // wood and roofs: charcoal
+  const q=l<.5?l*(1+s):l+s-l*s,p=2*l-q,f=t=>{t=(t%360+360)%360/360;return t<1/6?p+(q-p)*6*t:t<.5?q:t<2/3?p+(q-p)*(2/3-t)*6:p};
+  const out=`rgba(${Math.round(f(h+120)*255)},${Math.round(f(h)*255)},${Math.round(f(h-120)*255)},${a})`;
+  volcCache.set(col,out);return out;
+}
+const FS=Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype,'fillStyle'),SS=Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype,'strokeStyle');
+// let a canvas draw in the volcano style while `themed` is on
+function themeCtx(c){
+  if(c._themed)return;c._themed=1;
+  Object.defineProperty(c,'fillStyle',{get(){return FS.get.call(this)},set(v){FS.set.call(this,themed&&typeof v==='string'?volc(v):v)}});
+  Object.defineProperty(c,'strokeStyle',{get(){return SS.get.call(this)},set(v){SS.set.call(this,themed&&typeof v==='string'?volc(v):v)}});
+}
+// draw fn in the volcano style if you're on Volcano Island (people, pets and speech bubbles keep their colors)
+function styled(c,on,fn){themeCtx(c);const was=themed;themed=on;try{fn()}finally{themed=was}}
+const plain=fn=>(...a)=>{const was=themed;themed=false;try{return fn(...a)}finally{themed=was}};
+
+const bubble=plain(bubbleRaw);
+function bubbleRaw(c,x,y,txt){rect(c,x-13,y-26,26,24,'rgba(255,255,255,.95)',8);poly(c,'rgba(255,255,255,.95)',x-4,y-3,x+4,y-3,x,y+3);
   c.font=`15px ${EMOJI_FONT}`;c.textAlign='center';c.textBaseline='middle';c.fillText(txt,x,y-13)}
 const ROOFS=['#d9534f','#4a8fd9','#4fae5c','#9b59b6','#f0ad4e','#e8739a'],WALLS=['#fff4dc','#ffe9c7','#f3f0ff','#e8f7ff'];
-function drawObj(c,o,t,icon){
+function drawObj(c,o,t,icon){styled(c,curKind==='volcano',()=>drawObjIn(c,o,t,icon))}
+function drawObjIn(c,o,t,icon){
   const X=o.x*T,Y=o.y*T,night=icon?0:nightness();
   switch(o.t){
   case'farm':rect(c,X+1,Y+1,T-2,T-2,'#8a5a33',5);c.fillStyle='#6e4426';for(let k=0;k<4;k++)c.fillRect(X+5,Y+5+k*7,T-10,3);break;
@@ -1311,7 +1350,8 @@ function shop(c,X,Y,wall,roof,stripe,sign,icon,t){
   c.font='9px '+EMOJI_FONT;c.textAlign='center';c.textBaseline='middle';c.fillText(sign,X+32,Y+18.5);
   if(!icon)for(let k=0;k<3;k++){const a=(t*.4+k/3)%1;ell(c,X+48+a*6,Y+2-a*22,3+a*4,3+a*4,`rgba(235,235,235,${.6*(1-a)})`)}
 }
-function drawCrop(c,o,t){
+const drawCrop=plain(drawCropRaw);
+function drawCropRaw(c,o,t){
   const p=cropProgress(o),cr=CROPS[o.c.k],X=o.x*T+16,Y=o.y*T+26,k=o.c.k;
   const leaf=(dx,h,w)=>{c.fillStyle='#3f9a3a';c.beginPath();c.ellipse(X+dx,Y-h/2,w,h/2,dx*.06,0,Math.PI*2);c.fill()};
   if(p<.34){leaf(-3,7,2.5);leaf(3,7,2.5);return}
@@ -1366,7 +1406,8 @@ function drawShip(c,t){
   c.restore();
   if(!st&&S.intro){const g=(Math.sin(t*3)+1)/2;bubble(c,X+48,Y-14+g*3,'🔧')}
 }
-function drawPerson(c,x,y,look,dir,walk,act,t){
+const drawPerson=plain(drawPersonRaw);
+function drawPersonRaw(c,x,y,look,dir,walk,act,t){
   const bob=Math.sin(walk)*2,lg=walk?Math.sin(walk)*2.5:0;
   ell(c,x,y,9,3.5,'rgba(0,0,0,.2)');
   rect(c,x-5,y-9,4,9+lg*.3,'#3b4a6b',1.5);rect(c,x+1,y-9,4,9-lg*.3,'#3b4a6b',1.5);
@@ -1385,7 +1426,8 @@ function drawPerson(c,x,y,look,dir,walk,act,t){
     if(dir==='down'){c.fillRect(x-3.5,hy,2,2.4);c.fillRect(x+1.5,hy,2,2.4)}else c.fillRect(x+ex,hy,2,2.4);
     ell(c,x-4+ex*.5,hy+3,1.6,1,'rgba(255,120,120,.5)');ell(c,x+4+ex*.5,hy+3,1.6,1,'rgba(255,120,120,.5)')}
 }
-function drawAnimal(c,a,t){
+const drawAnimal=plain(drawAnimalRaw);
+function drawAnimalRaw(c,a,t){
   const x=a.x,y=a.y,s=a.dir,b=a.moving?Math.abs(Math.sin(t*12))*1.5:0;
   if(a.kind==='pig'){ell(c,x,y,11,3.5,'rgba(0,0,0,.15)');c.fillStyle='#e8909f';for(const dx of[-6,-2,3,6])c.fillRect(x+dx-1.2,y-5,2.4,5);
     ell(c,x,y-9-b*.5,11,7,'#f4a6b4');ell(c,x+10*s,y-11-b*.5,5.5,5,'#f4a6b4');ell(c,x+14*s,y-10-b*.5,3,2.5,'#e8909f');
@@ -1723,7 +1765,7 @@ function inTray(chip){
   chip('<span class="e">🧹</span>Remove<span class="p">½ back</span>',itool==='remove',false,()=>{itool='remove';inLifted=null;inG=null;refreshTray();toast('Tap something to remove it')});
   for(const k in FURN){const F=FURN[k];
     const d=chip(`${F.n}<span class="p">🪙${F.cost}</span>`,itool===k,S.coins<F.cost,()=>{itool=k;inLifted=null;inG=null;refreshTray();toast(`${F.e} ${F.n}: ${F.wall?'tap the wall':'tap the floor'} to put it there`)});
-    icons['f_'+k]=icons['f_'+k]||furnIcon(k);const ic=icons['f_'+k].cloneNode();ic.getContext('2d').drawImage(icons['f_'+k],0,0);d.prepend(ic)}
+    const fk='f_'+curKind+k;icons[fk]=icons[fk]||furnIcon(k);const ic=icons[fk].cloneNode();ic.getContext('2d').drawImage(icons[fk],0,0);d.prepend(ic)}
   const lbl=t=>{const l=document.createElement('span');l.className='lbl';l.textContent=t;tray.appendChild(l)};
   lbl('PETS');
   for(const k in PETS){const P=PETS[k];
@@ -1759,7 +1801,8 @@ function inUp(e,d,quick,w){
   else if(FURN[f.k].col)doAct('homeColor',{id:f.id});
   else toast(`${FURN[f.k].e} ${FURN[f.k].n}`);
 }
-function drawFurn(c,f,t,icon){
+function drawFurn(c,f,t,icon){styled(c,curKind==='volcano',()=>drawFurnIn(c,f,t,icon))}
+function drawFurnIn(c,f,t,icon){
   const F=FURN[f.k],X=f.x*T,Y=f.y*T,col=FCOLS[f.c||0],shade='rgba(0,0,0,.14)';
   switch(f.k){
   case'bed':rect(c,X+2,Y-8,60,16,'#a8743f',6);rect(c,X+2,Y+2,60,60,'#8a5a2c',6);rect(c,X+6,Y+4,52,54,'#fff',5);rect(c,X+12,Y+7,40,12,'#eef0ff',5);
@@ -1878,7 +1921,8 @@ function petModal(p,leaving){
     {name:()=>{doAct('petRename',{id:p.id,name:document.getElementById('codeIn').value});closeModal()}});
 }
 function petIcon(k){const c=document.createElement('canvas');c.width=112;c.height=88;const x=c.getContext('2d');x.scale(2.2,2.2);drawPet(x,{k,v:0},{x:25,y:32,dir:'right',walk:0,happy:0},0);return c}
-function drawPet(c,p,q,t){
+const drawPet=plain(drawPetRaw);
+function drawPetRaw(c,p,q,t){
   const P=PETS[p.k],col=P.cols[p.v%P.cols.length]||P.cols[0],s=q.dir==='left'?-1:1,mv=q.walk>0,x=q.x;
   let y=q.y-(q.happy>0?Math.abs(Math.sin(q.happy*8))*5:0);
   const step=mv?Math.sin(q.walk*1.6):0,dark='rgba(0,0,0,.25)';
@@ -1934,7 +1978,7 @@ function drawInside(t){
   const z=zoom(),s=z*dpr;
   ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#2b2236';ctx.fillRect(0,0,cv.width,cv.height);
   ctx.setTransform(s,0,0,s,(cssW/2-cam.x*z)*dpr,(cssH/2-cam.y*z)*dpr);
-  drawRoom(ctx);
+  styled(ctx,curKind==='volcano',()=>drawRoom(ctx));
   const H=room().items;
   for(const f of H)if(FURN[f.k].wall)drawFurn(ctx,f,t);
   for(const f of H)if(FURN[f.k].walk)drawFurn(ctx,f,t);
