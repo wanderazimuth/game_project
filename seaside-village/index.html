@@ -407,6 +407,7 @@ function pickAt(wx,wy){
     if(chestHere(i)&&d===0)return{k:'chest',c:chestAt[i]};
     if(feat[i]===VOLC)return{k:'volcano'};
     if(feat[i]&&(d===0||d===1&&feat[i]!==ROCK))return{k:'feat',i,x,y};
+    if(d===0&&fireAt(x,y))return{k:'fire'};
     if(d===0&&forageAt.has(i))return{k:'forage',i};
   }
   return{k:'ground',x:tx,y:ty};
@@ -423,11 +424,12 @@ function goToTarget(tg){
   player.steer=null;
   const pt=tileOf(player);
   if(tg.k==='volcano'){toast('🌋 Way too hot to climb!');return}
+  if(tg.k==='fire'){toast('🔥 That\'s a fire flower — if you touch it, it burns something in your bag!',2800);return}
   if(tg.k==='scorp'){ // close enough to bonk it, or run after it
     if(Math.hypot(tg.sc.x-player.x,tg.sc.y-player.y)<T*1.8){player.path=[];arrive(tg);return}
     const b=tileOf(tg.sc),r=findPath(pt.x,pt.y,(x,y)=>Math.abs(x-b.x)<=1&&Math.abs(y-b.y)<=1,b);player.path=r?r.path:[];player.target=tg;return}
   if(tg.k==='ground'){
-    const r=findPath(pt.x,pt.y,(x,y)=>x===tg.x&&y===tg.y,tg);
+    const g=(x,y)=>x===tg.x&&y===tg.y,r=findPath(pt.x,pt.y,g,tg,noFire)||findPath(pt.x,pt.y,g,tg);
     player.target=null;player.path=r?r.path:[];
     if(r&&!r.ok&&!walkable(tg.x,tg.y)&&rev[tg.y*W+tg.x])toast(feat[tg.y*W+tg.x]?'Tap a tree 🌳 to chop it, or a rock to mine it':'Can\'t walk there');
     return;
@@ -437,7 +439,7 @@ function goToTarget(tg){
     if(onIt&&x>=f.x&&x<f.x+f.w&&y>=f.y&&y<f.y+f.h)return true;
     return x>=f.x-1&&x<=f.x+f.w&&y>=f.y-1&&y<=f.y+f.h&&!(x>=f.x&&x<f.x+f.w&&y>=f.y&&y<f.y+f.h);
   };
-  const r=findPath(pt.x,pt.y,goal,null);
+  const r=findPath(pt.x,pt.y,goal,null,noFire)||findPath(pt.x,pt.y,goal,null);
   if(!r){toast('Can\'t get there — chop trees 🪓 to make a way');return}
   if(tg.k==='vill')tg.v.wait=Math.max(tg.v.wait,4),tg.v.path=[];
   player.path=r.path;player.target=tg;player.act=null;
@@ -555,7 +557,7 @@ function shipModal(){
 }
 // ── Volcano Island: it erupts every 17 seconds, and scorpions steal your stuff ──
 const ERUPT_MS=17000;
-let scorps=[],bombs=[],sparks=[],lavaDrops=[],shake=0,lastPhase=0,stealCool=0,rumbled=false;
+let fireTile=-1,scorps=[],bombs=[],sparks=[],lavaDrops=[],shake=0,lastPhase=0,stealCool=0,rumbled=false;
 const scorpOk=(x,y)=>animalOk(x,y); // fences, hedges and gates keep them out
 function scorpSpot(){
   for(let k=0;k<300;k++){const x=2+(Math.random()*(W-4)|0),y=2+(Math.random()*(H-4)|0);
@@ -586,6 +588,9 @@ function volcanoUpdate(dt){
   for(const d of lavaDrops){d.hot-=dt;if(d.hot<=0&&!d.got&&Math.hypot(player.x-d.x,player.y-d.y)<18){d.got=1;doAct('lavaPick',{});floatAt(d.x,d.y-20,'+1 🌋')}}
   lavaDrops=lavaDrops.filter(d=>!d.got);
   stealCool=Math.max(0,stealCool-dt);
+  // stepping onto a fire flower burns something in your bag (once per step onto it)
+  const pt=tileOf(player),pk=pt.y*W+pt.x;
+  if(pk!==fireTile){fireTile=pk;if(fireAt(pt.x,pt.y))burn()}
   for(const sc of scorps){
     if(sc.hide>0){if((sc.hide-=dt)<=0)Object.assign(sc,scorpSpot(),{loot:null,stun:0,flee:0});continue}
     if(sc.stun>0){sc.stun-=dt;sc.walk=0;continue}
@@ -598,6 +603,19 @@ function volcanoUpdate(dt){
     if(!moved)sc.wa=Math.random()*Math.PI*2;
     if(mx)sc.dir=mx<0?-1:1;sc.walk+=dt*12;
   }
+}
+// a fire flower: the wild ones on Volcano Island, and the Fire Flowers you plant there
+function fireAt(x,y){
+  if(curKind!=='volcano'||!inMap(x,y))return false;const i=y*W+x,o=objAt(i);
+  return o&&o.t==='flowers'||forageAt.has(i)&&forage[forageAt.get(i)].k==='fireflower';
+}
+const noFire=(x,y)=>walkable(x,y)&&!fireAt(x,y);
+function burn(){
+  for(let k=0;k<12;k++)sparks.push({x:player.x,y:player.y-6,vx:(Math.random()-.5)*110,vy:-40-Math.random()*90,t:0,c:k%2?'#ff6a1a':'#ffd23f'});
+  const ks=Object.keys(S.inv).filter(k=>S.inv[k]>0&&ITEMS[k]);
+  if(!ks.length){toast('🔥 Ouch, hot! Good thing your bag was empty');return}
+  const k=ks[Math.random()*ks.length|0];doAct('steal',{k,n:1});
+  floatAt(player.x,player.y-40,`-1 ${ITEMS[k].e}`);toast(`🔥 Ouch! A fire flower burned 1 ${ITEMS[k].e} ${ITEMS[k].n}!`,2600);
 }
 function steal(sc){
   const ks=Object.keys(S.inv).filter(k=>S.inv[k]>0&&ITEMS[k]);stealCool=4;
@@ -718,10 +736,10 @@ function genForage(){
     if(!test(x,y,i)||feat[i]||objAt(i)||chestHere(i)||inShip(x,y)||forageAt.has(i))continue;forageAt.set(i,forage.length);forage.push({x,y,k});n--}};
   add('shell',(x,y,i)=>ter[i]===SAND,14);
   add('mushroom',(x,y,i)=>ter[i]===GRASS&&N4.some(([a,b])=>feat[(y+b)*W+x+a]===TREE),10);
-  add('flower',(x,y,i)=>ter[i]===GRASS,10);
+  if(curKind==='volcano')add('fireflower',(x,y,i)=>ter[i]===GRASS,18);else add('flower',(x,y,i)=>ter[i]===GRASS,10);
   S.fg=forage;loadForage();
 }
-function loadForage(){forage=S.fg||[];forageAt=new Map();forage.forEach((f,k)=>{if(!S.taken.includes(k))forageAt.set(f.y*W+f.x,k)})}
+function loadForage(){forage=S.fg||[];if(curKind==='volcano')for(const f of forage)if(f.k==='flower')f.k='fireflower';forageAt=new Map();forage.forEach((f,k)=>{if(!S.taken.includes(k))forageAt.set(f.y*W+f.x,k)})}
 function takeForage(i){const fi=forageAt.get(i);if(fi!==undefined){S.taken.push(fi);forageAt.delete(i)}}
 const dayNow=()=>Math.floor((now()-S.t0)/DAY_MS)+1;
 function newDay(quiet){
@@ -915,7 +933,7 @@ function doMove(o,x,y){
 }
 const byId=id=>S.objs.find(o=>o.id===id);
 const ACT={
-  forage({i}){const fi=forageAt.get(i);if(fi===undefined)return;const it=forage[fi].k;takeForage(i);give(it,1);tally('forage:'+it);floatAt((i%W)*T+16,(i/W|0)*T,`+1 ${ITEMS[it].e}`)},
+  forage({i}){const fi=forageAt.get(i);if(fi===undefined)return;const it=forage[fi].k;if(!ITEMS[it])return;takeForage(i);give(it,1);tally('forage:'+it);floatAt((i%W)*T+16,(i/W|0)*T,`+1 ${ITEMS[it].e}`)},
   feat({i}){const kind=feat[i],X=(i%W)*T+16,Y=(i/W|0)*T;if(!kind||kind===VOLC)return;feat[i]=0;S.cut.push(i);tally(kind===ROCK?'mine':'chop');dirty();
     if(kind===ROCK){give('stone',1);if(Math.random()<.12){give('gem',1);floatAt(X,Y-14,'+1 💎');toast('Ooh, a gem! 💎')}else floatAt(X,Y,'+1 🪨')}
     else{give('wood',2);floatAt(X,Y,'+2 🪵')}},
@@ -1093,7 +1111,7 @@ function useNearest(){
   for(const[x,y]of[[t.x+d[0],t.y+d[1]],[t.x,t.y],...N8.map(([a,b])=>[t.x+a,t.y+b])]){
     if(!inMap(x,y))continue;const i=y*W+x;
     const v=villagers.find(v=>{const vt=tileOf(v);return vt.x===x&&vt.y===y});
-    let tg=v?{k:'vill',v}:objAt(i)&&objAt(i).t!=='path'?{k:'obj',o:objAt(i)}:inShip(x,y)?{k:'ship'}:chestHere(i)?{k:'chest',c:chestAt[i]}:feat[i]?{k:'feat',i,x,y}:forageAt.has(i)?{k:'forage',i}:null;
+    let tg=v?{k:'vill',v}:objAt(i)&&objAt(i).t!=='path'?{k:'obj',o:objAt(i)}:inShip(x,y)?{k:'ship'}:chestHere(i)?{k:'chest',c:chestAt[i]}:feat[i]?{k:'feat',i,x,y}:fireAt(x,y)?null:forageAt.has(i)?{k:'forage',i}:null;
     if(tg){arrive(tg);return}
   }
 }
@@ -1389,6 +1407,9 @@ function drawForage(c,f,t){
   const X=f.x*T+16,Y=f.y*T+22;
   if(f.k==='shell'){poly(c,'#f7b2c4',X-6,Y+2,X+6,Y+2,X,Y-6);c.strokeStyle='#e58aa3';c.lineWidth=1;for(let s=-3;s<=3;s+=3){c.beginPath();c.moveTo(X,Y-5);c.lineTo(X+s*1.6,Y+2);c.stroke()}}
   else if(f.k==='mushroom'){rect(c,X-2,Y-4,4,7,'#f4ecd8',1);ell(c,X,Y-5,7,5,'#e03b3b');ell(c,X-3,Y-6,1.4,1.4,'#fff');ell(c,X+3,Y-7,1.4,1.4,'#fff')}
+  else if(f.k==='fireflower'){const fl=Math.sin(t*9+f.x*3)*1.2;c.fillStyle='rgba(255,140,40,.22)';c.beginPath();c.arc(X,Y-5,11,0,Math.PI*2);c.fill();
+    c.fillStyle='#6e2414';c.fillRect(X-.7,Y-4,1.4,8);for(let p=0;p<5;p++)ell(c,X+Math.cos(p*1.26)*3.4,Y-5+Math.sin(p*1.26)*3.4,2.6,2.6,'#e8401a');
+    ell(c,X,Y-5,2,2,'#ffd23f');ell(c,X,Y-10+fl,2.6,4,'#ff8a1f');ell(c,X,Y-9+fl*.5,1.4,2.4,'#ffe066')}
   else{c.fillStyle='#4f9a3a';c.fillRect(X-.7,Y-4,1.4,8);for(let p=0;p<5;p++)ell(c,X+Math.cos(p*1.26)*3,Y-5+Math.sin(p*1.26)*3,2.4,2.4,'#ffd23f');ell(c,X,Y-5,1.6,1.6,'#e8742a')}
 }
 function drawShip(c,t){
