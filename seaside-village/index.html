@@ -91,7 +91,7 @@ const CROPS={
   pineapple:{n:'Pineapple',e:'🍍',seed:80,grow:300,sell:320,col:'#f2b730',rare:1},
 };
 const ITEMS={...CROPS,
-  egg:{n:'Egg',e:'🥚',sell:25},bread:{n:'Bread',e:'🍞',sell:60},cheese:{n:'Cheese',e:'🧀',sell:160},truffle:{n:'Truffle',e:'🌰',sell:90},lavarock:{n:'Lava Rock',e:'🌋',sell:35},icecrystal:{n:'Ice Crystal',e:'🧊',sell:50},milk:{n:'Milk',e:'🥛',sell:60},honey:{n:'Honey',e:'🍯',sell:80},
+  egg:{n:'Egg',e:'🥚',sell:25},bread:{n:'Bread',e:'🍞',sell:60},cheese:{n:'Cheese',e:'🧀',sell:160},truffle:{n:'Truffle',e:'🌰',sell:90},lavarock:{n:'Lava Rock',e:'🌋',sell:35},icecrystal:{n:'Ice Crystal',e:'🧊',sell:50},banana:{n:'Banana',e:'🍌',sell:15},idol:{n:'Golden Idol',e:'🗿',sell:500},templekey:{n:'Temple Key',e:'🗝️',sell:0,keep:1},milk:{n:'Milk',e:'🥛',sell:60},honey:{n:'Honey',e:'🍯',sell:80},
   fish:{n:'Fish',e:'🐟',sell:30},wood:{n:'Wood',e:'🪵',sell:3},stone:{n:'Stone',e:'🪨',sell:4},
   gem:{n:'Gem',e:'💎',sell:50},shell:{n:'Seashell',e:'🐚',sell:8},mushroom:{n:'Mushroom',e:'🍄',sell:12},
   flower:{n:'Wildflower',e:'🌼',sell:5}};
@@ -163,19 +163,26 @@ function noise(rng,cell){
     const a=g[iy*gw+ix],b=g[iy*gw+ix+1],c=g[(iy+1)*gw+ix],d=g[(iy+1)*gw+ix+1];
     return a+(b-a)*tx+(c-a)*ty+(a-b-c+d)*tx*ty}}
 const hash=(x,y)=>(((x*73856093)^(y*19349663))>>>0)%1000/1000;
-const WATER=0,SAND=1,GRASS=2,ICE=3,TREE=1,PALM=2,ROCK=3,VOLC=4; // ICE: a frozen lake (ground); VOLC: the volcano itself (a feature)
+const WATER=0,SAND=1,GRASS=2,ICE=3,TREE=1,PALM=2,ROCK=3,VOLC=4,FALL=5,TEMPLE=6; // ICE: a frozen lake (ground); VOLC, FALL, TEMPLE: the volcano, waterfall cliff and temple (features you can't chop)
 const ter=new Uint8Array(W*H),feat=new Uint8Array(W*H),depth=new Uint8Array(W*H);
 const chestAt=new Int16Array(W*H).fill(-1);
 let SPAWN,SHIP,chests=[],landTotal=0;
 const inMap=(x,y)=>x>=0&&y>=0&&x<W&&y<H;
 const N4=[[1,0],[-1,0],[0,1],[0,-1]],N8=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
 const HOME_SEED=20261108;
-let curSeed=HOME_SEED,curKind='',VOLCANO=null; // VOLCANO: the volcano's middle tile, on Volcano Island
+let curSeed=HOME_SEED,curKind='',VOLCANO=null,FALLS=null,TEMPLE_AT=null; // FALLS, TEMPLE_AT: on Jungle Island // VOLCANO: the volcano's middle tile, on Volcano Island
+// the land tile farthest from the sea, near the middle and away from the beach where you land
+function inlandMiddle(){
+  const far=new Int16Array(W*H).fill(-1),q=[];for(let i=0;i<W*H;i++)if(ter[i]===WATER){far[i]=0;q.push(i)}
+  for(let h=0;h<q.length;h++){const j=q[h],x=j%W,y=j/W|0;for(const[a,b]of N4){if(!inMap(x+a,y+b))continue;const k=(y+b)*W+x+a;if(far[k]<0){far[k]=far[j]+1;q.push(k)}}}
+  let best=-1,bs=-1;for(let i=0;i<W*H;i++){const x=i%W,y=i/W|0,sc=far[i]*10-Math.hypot(x-W/2,y-H/2)-(y>SPAWN.y-10?99:0);if(sc>bs){bs=sc;best=i}}
+  return best;
+}
 function genIsland(seed=HOME_SEED,kind=''){
-  feat.fill(0);chestAt.fill(-1);chests=[];landTotal=0;curSeed=seed;curKind=kind;VOLCANO=null;
+  feat.fill(0);chestAt.fill(-1);chests=[];landTotal=0;curSeed=seed;curKind=kind;VOLCANO=null;FALLS=null;TEMPLE_AT=null;
   // each new island gets its own size, lakes and forests; the home island keeps the ones it always had
   const v=seed===HOME_SEED?null:rngFrom(seed^0x5bd1e995);
-  const P=kind==='ice'?{rx:.42,ry:.41,lake:.6,forest:.55,trees:.55,palms:0,lone:.02,rocks:.06,sandRocks:.02}:kind==='volcano'?{rx:.42,ry:.42,lake:2,forest:2,trees:0,palms:0,lone:0,rocks:.22,sandRocks:.12}:v?{rx:.36+v()*.12,ry:.34+v()*.12,lake:.66+v()*.14,forest:.52+v()*.16,trees:.5+v()*.35,palms:.06+v()*.08,rocks:.04+v()*.04}
+  const P=kind==='jungle'?{rx:.43,ry:.42,lake:2,forest:.45,trees:.78,palms:.22,lone:.06,rocks:.03,sandRocks:.01}:kind==='ice'?{rx:.42,ry:.41,lake:.6,forest:.55,trees:.55,palms:0,lone:.02,rocks:.06,sandRocks:.02}:kind==='volcano'?{rx:.42,ry:.42,lake:2,forest:2,trees:0,palms:0,lone:0,rocks:.22,sandRocks:.12}:v?{rx:.36+v()*.12,ry:.34+v()*.12,lake:.66+v()*.14,forest:.52+v()*.16,trees:.5+v()*.35,palms:.06+v()*.08,rocks:.04+v()*.04}
     :{rx:.45,ry:.43,lake:.72,forest:.6,trees:.7,palms:.09,rocks:.055};
   const r=rngFrom(seed),n1=noise(r,9),n2=noise(r,4),n3=noise(r,7),nf=noise(r,5);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
@@ -216,17 +223,29 @@ function genIsland(seed=HOME_SEED,kind=''){
     for(const[a,b]of N4){if(!inMap(x+a,y+b))continue;const k=(y+b)*W+x+a;if(depth[k]>depth[j]+1){depth[k]=depth[j]+1;q.push(k)}}}
   // The volcano: in the middle of the island, as far from the sea as it gets
   if(kind==='volcano'){
-    const far=new Int16Array(W*H).fill(-1),q=[];for(let i=0;i<W*H;i++)if(ter[i]===WATER){far[i]=0;q.push(i)}
-    for(let h=0;h<q.length;h++){const j=q[h],x=j%W,y=j/W|0;for(const[a,b]of N4){if(!inMap(x+a,y+b))continue;const k=(y+b)*W+x+a;if(far[k]<0){far[k]=far[j]+1;q.push(k)}}}
-    let best=-1,bs=-1;for(let i=0;i<W*H;i++){const x=i%W,y=i/W|0,sc=far[i]*10-Math.hypot(x-W/2,y-H/2)-(y>SPAWN.y-10?99:0);if(sc>bs){bs=sc;best=i}}
-    VOLCANO={x:best%W,y:best/W|0};
+    const mid=inlandMiddle();
+    VOLCANO={x:mid%W,y:mid/W|0};
     for(let y=VOLCANO.y-4;y<=VOLCANO.y+4;y++)for(let x=VOLCANO.x-4;x<=VOLCANO.x+4;x++){const i=y*W+x;if(inMap(x,y)&&ter[i]!==WATER&&Math.hypot(x-VOLCANO.x,(y-VOLCANO.y)*1.2)<3.3)feat[i]=VOLC}
   }
-  // Treasure chests, hidden away from the crash site
-  const loot=['strawberry','melon','pineapple',60,80,100,120,150,200,250];
+  // Jungle Island: a waterfall pouring into a pool, and an old temple deep in the jungle
+  if(kind==='jungle'){
+    const mid=inlandMiddle(),cx=mid%W,cy=mid/W|0;
+    for(let y=cy-3;y<=cy+3;y++)for(let x=cx-4;x<=cx+4;x++)if(inMap(x,y)&&Math.hypot((x-cx)/3.2,(y-cy)/2.3)<1){const i=y*W+x;if(ter[i]!==WATER)landTotal--;ter[i]=WATER;feat[i]=0;depth[i]=1}
+    let top=cy;while(ter[(top-1)*W+cx]===WATER)top--;
+    FALLS={x:cx,y:top};
+    for(let y=top-3;y<=top-1;y++)for(let x=cx-1;x<=cx+1;x++){const i=y*W+x;if(ter[i]===WATER)landTotal++;ter[i]=GRASS;feat[i]=FALL;depth[i]=0}
+    let best=-1,bd=-1; // the temple: as far from the beach where you land as it can be
+    for(let y=3;y<H-4;y++)for(let x=3;x<W-4;x++){let ok=true;
+      for(let j=-1;j<=3&&ok;j++)for(let i=-1;i<=3&&ok;i++){const k=(y+j)*W+x+i;if(ter[k]!==GRASS||feat[k]===FALL||Math.hypot(x+i-cx,y+j-cy)<6)ok=false}
+      const d=Math.hypot(x-SPAWN.x,y-SPAWN.y);if(ok&&d>bd){bd=d;best=y*W+x}}
+    if(best>=0){TEMPLE_AT={x:best%W,y:best/W|0,w:3,h:3};
+      for(let j=-1;j<=3;j++)for(let i=-1;i<=3;i++){const k=(TEMPLE_AT.y+j)*W+TEMPLE_AT.x+i;feat[k]=j>=0&&j<3&&i>=0&&i<3?TEMPLE:0}}
+  }
+  // Treasure chests, hidden away from the crash site (on Jungle Island, three of them hold the temple's keys)
+  const loot=kind==='jungle'?['templekey','templekey','templekey','pineapple',100,120,150,200,250,'melon']:['strawberry','melon','pineapple',60,80,100,120,150,200,250];
   for(let tries=0;tries<5000&&chests.length<loot.length;tries++){
     const x=2+(r()*(W-4)|0),y=2+(r()*(H-4)|0),i=y*W+x;
-    if(ter[i]===WATER||ter[i]===ICE||feat[i]===VOLC||Math.hypot(x-SPAWN.x,y-SPAWN.y)<11||chests.some(c=>Math.hypot(c.x-x,c.y-y)<8))continue;
+    if(ter[i]===WATER||ter[i]===ICE||feat[i]>=VOLC||Math.hypot(x-SPAWN.x,y-SPAWN.y)<11||chests.some(c=>Math.hypot(c.x-x,c.y-y)<8))continue;
     feat[i]=0;chestAt[i]=chests.length;chests.push({x,y,loot:loot[chests.length]});
   }
 }
@@ -313,9 +332,9 @@ const terC=document.createElement('canvas');terC.width=W*T;terC.height=H*T;
 function drawTerrain(){
   const c=terC.getContext('2d');
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;
-    c.fillStyle=curKind==='volcano'?(depth[i]===1?'#ff8a1f':depth[i]===2?'#ef5a16':'#c63a12'):curKind==='ice'?(depth[i]===1?'#6fa9cf':depth[i]===2?'#4f8bb8':'#2f6795'):depth[i]===1?'#56b9e3':depth[i]===2?'#42a2da':'#2f88c9';c.fillRect(x*T,y*T,T,T)}
+    c.fillStyle=curKind==='volcano'?(depth[i]===1?'#ff8a1f':depth[i]===2?'#ef5a16':'#c63a12'):curKind==='ice'?(depth[i]===1?'#6fa9cf':depth[i]===2?'#4f8bb8':'#2f6795'):curKind==='jungle'?(depth[i]===1?'#3fc1c9':depth[i]===2?'#2aa5b8':'#1f86a3'):depth[i]===1?'#56b9e3':depth[i]===2?'#42a2da':'#2f88c9';c.fillRect(x*T,y*T,T,T)}
   const blob=(col,test,grow)=>{c.fillStyle=col;for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(test(y*W+x)){c.beginPath();c.roundRect(x*T-grow,y*T-grow,T+grow*2,T+grow*2,grow+6);c.fill()}};
-  const V=curKind==='volcano',PAL=V?{s1:'#3e393a',s2:'#4a4446',g:'#6e6159',g2:'#655850',g3:'#564a43',sd:'#2f2b2c'}:curKind==='ice'?{s1:'#b9cddd',s2:'#c9dae8',g:'#f2f7fb',g2:'#e7eff7',g3:'#cfdeec',sd:'#a9bfd2'}:{s1:'#efd79a',s2:'#f4e0a8',g:'#7cc35d',g2:'#73b955',g3:'#5fa647',sd:'#e1c47f'};
+  const V=curKind==='volcano',PAL=curKind==='jungle'?{s1:'#e6c983',s2:'#eed49a',g:'#3f9a3a',g2:'#378a33',g3:'#2c7a2a',sd:'#d7b46c'}:V?{s1:'#3e393a',s2:'#4a4446',g:'#6e6159',g2:'#655850',g3:'#564a43',sd:'#2f2b2c'}:curKind==='ice'?{s1:'#b9cddd',s2:'#c9dae8',g:'#f2f7fb',g2:'#e7eff7',g3:'#cfdeec',sd:'#a9bfd2'}:{s1:'#efd79a',s2:'#f4e0a8',g:'#7cc35d',g2:'#73b955',g3:'#5fa647',sd:'#e1c47f'};
   blob(PAL.s1,i=>ter[i]!==WATER,5);
   blob(PAL.s2,i=>ter[i]!==WATER,2);
   blob(PAL.g,i=>ter[i]===GRASS,3);
@@ -405,7 +424,7 @@ unstick(player);
 // ── What did you tap? ────────────────────────────────────────────────────────
 function pickAt(wx,wy){
   for(const sc of scorps)if(!sc.hide&&Math.abs(wx-sc.x)<17&&Math.abs(wy-sc.y+6)<15)return{k:'scorp',sc};
-  for(const cr of critters){const big=cr.kind==='bear';if(Math.abs(wx-cr.x)<(big?20:13)&&wy<cr.y+5&&wy>cr.y-(big?32:24))return{k:'critter',cr}}
+  for(const cr of critters){if(cr.hide)continue;const big=cr.kind==='bear',up=cr.kind==='parrot'?24:0;if(Math.abs(wx-cr.x)<(big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(big?32:24))return{k:'critter',cr}}
   for(const v of villagers)if(!isGuest(v.v.name)&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
   const tx=Math.floor(wx/T),ty=Math.floor(wy/T);
   for(let d=0;d<4;d++){
@@ -415,6 +434,8 @@ function pickAt(wx,wy){
     if(inShip(x,y)&&d<2)return{k:'ship'};
     if(chestHere(i)&&d===0)return{k:'chest',c:chestAt[i]};
     if(feat[i]===VOLC)return{k:'volcano'};
+    if(feat[i]===FALL)return{k:'falls'};
+    if(feat[i]===TEMPLE)return{k:'temple'};
     if(feat[i]&&(d===0||d===1&&feat[i]!==ROCK))return{k:'feat',i,x,y};
     if(d===0&&fireAt(x,y))return{k:'fire'};
     if(d===0&&forageAt.has(i))return{k:'forage',i};
@@ -428,15 +449,17 @@ function footprintOf(tg){
   if(tg.k==='vill'){const t=tileOf(tg.v);return{x:t.x,y:t.y,w:1,h:1}}
   if(tg.k==='scorp'){const t=tileOf(tg.sc);return{x:t.x,y:t.y,w:1,h:1}}
   if(tg.k==='critter'){const t=tileOf(tg.cr);return{x:t.x,y:t.y,w:1,h:1}}
+  if(tg.k==='temple')return TEMPLE_AT;
   return{x:tg.x??tg.i%W,y:tg.y??(tg.i/W|0),w:1,h:1};
 }
 function goToTarget(tg){
   player.steer=null;
   const pt=tileOf(player);
   if(tg.k==='volcano'){toast('🌋 Way too hot to climb!');return}
+  if(tg.k==='falls'){toast('💦 What a beautiful waterfall!');return}
   if(tg.k==='fire'){toast('🔥 That\'s a fire flower — if you touch it, it burns something in your bag!',2800);return}
   if(tg.k==='critter'){
-    if(Math.hypot(tg.cr.x-player.x,tg.cr.y-player.y)<T*1.8){player.path=[];arrive(tg);return}
+    if(Math.hypot(tg.cr.x-player.x,tg.cr.y-player.y)<T*(tg.cr.kind==='parrot'?3:1.8)){player.path=[];arrive(tg);return}
     const b=tileOf(tg.cr),r=findPath(pt.x,pt.y,(x,y)=>Math.abs(x-b.x)<=1&&Math.abs(y-b.y)<=1,b,avoid);player.path=r?r.path:[];player.target=tg;return}
   if(tg.k==='scorp'){ // close enough to bonk it, or run after it
     if(Math.hypot(tg.sc.x-player.x,tg.sc.y-player.y)<T*1.8){player.path=[];arrive(tg);return}
@@ -466,9 +489,10 @@ function arrive(tg){
     case'ship':shipModal();break;
     case'chest':doAct('chest',{c:tg.c});break;
     case'forage':if(forageAt.has(tg.i))act(250,'pick',()=>doAct('forage',{i:tg.i}));break;
-    case'critter':if(Math.hypot(tg.cr.x-player.x,tg.cr.y-player.y)<T*2.4){facePoint(tg.cr.x,tg.cr.y);feedCritter(tg.cr)}else toast('It wandered off!');break;
+    case'critter':if(Math.hypot(tg.cr.x-player.x,tg.cr.y-player.y)<T*(tg.cr.kind==='parrot'?3.5:2.4)){facePoint(tg.cr.x,tg.cr.y);feedCritter(tg.cr)}else toast('It wandered off!');break;
     case'scorp':if(Math.hypot(tg.sc.x-player.x,tg.sc.y-player.y)<T*2.2){facePoint(tg.sc.x,tg.sc.y);act(250,'chop',()=>bonk(tg.sc))}else toast('🦂 It scuttled away — after it!');break;
-    case'feat':{const kind=feat[tg.i];if(kind===VOLC)break;if(kind)act(kind===ROCK?800:700,kind===ROCK?'mine':'chop',()=>doAct('feat',{i:tg.i}));break}
+    case'temple':templeModal();break;
+    case'feat':{const kind=feat[tg.i];if(kind>=VOLC)break;if(kind)act(kind===ROCK?800:700,kind===ROCK?'mine':'chop',()=>doAct('feat',{i:tg.i}));break}
     case'obj':useObj(tg.o,act);break;
     case'furn':useFurn(tg.f);break;
     case'pet':if(roomPets().includes(tg.p))usePet(tg.p);break;
@@ -530,7 +554,7 @@ function tapField(o,sel){
 
 // ── Shipping bin ─────────────────────────────────────────────────────────────
 function binModal(bin){
-  const keys=Object.keys(S.inv).filter(k=>S.inv[k]>0);
+  const keys=Object.keys(S.inv).filter(k=>S.inv[k]>0&&!ITEMS[k].keep);
   const total=keys.reduce((a,k)=>a+priceOf(k)*S.inv[k],0);
   let h='<h2>📦 Shipping Bin</h2>';
   if(!keys.length)h+='<p>Your bag is empty. Grow crops, collect eggs or gather things around the island, then ship them here for coins!</p>';
@@ -553,7 +577,9 @@ function bagModal(){
 function openChest(ci){
   if(S.opened.includes(ci)){toast('This chest is empty');return}
   S.opened.push(ci);S.stats.chests++;dirty();const l=chests[ci].loot;
-  if(typeof l==='number'){S.coins+=l;floatAt(chests[ci].x*T+16,chests[ci].y*T,`+🪙${l}`);
+  if(l==='templekey'){give('templekey',1);const n=S.inv.templekey;
+    openModal(`<h2>🗝️ A Temple Key!</h2><p style="font-size:40px;text-align:center">🗝️</p><p>An old golden key with a monkey on it. ${n>=3?'That\'s all 3 — go and open the temple deep in the jungle!':`You have <b>${n} of 3</b>. The temple door needs all three.`}</p><div class="btns"><button class="btn" data-a="close">Yay!</button></div>`)}
+  else if(typeof l==='number'){S.coins+=l;floatAt(chests[ci].x*T+16,chests[ci].y*T,`+🪙${l}`);
     openModal(`<h2>🎁 Treasure!</h2><p style="font-size:40px;text-align:center">🪙</p><p>You found <b>${l} coins</b> in an old chest!</p><div class="btns"><button class="btn" data-a="close">Yay!</button></div>`)}
   else if(S.found.includes(l)){S.coins+=150;floatAt(chests[ci].x*T+16,chests[ci].y*T,'+🪙150');
     openModal(`<h2>🎁 Treasure!</h2><p style="font-size:40px;text-align:center">🪙</p><p>You found <b>150 coins</b> in an old chest!</p><div class="btns"><button class="btn" data-a="close">Yay!</button></div>`)}
@@ -628,13 +654,13 @@ const noFire=(x,y)=>walkable(x,y)&&!fireAt(x,y);
 const avoid=(x,y)=>noFire(x,y)&&ter[y*W+x]!==ICE;
 function burn(){
   for(let k=0;k<12;k++)sparks.push({x:player.x,y:player.y-6,vx:(Math.random()-.5)*110,vy:-40-Math.random()*90,t:0,c:k%2?'#ff6a1a':'#ffd23f'});
-  const ks=Object.keys(S.inv).filter(k=>S.inv[k]>0&&ITEMS[k]);
+  const ks=Object.keys(S.inv).filter(k=>S.inv[k]>0&&ITEMS[k]&&!ITEMS[k].keep);
   if(!ks.length){toast('🔥 Ouch, hot! Good thing your bag was empty');return}
   const k=ks[Math.random()*ks.length|0];doAct('steal',{k,n:1});
   floatAt(player.x,player.y-40,`-1 ${ITEMS[k].e}`);toast(`🔥 Ouch! A fire flower burned 1 ${ITEMS[k].e} ${ITEMS[k].n}!`,2600);
 }
 function steal(sc){
-  const ks=Object.keys(S.inv).filter(k=>S.inv[k]>0&&ITEMS[k]);stealCool=4;
+  const ks=Object.keys(S.inv).filter(k=>S.inv[k]>0&&ITEMS[k]&&!ITEMS[k].keep);stealCool=4;
   if(ks.length){const k=ks[Math.random()*ks.length|0],n=Math.min(S.inv[k],1+(Math.random()*3|0));sc.loot={k,n};doAct('steal',{k,n});toast(`🦂 A scorpion stole ${n} ${ITEMS[k].e} ${ITEMS[k].n}! Catch it!`,2600)}
   else if(S.coins>0){const n=Math.min(S.coins,10+(Math.random()*20|0));sc.loot={coins:n};doAct('steal',{coins:n});toast(`🦂 A scorpion stole 🪙${n}! Catch it!`,2600)}
   else{sc.stun=1;toast('🦂 The scorpion found nothing to steal!');return}
@@ -676,7 +702,8 @@ function drawScorp(c,sc,t){
 // ── Ice Island: snow, slippery frozen lakes, penguins and polar bears ────────
 let critters=[];
 function spawnCritters(){
-  critters=curKind!=='ice'?[]:[...Array(10)].map((_,k)=>({kind:k<7?'peng':'bear',...scorpSpot(),wa:Math.random()*6,wt:0,dir:1,walk:0,happy:0,calm:0,still:false}));
+  const kinds=curKind==='ice'?['peng','peng','peng','peng','peng','peng','peng','bear','bear','bear']:curKind==='jungle'?['monkey','monkey','monkey','monkey','monkey','parrot','parrot','parrot','parrot']:[];
+  critters=kinds.map(kind=>({kind,fly:0,loot:null,hide:0,...scorpSpot(),wa:Math.random()*6,wt:0,dir:1,walk:0,happy:0,calm:0,still:false}));
 }
 const onIce=e=>{const t=tileOf(e);return inMap(t.x,t.y)&&ter[t.y*W+t.x]===ICE};
 const noIce=(x,y)=>walkable(x,y)&&ter[y*W+x]!==ICE;
@@ -694,12 +721,17 @@ function slideStep(dt){
     const r=findPath(pt.x,pt.y,g,null,noIce)||findPath(pt.x,pt.y,g,null);if(r){player.path=r.path;player.target=sl.tg}}
   else if(sl.tg)player.target=sl.tg;
 }
-function iceUpdate(dt){
+// penguins and polar bears on Ice Island, monkeys and parrots on Jungle Island
+function critterUpdate(dt){
   for(const cr of critters){
+    if(cr.hide>0){if((cr.hide-=dt)<=0)Object.assign(cr,scorpSpot(),{loot:null});continue}
     cr.happy=Math.max(0,cr.happy-dt);cr.calm=Math.max(0,cr.calm-dt);
+    if(cr.kind==='parrot'){flyParrot(cr,dt);continue}
     if(cr.happy>0){cr.walk=0;continue}
     const dx=player.x-cr.x,dy=player.y-cr.y,d=Math.hypot(dx,dy);let vx,vy,sp;
     if(cr.kind==='bear'&&!cr.calm&&d<T*4&&!player.stun&&!player.slide){vx=dx;vy=dy;sp=T*1.7;if(d<18){bearHit(cr);continue}} // here comes the bear!
+    else if(cr.kind==='monkey'&&cr.loot&&d<T*8){vx=-dx;vy=-dy;sp=T*3.2}  // running off with your bananas
+    else if(cr.kind==='monkey'&&!cr.loot&&!cr.calm&&S.inv.banana&&d<T*5&&!stealCool&&!player.stun){vx=dx;vy=dy;sp=T*2.6;if(d<15){swipe(cr);continue}} // it smells your bananas!
     else{if((cr.wt-=dt)<=0){cr.wt=1+Math.random()*3;cr.wa=Math.random()*Math.PI*2;cr.still=Math.random()<.4}
       if(cr.still){cr.walk=0;continue}vx=Math.cos(cr.wa);vy=Math.sin(cr.wa);sp=cr.kind==='bear'?T*.6:T*.9}
     const l=Math.hypot(vx,vy)||1,mx=vx/l*sp*dt,my=vy/l*sp*dt;let moved=false;
@@ -713,7 +745,32 @@ function bearHit(cr){
   if(S.inv.fish){doAct('steal',{k:'fish',n:1});cr.calm=25;floatAt(player.x,player.y-40,'-1 🐟');toast('🐻‍❄️ ROAR! The polar bear gobbled a 🐟 fish from your bag!',2800)}
   else{cr.calm=6;toast('🐻‍❄️ ROAR! Polar bears love 🐟 fish — bring one next time!',2800)}
 }
+function swipe(cr){
+  const n=Math.min(S.inv.banana,1+(Math.random()*2|0));cr.loot=n;stealCool=4;doAct('steal',{k:'banana',n});
+  floatAt(player.x,player.y-40,`-${n} 🍌`);toast(`🐒 Ooh ooh! A monkey swiped ${n} 🍌! Catch it!`,2600);
+}
+// parrots fly about over the island
+function flyParrot(cr,dt){
+  if((cr.wt-=dt)<=0){cr.wt=2+Math.random()*3;const mid={x:W*T/2,y:H*T/2},toMid=Math.atan2(mid.y-cr.y,mid.x-cr.x);
+    cr.wa=Math.hypot(mid.x-cr.x,mid.y-cr.y)>T*16?toMid:cr.wa+(Math.random()-.5)*2.4}
+  const sp=cr.happy>0?0:T*1.6;cr.x+=Math.cos(cr.wa)*sp*dt;cr.y+=Math.sin(cr.wa)*sp*dt;cr.dir=Math.cos(cr.wa)<0?-1:1;cr.walk+=dt*12;
+}
+const PARROT_SAYS=['Squawk! Pretty bird!','Squawk! Three keys open the temple!','Squawk! Keys hide in treasure chests!','Squawk! Monkeys love bananas!',
+  'Squawk! The temple is deep in the jungle!','Squawk! Hello, captain!','Squawk! Gold! Gold! Gold!'];
+// the old temple: three keys open its door
+function templeModal(){
+  if(S.templeOpen){openModal('<h2>🏛️ The Old Temple</h2><p>The temple is quiet now. You already found its treasure — the 🗿 Golden Idol!</p><div class="btns"><button class="btn" data-a="close">OK</button></div>');return}
+  const n=S.inv.templekey||0;
+  if(n<3){openModal(`<h2>🏛️ The Old Temple</h2><p>Vines cover a huge stone door with <b>3 keyholes</b>.</p><p>You have <b>${n} of 3</b> 🗝️ Temple Keys. ${n?'Keep looking — the others are in treasure chests around the jungle!':'They\'re hidden in treasure chests around the jungle. The parrots might know more…'}</p><div class="btns"><button class="btn" data-a="close">I'll find them!</button></div>`);return}
+  openModal('<h2>🏛️ The Old Temple</h2><p>You put the 3 keys in the door… <b>CLUNK!</b> It slowly rumbles open!</p><div class="btns"><button class="btn" data-a="open">Go inside!</button></div>',{open:()=>{closeModal();doAct('openTemple',{})}});
+}
 function feedCritter(cr){
+  if(cr.kind==='parrot'){cr.happy=2;floatAt(cr.x,cr.y-46,'🎵');toast('🦜 '+PARROT_SAYS[Math.random()*PARROT_SAYS.length|0],2800);return}
+  if(cr.kind==='monkey'){
+    if(cr.loot){const n=cr.loot;doAct('giveBack',{k:'banana',n});floatAt(cr.x,cr.y-30,`+${n} 🍌`);toast(`💥 Bonk! You got your ${n} 🍌 back!`);cr.loot=null;cr.hide=15;stealCool=3;return}
+    if(!S.inv.banana){toast('🐒 Ooh ooh! Monkeys love 🍌 bananas');cr.happy=.6;return}
+    cr.happy=1.5;cr.calm=60;const gem=Math.random()<.25;doAct('trade',{from:'banana',coins:25});if(gem)doAct('giveBack',{k:'gem',n:1});
+    floatAt(cr.x,cr.y-30,gem?'+🪙25 +💎':'+🪙25');toast(`🐒 The monkey loved the banana and gave you 🪙25${gem?' and a 💎 gem':''}!`);return}
   const bear=cr.kind==='bear';
   if(!S.inv.fish){toast(bear?'🐻‍❄️ Grrr… polar bears love 🐟 fish':'🐧 Squawk! Penguins love 🐟 fish');cr.happy=.6;return}
   cr.happy=1.5;
@@ -723,6 +780,9 @@ function feedCritter(cr){
 function drawCritterRaw(c,cr,t){
   const q={x:cr.x,y:cr.y,dir:cr.dir<0?'left':'right',walk:cr.walk,happy:cr.happy};
   if(cr.kind==='peng'){drawPet(c,{k:'penguin',v:0,id:1},q,t);return}
+  if(cr.kind==='parrot'){const up=24+Math.sin(cr.walk*.3)*3;ell(c,cr.x,cr.y,6,2,'rgba(0,0,0,.12)');const fq={...q,y:cr.y-up,walk:0};drawPet(c,{k:'parrot',v:cr.id||0},fq,t);
+    const fl=Math.sin(cr.walk)*5;poly(c,'#27ae60',cr.x-2,cr.y-up-9,cr.x-9,cr.y-up-12-fl,cr.x-3,cr.y-up-5);return}
+  if(cr.kind==='monkey'){drawMonkey(c,cr,t);return}
   const x=cr.x,s=cr.dir,st=cr.walk?Math.sin(cr.walk)*2:0,y=cr.y-(cr.happy>0?Math.abs(Math.sin(cr.happy*8))*4:0);
   ell(c,x,cr.y,16,4.5,'rgba(0,0,0,.18)');
   for(const dx of[-9,-4,4,9])rect(c,x+dx*s-2.5,y-10+(dx<0?st:-st),5,10,'#e6ecf1',2);
@@ -732,6 +792,33 @@ function drawCritterRaw(c,cr,t){
   if(cr.calm>8){c.font='11px sans-serif';c.textAlign='center';c.fillText('💤',x+8*s,y-34)}
 }
 const drawCritter=(...a)=>plain(drawCritterRaw)(...a);
+function drawMonkey(c,cr,t){
+  const x=cr.x,s=cr.dir,st=cr.walk?Math.sin(cr.walk)*2:0,y=cr.y-(cr.happy>0?Math.abs(Math.sin(cr.happy*8))*5:0),br='#7a4a24',tan='#d9a36a';
+  ell(c,x,cr.y,9,3,'rgba(0,0,0,.18)');
+  c.strokeStyle=br;c.lineWidth=2.2;c.lineCap='round';c.beginPath();c.moveTo(x-6*s,y-8);c.quadraticCurveTo(x-15*s,y-12,x-12*s,y-20+Math.sin(t*4)*2);c.stroke();
+  rect(c,x-5,y-6+st,3,6,br,1);rect(c,x+2,y-6-st,3,6,br,1);ell(c,x,y-10,7,6.5,br);ell(c,x+1*s,y-9,4,4.5,tan);
+  ell(c,x+2*s,y-19,6.5,6,br);ell(c,x-4*s,y-20,2.5,2.5,tan);ell(c,x+3*s,y-18,4.5,4,tan);
+  c.fillStyle='#222';c.fillRect(x+1.5*s-.7,y-20,1.5,1.5);c.fillRect(x+4.5*s-.7,y-20,1.5,1.5);ell(c,x+4*s,y-16.5,1.6,.9,'#5a2e15');
+  if(cr.loot)bubble(c,x,y-26,'🍌');
+}
+function drawFalls(c,t){
+  const X=(FALLS.x-1)*T,Y=(FALLS.y-3)*T;
+  rect(c,X-4,Y-6,3*T+8,3*T+6,'#6b7466',8);for(let k=0;k<6;k++)ell(c,X+6+k*16,Y-2+hash(k,2)*8,9,6,'#3f8a3a');
+  rect(c,X+T*.7,Y,T*1.6,3*T+6,'#7fd3f0',4);
+  c.strokeStyle='rgba(255,255,255,.75)';c.lineWidth=2;for(let k=0;k<5;k++){const xx=X+T*.8+k*T*.32,o=(t*90+k*37)%40;c.beginPath();c.moveTo(xx,Y+o);c.lineTo(xx,Y+o+18);c.stroke()}
+  for(let k=0;k<5;k++){const a=(t*1.5+k/5)%1;ell(c,X+T*1.5+(k-2)*10,Y+3*T+6-a*10,6+a*8,4+a*4,`rgba(255,255,255,${.6*(1-a)})`)}
+}
+function drawTemple(c,t){
+  const X=TEMPLE_AT.x*T,Y=TEMPLE_AT.y*T,open=S.templeOpen,w=3*T;
+  ell(c,X+w/2,Y+w+2,w/2+6,7,'rgba(0,0,0,.2)');
+  for(let k=0;k<4;k++){const inset=k*10,h=w/4;rect(c,X+inset-6,Y+w-h*(k+1)-k*4+6,w-inset*2+12,h+6,['#8f9a86','#9aa58f','#a5b098','#b0bba2'][k],3)}
+  c.fillStyle='rgba(0,0,0,.1)';for(let k=0;k<12;k++)c.fillRect(X-2+hash(k,9)*w,Y+18+hash(k,4)*(w-24),10,2);
+  rect(c,X+w/2-13,Y+w-36,26,36,open?'#ffd23f':'#2a2620',12);
+  if(open){c.fillStyle='rgba(255,220,80,.35)';c.beginPath();c.arc(X+w/2,Y+w-18,30+Math.sin(t*3)*4,0,Math.PI*2);c.fill()}
+  else{const n=Math.min(3,S.inv.templekey||0);for(let k=0;k<3;k++)ell(c,X+w/2-8+k*8,Y+w-22,2.6,2.6,k<n?'#ffd23f':'#77705f')}
+  c.strokeStyle='#2f7a2c';c.lineWidth=2;for(const vx of[6,22,70,86]){c.beginPath();c.moveTo(X+vx,Y+8);c.quadraticCurveTo(X+vx+6,Y+w*.5,X+vx-2,Y+w*.75);c.stroke();ell(c,X+vx+3,Y+w*.45,3,2,'#3f9a3a')}
+  ell(c,X+w/2,Y-2,8,8,'#c9a24a');ell(c,X+w/2,Y-2,4,4,'#8a6a2a');
+}
 // gently falling snow
 function drawSnowfall(t){
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='rgba(255,255,255,.85)';
@@ -763,10 +850,12 @@ function sailModal(){
   for(const i of isles.list){const here=i.id===isles.cur;
     h+=`<div class="irow"><span class="ie">${i.id?'🏝️':'🏠'}</span><span class="in">${cleanName(i.name)}${here?'<br><span class="ip">You are here</span>':''}</span>
       <button class="btn gray" data-a="ren" data-v="${i.id}" style="padding:0 10px">✏️</button>${here?'':`<button class="btn blue" data-a="go" data-v="${i.id}">Sail</button>`}</div>`}
+  if(!isles.list.some(i=>i.kind==='jungle'))h+=`<div class="irow"><span class="ie">🌴</span><span class="in">Jungle Island<br><span class="ip">Monkeys, parrots, a waterfall and a hidden temple!</span></span><button class="btn blue" data-a="jungle">Sail</button></div>`;
   if(!isles.list.some(i=>i.kind==='ice'))h+=`<div class="irow"><span class="ie">🧊</span><span class="in">Ice Island<br><span class="ip">Snow, slippery ice, penguins and polar bears!</span></span><button class="btn blue" data-a="ice">Sail</button></div>`;
   if(!isles.list.some(i=>i.kind==='volcano'))h+=`<div class="irow"><span class="ie">🌋</span><span class="in">Volcano Island<br><span class="ip">Hot lava and sneaky scorpions — be careful!</span></span><button class="btn blue" data-a="volc">Sail</button></div>`;
   h+=`<div class="btns">${isles.list.length<MAX_ISLES?'<button class="btn" data-a="new">✨ Discover a new island</button>':''}<button class="btn gray" data-a="close">Stay here</button></div>`;
   openModal(h,{go:id=>{closeModal();sailTo(+id)},ren:id=>nameModal(+id),new:()=>nameModal(null),
+    jungle:()=>{closeModal();if(net){toast('Stop playing together (👥) before sailing');return}const id=isles.next++;isles.list.push({id,name:'Jungle Island',seed:777777,kind:'jungle'});saveIsles();sailTo(id)},
     ice:()=>{closeModal();if(net){toast('Stop playing together (👥) before sailing');return}const id=isles.next++;isles.list.push({id,name:'Ice Island',seed:424242,kind:'ice'});saveIsles();sailTo(id)},
     volc:()=>{closeModal();if(net){toast('Stop playing together (👥) before sailing');return}const id=isles.next++;isles.list.push({id,name:'Volcano Island',seed:666013,kind:'volcano'});saveIsles();sailTo(id)}});
 }
@@ -833,6 +922,7 @@ function genForage(){
     if(!test(x,y,i)||feat[i]||objAt(i)||chestHere(i)||inShip(x,y)||forageAt.has(i))continue;forageAt.set(i,forage.length);forage.push({x,y,k});n--}};
   add('shell',(x,y,i)=>ter[i]===SAND,14);
   add('mushroom',(x,y,i)=>ter[i]===GRASS&&N4.some(([a,b])=>feat[(y+b)*W+x+a]===TREE),10);
+  if(curKind==='jungle')add('banana',(x,y,i)=>ter[i]===GRASS&&N4.some(([a,b])=>feat[(y+b)*W+x+a]===TREE),16);
   if(curKind==='volcano')add('fireflower',(x,y,i)=>ter[i]===GRASS,18);else add('flower',(x,y,i)=>ter[i]===GRASS,10);
   S.fg=forage;loadForage();
 }
@@ -1032,7 +1122,7 @@ function doMove(o,x,y){
 const byId=id=>S.objs.find(o=>o.id===id);
 const ACT={
   forage({i}){const fi=forageAt.get(i);if(fi===undefined)return;const it=forage[fi].k;if(!ITEMS[it])return;takeForage(i);give(it,1);tally('forage:'+it);floatAt((i%W)*T+16,(i/W|0)*T,`+1 ${ITEMS[it].e}`)},
-  feat({i}){const kind=feat[i],X=(i%W)*T+16,Y=(i/W|0)*T;if(!kind||kind===VOLC)return;feat[i]=0;S.cut.push(i);tally(kind===ROCK?'mine':'chop');dirty();
+  feat({i}){const kind=feat[i],X=(i%W)*T+16,Y=(i/W|0)*T;if(!kind||kind>=VOLC)return;feat[i]=0;S.cut.push(i);tally(kind===ROCK?'mine':'chop');dirty();
     if(kind===ROCK){give('stone',1);if(Math.random()<.12){give('gem',1);floatAt(X,Y-14,'+1 💎');toast('Ooh, a gem! 💎')}else floatAt(X,Y,'+1 🪨')}
     else{give('wood',2);floatAt(X,Y,'+2 🪵')}},
   chest({c}){if(chests[c])openChest(c)},
@@ -1050,7 +1140,7 @@ const ACT={
   fish({id}){const o=byId(id);if(!o||o.t!=='dock')return;if(!produced(o)){toast('🎣 Your friend got that fish first!');return}
     o.last=now();give('fish',1);tally('fish');floatAt(o.x*T+16,o.y*T,'+1 🐟')},
   ship({keys,bin}){const b=byId(bin);let got=0;
-    for(const k of keys||[]){if(!S.inv[k]||!ITEMS[k])continue;got+=priceOf(k)*S.inv[k];S.stats.shipped+=S.inv[k];delete S.inv[k]}
+    for(const k of keys||[]){if(!S.inv[k]||!ITEMS[k]||ITEMS[k].keep)continue;got+=priceOf(k)*S.inv[k];S.stats.shipped+=S.inv[k];delete S.inv[k]}
     if(!got)return;S.coins+=got;tally('earn',got);dirty();if(b)floatAt(b.x*T+16,b.y*T-4,`+🪙${got}`);refreshTray()},
   fix({stage}){const st=SHIP_STAGES[S.ship];if(!st||stage!==S.ship)return;if(S.coins<st.cost){toast(`Need 🪙${st.cost}`);return}
     S.coins-=st.cost;S.ship++;dirty();shipConfetti();netSend({t:'confetti'});
@@ -1064,6 +1154,10 @@ const ACT={
   giveBack({k,n,coins}){if(coins)S.coins+=coins;else if(ITEMS[k])give(k,n);dirty()},
   lavaPick(){give('lavarock',1);tally('collect:lavarock')},
   trade({from,to,coins}){if(!S.inv[from])return;S.inv[from]--;if(!S.inv[from])delete S.inv[from];if(to)give(to,1);if(coins)S.coins+=coins;refreshTray();dirty()},
+  openTemple(){if(S.templeOpen||(S.inv.templekey||0)<3)return;S.inv.templekey-=3;if(!S.inv.templekey)delete S.inv.templekey;
+    S.templeOpen=1;S.coins+=1000;give('idol',1);dirty();refreshTray();
+    if(TEMPLE_AT)for(let k=0;k<70;k++)confetti.push({x:(TEMPLE_AT.x+1.5)*T,y:TEMPLE_AT.y*T,vx:(Math.random()-.5)*280,vy:-120-Math.random()*240,c:['#ffd23f','#f39c12','#fff'][k%3],t:0});
+    openModal('<h2>🗿 The Temple Treasure!</h2><p style="font-size:44px;text-align:center">🗿🪙</p><p>Inside, a golden glow… you found the <b>Golden Idol</b> and <b>1000 coins</b>!</p><div class="btns"><button class="btn" data-a="close">WOW!</button></div>')},
   skipJob(){if(S.job){newJob();toast('🔄 Here\'s a different job!')}},
   homePlace({k,x,y}){const F=FURN[k];if(!F)return;const why=furnWhy(k,x,y,null,S.home.items)||(S.coins<F.cost?`Need 🪙${F.cost} for ${F.n}`:'');if(why){toast(why);return}
     S.coins-=F.cost;S.home.items.push({id:S.home.next++,k,x,y,c:0});if(F.cost)floatAt((x+F.w/2)*T,y*T,`-🪙${F.cost}`);
@@ -1234,7 +1328,7 @@ function update(dt){
   if(!guestMode){visitorsComeAndGo();if((feedT-=dt)<=0){feedT=2;autoFeed()}}
   // Player
   if(curKind==='volcano'&&!inside)volcanoUpdate(dt);
-  if(curKind==='ice'&&!inside)iceUpdate(dt);
+  if(critters.length&&!inside)critterUpdate(dt);
   if(player.act){if(tNow>=player.act.end){const f=player.act.fn;player.act=null;f()}}
   else if(player.stun>0){player.stun-=dt;player.walk=0}
   else if(player.slide)slideStep(dt);
@@ -1313,9 +1407,13 @@ const INAMES={farm:'Frost Farmland',myhouse:'Your Igloo',path:'Ice Path',fence:'
   flowers:'Frost Flowers',tree:'Snowy Pine',bench:'Ice Bench',lamp:'Ice Lantern',campfire:'Cozy Fire',picnic:'Ice Table',statue:'Ice Statue',playground:'Snow Playground',
   windmill:'Frosty Windmill',well:'Ice Well',house:'Igloo',cabin:'Guest Igloo',coop:'Snowy Coop',hive:'Frost Hive',dock:'Ice Dock',barn:'Snowy Barn',pond:'Frozen Pond',
   pigpen:'Snowy Pen',bakery:'Cocoa Bakery',creamery:'Ice Cream Shop',greenhouse:'Warm Greenhouse',bin:'Ice Bin',market:'Frost Market',fountain:'Ice Fountain',lighthouse:'Ice Lighthouse'};
-const bname=t=>curKind==='volcano'&&VNAMES[t]||curKind==='ice'&&INAMES[t]||BUILD[t].n;
+const JNAMES={farm:'Jungle Farmland',myhouse:'Your Jungle Hut',path:'Jungle Path',fence:'Bamboo Fence',gate:'Bamboo Gate',hedge:'Vine Hedge',bridge:'Rope Bridge',
+  flowers:'Jungle Flowers',tree:'Banana Tree',bench:'Log Bench',lamp:'Tiki Torch',campfire:'Tiki Fire',picnic:'Bamboo Table',statue:'Tiki Statue',playground:'Vine Swings',
+  windmill:'Bamboo Windmill',well:'Jungle Well',house:'Bamboo Hut',cabin:'Guest Hut',coop:'Bamboo Coop',hive:'Jungle Hive',dock:'Bamboo Dock',barn:'Bamboo Barn',pond:'Lily Pond',
+  pigpen:'Mud Pen',bakery:'Banana Bakery',creamery:'Coconut Creamery',greenhouse:'Orchid House',bin:'Basket Bin',market:'Fruit Market',fountain:'Jungle Fountain',lighthouse:'Lookout Tower'};
+const bname=t=>({volcano:VNAMES,ice:INAMES,jungle:JNAMES}[curKind]||{})[t]||BUILD[t].n;
 let themed=null; // the color change to draw with, while drawing Volcano or Ice Island's version of something
-const themeFor=()=>curKind==='volcano'?volc:curKind==='ice'?icy:null;
+const themeFor=()=>({volcano:volc,ice:icy,jungle})[curKind]||null;
 // a color change, made from a rule that turns one hue/saturation/lightness into another
 function hslMap(rule){const cache=new Map();return col=>{
   if(cache.has(col))return cache.get(col);
@@ -1329,6 +1427,13 @@ function hslMap(rule){const cache=new Map();return col=>{
   const q=l<.5?l*(1+s):l+s-l*s,p=2*l-q,f=t=>{t=(t%360+360)%360/360;return t<1/6?p+(q-p)*6*t:t<.5?q:t<2/3?p+(q-p)*(2/3-t)*6:p};
   const out=`rgba(${Math.round(f(h+120)*255)},${Math.round(f(h)*255)},${Math.round(f(h-120)*255)},${a})`;
   cache.set(col,out);return out}}
+// Jungle Island: wood turns to bamboo, red roofs to thatch, white to straw, water and glass to jungle green
+const jungle=hslMap((h,s,l)=>{
+  if(l>.86||s<.15)return[42,.4,.55+l*.3];
+  if(h>=175&&h<265)return[168,.55,.42+l*.25];
+  if(h>=15&&h<50&&!(s>.65&&l>.45))return[54,.5,.3+l*.38];
+  if(h<15||h>=330)return[38,.5,.36+l*.25];
+  return[h,s,l]});
 // Ice Island: white turns to snow, water and glass to ice, leaves to frost, wood to icy planks
 const icy=hslMap((h,s,l)=>{
   if(l>.86||s<.15)return[205,.35,.72+l*.24];
@@ -1506,7 +1611,11 @@ function drawCropRaw(c,o,t){
 }
 function drawTree(c,x,y,kind,t){
   const X=x*T+16,Y=y*T+28,h=hash(x,y),sw=Math.sin(t*1.3+h*6)*1.2;
-  if(kind===TREE&&curKind==='ice'){ell(c,X,Y,10,4,'rgba(0,0,0,.15)');rect(c,X-3,Y-9,6,10,'#6b4a2a',2);
+  if(kind===TREE&&curKind==='jungle'){ell(c,X,Y,13,4.5,'rgba(0,0,0,.2)');rect(c,X-4,Y-16,8,17,'#6b4a2a',2);
+    ell(c,X+sw,Y-26,18,14,'#1f6b2a');ell(c,X-8+sw,Y-30,11,9,'#2a8a35');ell(c,X+7+sw,Y-34,11,9,'#2f9a3a');ell(c,X+sw,Y-38,8,6,'#3fae45');
+    c.strokeStyle='#2f7a2c';c.lineWidth=1.5;for(const vx of[-10,-2,9]){c.beginPath();c.moveTo(X+vx+sw,Y-22);c.quadraticCurveTo(X+vx+3+sw,Y-14,X+vx+sw*.5,Y-6+hash(x+vx,y)*4);c.stroke()}
+    if(h>.6){for(let k=0;k<3;k++)ell(c,X+6+k*2.2+sw,Y-21+k*1.5,1.6,3.6,'#ffd23f')}}
+  else if(kind===TREE&&curKind==='ice'){ell(c,X,Y,10,4,'rgba(0,0,0,.15)');rect(c,X-3,Y-9,6,10,'#6b4a2a',2);
     for(let k=0;k<3;k++){const w=15-k*4,yy=Y-8-k*10;poly(c,'#2f6b4a',X-w+sw*.5,yy,X+w+sw*.5,yy,X+sw,yy-14);poly(c,'#f4f9fd',X-w*.55+sw*.5,yy-6,X+w*.55+sw*.5,yy-6,X+sw,yy-14)}}
   else if(kind===TREE){ell(c,X,Y,11,4,'rgba(0,0,0,.18)');rect(c,X-4,Y-14,8,15,'#7a4f2a',2);
     ell(c,X+sw,Y-24,15,13,'#2f7d32');ell(c,X-6+sw,Y-28,9,8,'#3c9a3e');ell(c,X+5+sw,Y-32,9,8,'#45a847');ell(c,X-1+sw,Y-36,6,5,'#5cbf54');
@@ -1526,6 +1635,7 @@ function drawForage(c,f,t){
   const X=f.x*T+16,Y=f.y*T+22;
   if(f.k==='shell'){poly(c,'#f7b2c4',X-6,Y+2,X+6,Y+2,X,Y-6);c.strokeStyle='#e58aa3';c.lineWidth=1;for(let s=-3;s<=3;s+=3){c.beginPath();c.moveTo(X,Y-5);c.lineTo(X+s*1.6,Y+2);c.stroke()}}
   else if(f.k==='mushroom'){rect(c,X-2,Y-4,4,7,'#f4ecd8',1);ell(c,X,Y-5,7,5,'#e03b3b');ell(c,X-3,Y-6,1.4,1.4,'#fff');ell(c,X+3,Y-7,1.4,1.4,'#fff')}
+  else if(f.k==='banana'){for(let k=0;k<3;k++){c.save();c.translate(X-3+k*3,Y-3);c.rotate(-.5+k*.5);ell(c,0,0,2,5.5,'#ffd23f');ell(c,0,-5,1,1,'#6b4a2a');c.restore()}}
   else if(f.k==='fireflower'){const fl=Math.sin(t*9+f.x*3)*1.2;c.fillStyle='rgba(255,140,40,.22)';c.beginPath();c.arc(X,Y-5,11,0,Math.PI*2);c.fill();
     c.fillStyle='#6e2414';c.fillRect(X-.7,Y-4,1.4,8);for(let p=0;p<5;p++)ell(c,X+Math.cos(p*1.26)*3.4,Y-5+Math.sin(p*1.26)*3.4,2.6,2.6,'#e8401a');
     ell(c,X,Y-5,2,2,'#ffd23f');ell(c,X,Y-10+fl,2.6,4,'#ff8a1f');ell(c,X,Y-9+fl*.5,1.4,2.4,'#ffe066')}
@@ -1607,7 +1717,7 @@ function drawLava(c,x0,y0,x1,y1,t){
 function draw(t){
   if(inside){drawInside(t);return}
   const z=zoom(),s=z*dpr;
-  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=curKind==='volcano'?'#c63a12':curKind==='ice'?'#2f6795':'#2f88c9';ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=curKind==='volcano'?'#c63a12':curKind==='ice'?'#2f6795':curKind==='jungle'?'#1f86a3':'#2f88c9';ctx.fillRect(0,0,cv.width,cv.height);
   const sh=shake>0?shake*5:0,shx=(Math.random()-.5)*sh,shy=(Math.random()-.5)*sh; // the ground shakes when the volcano blows
   ctx.setTransform(s,0,0,s,(cssW/2-cam.x*z+shx)*dpr,(cssH/2-cam.y*z+shy)*dpr);
   ctx.imageSmoothingEnabled=false;ctx.drawImage(terC,0,0);
@@ -1623,16 +1733,18 @@ function draw(t){
   if(mode==='build'){ctx.strokeStyle='rgba(255,255,255,.12)';ctx.lineWidth=1;ctx.beginPath();
     for(let x=x0;x<=x1+1;x++){ctx.moveTo(x*T,y0*T);ctx.lineTo(x*T,(y1+1)*T)}for(let y=y0;y<=y1+1;y++){ctx.moveTo(x0*T,y*T);ctx.lineTo((x1+1)*T,y*T)}ctx.stroke()}
   for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){const i=y*W+x;
-    if(feat[i]&&feat[i]!==VOLC)list.push([(y+1)*T-4,()=>drawTree(ctx,x,y,feat[i],t)]);
+    if(feat[i]&&feat[i]<VOLC)list.push([(y+1)*T-4,()=>drawTree(ctx,x,y,feat[i],t)]);
     if(chestHere(i))list.push([(y+1)*T-4,()=>drawChest(ctx,chestAt[i],t)]);
     if(forageAt.has(i)&&!objAt(i))list.push([(y+1)*T-8,()=>drawForage(ctx,forage[forageAt.get(i)],t)])}
   list.push([(SHIP.y+SHIP.h)*T,()=>drawShip(ctx,t)]);
+  if(FALLS)list.push([FALLS.y*T,()=>drawFalls(ctx,t)]);
+  if(TEMPLE_AT)list.push([(TEMPLE_AT.y+3)*T,()=>drawTemple(ctx,t)]);
   if(VOLCANO){list.push([(VOLCANO.y+3)*T,()=>drawVolcano(ctx,t)]);
     for(const d of lavaDrops)list.push([d.y,()=>drawLavaRock(ctx,d,t)]);
     for(const sc of scorps)if(!sc.hide)list.push([sc.y,()=>drawScorp(ctx,sc,t)]);
     for(const b of bombs){const p=Math.min(1,b.t/b.dur);ell(ctx,b.tx,b.ty,6+p*8,3+p*4,`rgba(0,0,0,${.12+p*.25})`)}}
   for(const a of animals)list.push([a.y,()=>drawAnimal(ctx,a,t)]);
-  for(const cr of critters)list.push([cr.y,()=>drawCritter(ctx,cr,t)]);
+  for(const cr of critters)if(!cr.hide)list.push([cr.y+(cr.kind==='parrot'?40:0),()=>drawCritter(ctx,cr,t)]);
   for(const v of villagers)if(!isGuest(v.v.name))list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-40,'❗')}]);
   list.push([player.y,()=>drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t)]);
   if(friend&&!friend.in)list.push([friend.y,()=>drawPerson(ctx,friend.x,friend.y,guestMode?PLAYER_LOOK:FRIEND_LOOK,friend.dir,friend.walk,friend.act,t)]);
