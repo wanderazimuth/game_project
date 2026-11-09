@@ -260,10 +260,12 @@ rebuildOcc();
 let ignoreObj=null; // the building being moved doesn't get in its own way
 const objAt=i=>{const o=occ[i]>=0?S.objs[occ[i]]:null;return o===ignoreObj?null:o};
 const inShip=(x,y)=>x>=SHIP.x&&x<SHIP.x+SHIP.w&&y>=SHIP.y&&y<SHIP.y+SHIP.h;
+// a treasure chest that hasn't been opened yet (opened ones are gone)
+function chestHere(i){return chestAt[i]>=0&&!S.opened.includes(chestAt[i])}
 function walkable(x,y){
   if(!inMap(x,y))return false;const i=y*W+x,o=objAt(i);
   if(o)return!!BUILD[o.t].walk;
-  return ter[i]!==WATER&&!feat[i]&&chestAt[i]<0&&!inShip(x,y);
+  return ter[i]!==WATER&&!feat[i]&&!chestHere(i)&&!inShip(x,y);
 }
 const count=t=>S.objs.reduce((n,o)=>n+(o.t===t),0);
 const priceOf=k=>Math.round(ITEMS[k].sell*(1+.2*Math.min(2,count('market'))));
@@ -392,7 +394,7 @@ function pickAt(wx,wy){
     const o=objAt(i);
     if(o&&(d===0||wy>=o.y*T-(BUILD[o.t].tall||14))){if(o.t==='path')break;return{k:'obj',o}}
     if(inShip(x,y)&&d<2)return{k:'ship'};
-    if(chestAt[i]>=0&&d===0)return{k:'chest',c:chestAt[i]};
+    if(chestHere(i)&&d===0)return{k:'chest',c:chestAt[i]};
     if(feat[i]&&(d===0||d===1&&feat[i]!==ROCK))return{k:'feat',i,x,y};
     if(d===0&&forageAt.has(i))return{k:'forage',i};
   }
@@ -608,7 +610,7 @@ let forage=[],forageAt=new Map();
 function genForage(){
   const r=rngFrom(S.day*7919+13);forage=[];forageAt=new Map();
   const add=(k,test,n)=>{for(let t=0;t<400&&n>0;t++){const x=r()*W|0,y=r()*H|0,i=y*W+x;
-    if(!test(x,y,i)||feat[i]||objAt(i)||chestAt[i]>=0||inShip(x,y)||forageAt.has(i))continue;forageAt.set(i,forage.length);forage.push({x,y,k});n--}};
+    if(!test(x,y,i)||feat[i]||objAt(i)||chestHere(i)||inShip(x,y)||forageAt.has(i))continue;forageAt.set(i,forage.length);forage.push({x,y,k});n--}};
   add('shell',(x,y,i)=>ter[i]===SAND,14);
   add('mushroom',(x,y,i)=>ter[i]===GRASS&&N4.some(([a,b])=>feat[(y+b)*W+x+a]===TREE),10);
   add('flower',(x,y,i)=>ter[i]===GRASS,10);
@@ -739,7 +741,7 @@ function canPlace(t,x,y){
   const b=BUILD[t];
   for(let j=0;j<b.h;j++)for(let i=0;i<b.w;i++){const X=x+i,Y=y+j,k=Y*W+X;
     if(!inMap(X,Y)||!rev[k])return'Explore there first';
-    if(objAt(k)||feat[k]||chestAt[k]>=0||inShip(X,Y))return'Something is in the way';
+    if(objAt(k)||feat[k]||chestHere(k)||inShip(X,Y))return'Something is in the way';
     if(b.one&&S.objs.some(o=>o.t===t&&o!==ignoreObj))return`You can only have one ${b.n}`;
     if(b.on==='shore'){if(ter[k]!==WATER||!N4.some(([a,c])=>inMap(X+a,Y+c)&&ter[(Y+c)*W+X+a]!==WATER))return'Docks go in the water, next to the beach'}
     else if(b.on==='water'){if(ter[k]!==WATER)return'Bridges go over water'}
@@ -982,7 +984,7 @@ function useNearest(){
   for(const[x,y]of[[t.x+d[0],t.y+d[1]],[t.x,t.y],...N8.map(([a,b])=>[t.x+a,t.y+b])]){
     if(!inMap(x,y))continue;const i=y*W+x;
     const v=villagers.find(v=>{const vt=tileOf(v);return vt.x===x&&vt.y===y});
-    let tg=v?{k:'vill',v}:objAt(i)&&objAt(i).t!=='path'?{k:'obj',o:objAt(i)}:inShip(x,y)?{k:'ship'}:chestAt[i]>=0?{k:'chest',c:chestAt[i]}:feat[i]?{k:'feat',i,x,y}:forageAt.has(i)?{k:'forage',i}:null;
+    let tg=v?{k:'vill',v}:objAt(i)&&objAt(i).t!=='path'?{k:'obj',o:objAt(i)}:inShip(x,y)?{k:'ship'}:chestHere(i)?{k:'chest',c:chestAt[i]}:feat[i]?{k:'feat',i,x,y}:forageAt.has(i)?{k:'forage',i}:null;
     if(tg){arrive(tg);return}
   }
 }
@@ -1227,11 +1229,10 @@ function drawTree(c,x,y,kind,t){
   else{ell(c,X,Y-2,12,4,'rgba(0,0,0,.15)');poly(c,'#8a909b',X-12,Y,X-9,Y-12,X-1,Y-17,X+9,Y-13,X+12,Y);poly(c,'#a9b0bb',X-8,Y-11,X-1,Y-16,X+6,Y-12,X-1,Y-8)}
 }
 function drawChest(c,ci,t){
-  const ch=chests[ci],X=ch.x*T+16,Y=ch.y*T+26,open=S.opened.includes(ci);
+  const ch=chests[ci],X=ch.x*T+16,Y=ch.y*T+26;
   ell(c,X,Y,13,4,'rgba(0,0,0,.18)');rect(c,X-11,Y-14,22,14,'#9a5b2a',2);rect(c,X-11,Y-9,22,2,'#e0b13c');
-  if(open){poly(c,'#7a4520',X-11,Y-14,X+11,Y-14,X+13,Y-22,X-9,Y-22);rect(c,X-9,Y-14,18,3,'#3a2210')}
-  else{rect(c,X-12,Y-20,24,7,'#b56f33',3);rect(c,X-2,Y-15,4,5,'#e0b13c',1);
-    const g=(Math.sin(t*2.5+ci)+1)/2;if(g>.75){c.fillStyle=`rgba(255,255,220,${(g-.75)*4})`;c.fillRect(X+8,Y-28,2,8);c.fillRect(X+5,Y-25,8,2)}}
+  rect(c,X-12,Y-20,24,7,'#b56f33',3);rect(c,X-2,Y-15,4,5,'#e0b13c',1);
+  const g=(Math.sin(t*2.5+ci)+1)/2;if(g>.75){c.fillStyle=`rgba(255,255,220,${(g-.75)*4})`;c.fillRect(X+8,Y-28,2,8);c.fillRect(X+5,Y-25,8,2)}
 }
 function drawForage(c,f,t){
   const X=f.x*T+16,Y=f.y*T+22;
@@ -1316,7 +1317,7 @@ function draw(t){
     for(let x=x0;x<=x1+1;x++){ctx.moveTo(x*T,y0*T);ctx.lineTo(x*T,(y1+1)*T)}for(let y=y0;y<=y1+1;y++){ctx.moveTo(x0*T,y*T);ctx.lineTo((x1+1)*T,y*T)}ctx.stroke()}
   for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){const i=y*W+x;
     if(feat[i])list.push([(y+1)*T-4,()=>drawTree(ctx,x,y,feat[i],t)]);
-    if(chestAt[i]>=0)list.push([(y+1)*T-4,()=>drawChest(ctx,chestAt[i],t)]);
+    if(chestHere(i))list.push([(y+1)*T-4,()=>drawChest(ctx,chestAt[i],t)]);
     if(forageAt.has(i)&&!objAt(i))list.push([(y+1)*T-8,()=>drawForage(ctx,forage[forageAt.get(i)],t)])}
   list.push([(SHIP.y+SHIP.h)*T,()=>drawShip(ctx,t)]);
   for(const a of animals)list.push([a.y,()=>drawAnimal(ctx,a,t)]);
