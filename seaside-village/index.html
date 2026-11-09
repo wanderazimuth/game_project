@@ -1852,7 +1852,7 @@ function drawFurnIn(c,f,t,icon){
   }
 }
 // ── Pets: they live in Your House ───────────────────────────────────────────
-const MAX_PETS=6;
+const MAX_PETS=10;
 const PETS={
   hamster:{n:'Hamster',pl:'Hamsters',cost:60,food:'wheat',speed:1.4,names:['Peanut','Nibbles','Squeak','Mochi'],cols:['#e8b06a','#f4e2c0','#9a7a5a']},
   bunny:{n:'Bunny',pl:'Bunnies',cost:80,food:'carrot',speed:1.8,names:['Clover','Thumper','Snowball','Hops'],cols:['#fbfbfb','#c8a07a','#8d8d95']},
@@ -1860,6 +1860,14 @@ const PETS={
   cat:{n:'Cat',pl:'Cats',cost:120,food:'fish',speed:1.6,names:['Whiskers','Luna','Tiger','Mittens'],cols:['#f0a040','#9aa0a8','#3a3a3a','#f4f1e8']},
   dog:{n:'Dog',pl:'Dogs',cost:150,food:'egg',speed:2,names:['Biscuit','Buddy','Rex','Daisy'],cols:['#b07b45','#e8d3a8','#3b2a20']},
   parrot:{n:'Parrot',pl:'Parrots',cost:200,food:'corn',speed:1.5,names:['Captain','Kiwi','Polly','Mango'],cols:['#2ecc71','#e74c3c','#3498db']},
+  frog:{n:'Frog',pl:'Frogs',cost:60,food:'flower',speed:1.3,names:['Ribbit','Lily','Hoppy','Pickle'],cols:['#5cbf54','#8fcf5a','#3f9a8a']},
+  mouse:{n:'Mouse',pl:'Mice',cost:70,food:'cheese',speed:2.2,names:['Squeaky','Pip','Crumbs','Nibbler'],cols:['#a7a7b0','#d9c3a5','#f4f1e8']},
+  hedgehog:{n:'Hedgehog',pl:'Hedgehogs',cost:90,food:'mushroom',speed:.9,names:['Spike','Prickles','Bramble','Sonic'],cols:['#7a5a3a','#9a7a5a']},
+  duck:{n:'Duck',pl:'Ducks',cost:110,food:'bread',speed:1.3,names:['Quackers','Puddles','Waddles','Daffy'],cols:['#ffd23f','#fbfbfb','#8d6e4f']},
+  penguin:{n:'Penguin',pl:'Penguins',cost:140,food:'fish',speed:1,names:['Pingu','Waddle','Tux','Flipper'],cols:['#2c2c38','#3a4a6b']},
+  fox:{n:'Fox',pl:'Foxes',cost:160,food:'egg',speed:2,names:['Rusty','Ember','Foxy','Maple'],cols:['#e8742a','#d9d9e0','#c0392b']},
+  owl:{n:'Owl',pl:'Owls',cost:180,food:'corn',speed:1.2,names:['Hoot','Professor','Luna','Twiggy'],cols:['#8a6a4a','#d9cbb5','#6b6b75']},
+  unicorn:{n:'Unicorn',pl:'Unicorns',cost:1000,food:'carrot',speed:1.7,names:['Sparkle','Rainbow','Stardust','Twinkle'],cols:['#fbfbff','#ffd6ec','#d9e8ff']},
 };
 function pets(){return S.home.pets||(S.home.pets=[])}
 function hungry(p){return p.fed<S.day}
@@ -1947,6 +1955,38 @@ function drawPetRaw(c,p,q,t){
   case'turtle':{for(const dx of[-6,5])for(const dy of[-1,0])rect(c,x+dx-1,y-4+dy*0+(dx<0?step:-step)*.5,3,4,'#8fcf5a',1.5);
     ell(c,x+9*s,y-5,3.6,3,'#8fcf5a');c.fillStyle='#222';c.fillRect(x+10*s-.7,y-6,1.4,1.4);
     ell(c,x,y-6,9,6,col);ell(c,x,y-7,6,3.6,'rgba(255,255,255,.18)');c.strokeStyle='rgba(0,0,0,.25)';c.lineWidth=1;c.beginPath();c.moveTo(x-4,y-10);c.lineTo(x-4,y-3);c.moveTo(x+3,y-10);c.lineTo(x+3,y-3);c.stroke();break}
+  case'frog':{const hop=mv?Math.abs(Math.sin(q.walk*.8))*5:0;y-=hop;
+    ell(c,x,y-5,8,5.5,col);ell(c,x-5*s,y-2,3.5,2,col);ell(c,x+4*s,y-1,2.5,1.6,col);ell(c,x+1*s,y-4,5,3,'rgba(255,255,255,.25)');
+    ell(c,x+2*s,y-10,3,3,col);ell(c,x+6*s,y-10,3,3,col);ell(c,x+2*s,y-10.5,1.8,1.8,'#fff');ell(c,x+6*s,y-10.5,1.8,1.8,'#fff');
+    c.fillStyle='#222';c.fillRect(x+2.4*s-.6,y-11,1.3,1.3);c.fillRect(x+6.4*s-.6,y-11,1.3,1.3);c.strokeStyle='#2a6a24';c.lineWidth=1;c.beginPath();c.arc(x+5*s,y-6,2.5,.3,Math.PI-.3);c.stroke();break}
+  case'mouse':{c.strokeStyle='#f4b6c2';c.lineWidth=1.2;c.beginPath();c.moveTo(x-6*s,y-4);c.quadraticCurveTo(x-12*s,y-2+Math.sin(t*4)*2,x-13*s,y-8);c.stroke();
+    ell(c,x,y-5,6.5,4.5,col);ell(c,x+5*s,y-7,3.8,3.4,col);ell(c,x+3*s,y-11,3,3,col);ell(c,x+3*s,y-11,1.7,1.7,'#f4b6c2');
+    ell(c,x+8.5*s,y-6.5,1.3,1.1,'#f08');c.fillStyle='#222';c.fillRect(x+6*s-.6,y-8.5,1.3,1.3);break}
+  case'hedgehog':{for(let k=0;k<7;k++){const a=Math.PI*(.15+k*.11);poly(c,'#4a3420',x-1*s-Math.cos(a)*7*s,y-5-Math.sin(a)*6,x-1*s-Math.cos(a)*11*s,y-5-Math.sin(a)*10,x-1*s-Math.cos(a+.15)*7*s,y-5-Math.sin(a+.15)*6)}
+    ell(c,x-1*s,y-5,8,6,col);ell(c,x+6*s,y-4,4,3.4,'#e8c9a0');ell(c,x+10*s,y-4,1.3,1.1,'#222');c.fillStyle='#222';c.fillRect(x+6.5*s-.6,y-6,1.3,1.3);
+    if(mv){rect(c,x-4,y-1,2,2,'#4a3420');rect(c,x+2,y-1+step,2,2,'#4a3420')}break}
+  case'duck':{const w=mv?Math.sin(q.walk*1.4)*.12:0;c.save();c.translate(x,y);c.rotate(w);
+    rect(c,-2,-2,1.5,2,'#f4a72a');rect(c,1,-2,1.5,2,'#f4a72a');ell(c,0,-6,7.5,5,col);poly(c,col,-6*s,-7,-10*s,-10,-7*s,-4);ell(c,-1*s,-6,4,2.6,'rgba(0,0,0,.08)');
+    ell(c,4*s,-12,4,4,p.v===2?'#2e7d4f':col);poly(c,'#f4a72a',7*s,-13,11*s,-11.5,7*s,-10);c.fillStyle='#222';c.fillRect(5*s-.6,-13.5,1.3,1.3);c.restore();break}
+  case'penguin':{const w=mv?Math.sin(q.walk*1.4)*.15:0;c.save();c.translate(x,y);c.rotate(w);
+    ell(c,-3,0,2.5,1.2,'#f4a72a');ell(c,3,0,2.5,1.2,'#f4a72a');ell(c,0,-9,6.5,9,col);ell(c,1*s,-8,4.2,7,'#fbfbfb');
+    ell(c,-6*s,-9,1.6,5,col);ell(c,2*s,-15,1.6,1.6,'#fff');c.fillStyle='#222';c.fillRect(2.3*s-.6,-15.5,1.2,1.2);poly(c,'#f4a72a',3.5*s,-13.5,7*s,-12.5,3.5*s,-11.5);c.restore();break}
+  case'fox':{for(const dx of[-5,-2,3,6])rect(c,x+dx*s-1,y-5+(dx<0?step:-step),2.2,5,'#3a2a20',1);
+    ell(c,x-11*s,y-9,6,3.5,col);ell(c,x-15*s,y-10,2.6,2.2,'#fbfbfb');ell(c,x,y-8,8,5,col);ell(c,x+1*s,y-6,5,2.6,'#fbfbfb');
+    ell(c,x+7*s,y-13,5,4.5,col);poly(c,col,x+4*s,y-16,x+5*s,y-21,x+7.5*s,y-16.5);poly(c,col,x+8*s,y-16.5,x+10*s,y-21,x+11*s,y-15);
+    poly(c,'#fbfbfb',x+9*s,y-13,x+14*s,y-11,x+8*s,y-9);ell(c,x+14*s,y-11,1.2,1,'#222');c.fillStyle='#222';c.fillRect(x+8*s-.6,y-14.5,1.4,1.6);break}
+  case'owl':{const hop=mv?Math.abs(Math.sin(q.walk*.9))*3:0;y-=hop;
+    rect(c,x-3,y-2,1.5,2,'#f4a72a');rect(c,x+1.5,y-2,1.5,2,'#f4a72a');ell(c,x,y-9,7,8.5,col);ell(c,x,y-7,4.5,5,'#e8dcc8');
+    poly(c,col,x-6,y-15,x-5,y-20,x-2,y-16);poly(c,col,x+6,y-15,x+5,y-20,x+2,y-16);
+    ell(c,x-2.7,y-12.5,2.8,2.8,'#fff');ell(c,x+2.7,y-12.5,2.8,2.8,'#fff');ell(c,x-2.7+.6*s,y-12.5,1.4,1.4,'#222');ell(c,x+2.7+.6*s,y-12.5,1.4,1.4,'#222');
+    poly(c,'#f4a72a',x-1,y-10.5,x+1,y-10.5,x,y-8.5);break}
+  case'unicorn':{for(const dx of[-7,-3,4,8])rect(c,x+dx*s-1.2,y-8+(dx<0?step:-step),2.6,8,col,1);
+    const rb=['#ff6b8b','#ffd23f','#5cbf54','#3d9be0','#b980ff'];
+    for(let k=0;k<5;k++){c.strokeStyle=rb[k];c.lineWidth=1.6;c.beginPath();c.moveTo(x-9*s,y-13+k*.8);c.quadraticCurveTo(x-15*s,y-12+k*1.5+Math.sin(t*3)*1.5,x-14*s,y-5+k);c.stroke()}
+    ell(c,x,y-12,10,6,col);poly(c,col,x+5*s,y-14,x+9*s,y-22,x+12*s,y-19,x+9*s,y-12);ell(c,x+11*s,y-21,5,3.6,col);ell(c,x+15*s,y-20,2.4,2,'#ffd6ec');
+    poly(c,'#ffd23f',x+10*s,y-24,x+12*s,y-24,x+12.5*s,y-31);
+    for(let k=0;k<4;k++)ell(c,x+(7-k*1.2)*s,y-23+k*3,2.2,2.2,rb[k]);c.fillStyle='#222';c.fillRect(x+11*s-.6,y-22,1.4,1.4);
+    if(!q.walk&&Math.sin(t*2+p.id)>.8){c.fillStyle='#fff7c2';c.fillRect(x+14*s,y-30,1.5,5);c.fillRect(x+12.5*s,y-28.5,5,1.5)}break}
   case'parrot':{const hop=mv?Math.abs(Math.sin(q.walk*.9))*3:0;y-=hop;
     rect(c,x-2,y-3,1.5,3,'#f4a72a');rect(c,x+1,y-3,1.5,3,'#f4a72a');
     poly(c,col,x-2*s,y-10,x-10*s,y-2,x-6*s,y-1);ell(c,x,y-9,5,7,col);ell(c,x-1*s,y-8,3,5,'rgba(0,0,0,.18)');
