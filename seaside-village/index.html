@@ -856,10 +856,8 @@ const ACT={
   petFeed({id}){const p=pets().find(p=>p.id===id);if(!p)return;const P=PETS[p.k],food=P.food,q=petPos(p);
     if(!hungry(p)){toast(`${p.name} is full! ❤️`);return}
     if(!S.inv[food]){toast(`${p.name} is hungry — ${P.pl} eat ${ITEMS[food].e} ${ITEMS[food].n}`,2800);return}
-    S.inv[food]--;if(!S.inv[food])delete S.inv[food];p.fed=S.day;p.hearts=Math.min(5,p.hearts+1);tally('feed');dirty();refreshTray();
-    floatAt(q.x,q.y-30,'❤️');
-    if(p.hearts>=5&&Math.random()<.5){S.coins+=25;floatAt(q.x,q.y-46,'+🪙25');toast(`${p.name} found 🪙25 under the sofa for you!`,2800)}
-    else toast(`${p.name} loved the ${ITEMS[food].n.toLowerCase()}! ${'❤️'.repeat(p.hearts)}`)},
+    S.inv[food]--;if(!S.inv[food])delete S.inv[food];refreshTray();
+    if(!feedPet(p))toast(`${p.name} loved the ${ITEMS[food].n.toLowerCase()}! ${'❤️'.repeat(p.hearts)}`)},
   petRename({id,name}){const p=pets().find(p=>p.id===id),n=String(name||'').replace(/[<>&"]/g,'').trim().slice(0,12);if(p&&n){p.name=n;dirty()}},
   petRemove({id}){const k=pets().findIndex(p=>p.id===id);if(k<0)return;const p=pets()[k],back=Math.floor(PETS[p.k].cost/2);
     pets().splice(k,1);S.coins+=back;toast(`👋 ${p.name} went to a lovely new home`);dirty()},
@@ -1001,11 +999,11 @@ function followPath(e,speed,dt){
   if(d<=step){e.x=tx;e.y=ty;e.path.shift()}else{e.x+=dx/d*step;e.y+=dy/d*step}
   e.dir=Math.abs(dx)>Math.abs(dy)?(dx<0?'left':'right'):(dy<0?'up':'down');e.walk+=dt*10;return true;
 }
-let goalT=0,saveT=0,lastTile=-1;
+let goalT=0,saveT=0,lastTile=-1,feedT=0;
 function update(dt){
   const tNow=now();
   if(!guestMode&&dayNow()!==S.day)newDay(false);
-  if(!guestMode)visitorsComeAndGo();
+  if(!guestMode){visitorsComeAndGo();if((feedT-=dt)<=0){feedT=2;autoFeed()}}
   // Player
   if(player.act){if(tNow>=player.act.end){const f=player.act.fn;player.act=null;f()}}
   else if(mode==='play'){
@@ -1388,6 +1386,7 @@ const FURN={
   fishbowl:{n:'Fishbowl',cost:30,w:1,h:1,tall:12,e:'🐠',say:'🐠 Blub blub!'},
   teddy:{n:'Teddy',cost:10,w:1,h:1,e:'🧸',say:'🧸 A big hug!'},
   chest:{n:'Chest',cost:30,w:1,h:1,tall:4,e:'🧰',say:'chest'},
+  feeder:{n:'Auto Feeder',cost:120,w:1,h:1,tall:16,e:'🥣',say:'It feeds your pets all by itself whenever they get hungry — no filling needed!'},
   window:{n:'Window',cost:20,w:1,h:2,wall:1,e:'🪟',say:'What a view!'},
   painting:{n:'Painting',cost:15,w:1,h:2,wall:1,e:'🖼️',say:'🖼️ A painting of the sea'},
   clock:{n:'Clock',cost:15,w:1,h:2,wall:1,e:'🕰️',say:'clock'},
@@ -1656,6 +1655,8 @@ function drawFurn(c,f,t,icon){
   case'toybox':rect(c,X+4,Y+8,24,20,'#3d9be0',3);rect(c,X+3,Y+5,26,6,'#2f80c9',3);ell(c,X+11,Y+4,4,4,'#e74c3c');poly(c,'#ffd23f',X+20,Y-4,X+23,Y+3,X+17,Y+3);rect(c,X+13,Y+14,6,6,'#ffd23f',1);break;
   case'fishbowl':rect(c,X+7,Y+12,18,16,'#b07b45',2);ell(c,X+16,Y+2,11,11,'rgba(190,232,255,.85)');ell(c,X+16,Y-1,10,4,'rgba(255,255,255,.4)');
     {const fx=X+16+(icon?0:Math.sin(t*1.5)*5);ell(c,fx,Y+4,4,2.6,'#ff8c2a');poly(c,'#ff8c2a',fx-3,Y+4,fx-7,Y+1,fx-7,Y+7)}break;
+  case'feeder':rect(c,X+9,Y-12,14,22,'rgba(200,235,255,.75)',4);rect(c,X+10,Y-4,12,13,'#d9a55a',3);
+    rect(c,X+8,Y-15,16,5,'#3d7fc4',2);rect(c,X+12,Y+8,8,8,'#3d7fc4',1);ell(c,X+16,Y+21,12,5,'#e74c3c');ell(c,X+16,Y+19,9,3,'#d9a55a');break;
   case'chest':rect(c,X+4,Y+10,24,17,'#9a5b2a',3);rect(c,X+3,Y+4,26,9,'#b56f33',4);rect(c,X+4,Y+12,24,2,'#6b3a18');
     rect(c,X+8,Y+4,3,23,'#c9a24a');rect(c,X+21,Y+4,3,23,'#c9a24a');rect(c,X+13,Y+11,6,6,'#e0b13c',1);ell(c,X+16,Y+15,1.2,1.4,'#5a3418');break;
   case'teddy':ell(c,X+16,Y+18,9,9,'#b07b45');ell(c,X+16,Y+20,5,5,'#d6a46b');ell(c,X+16,Y+4,7.5,7.5,'#b07b45');ell(c,X+10,Y-2,3,3,'#b07b45');ell(c,X+22,Y-2,3,3,'#b07b45');
@@ -1698,6 +1699,21 @@ function petsWander(dt){
     if(q.happy>0){q.walk=0;continue}
     wanderIn(q,T*PETS[p.k].speed,dt);
   }
+}
+// a pet gets fed: a heart, and a happy pet sometimes finds coins
+function feedPet(p){
+  p.fed=S.day;p.hearts=Math.min(5,p.hearts+1);tally('feed');dirty();
+  const q=petPos(p),here=inside&&!visit; // the hearts show only if you're in Your House
+  if(here)floatAt(q.x,q.y-30,'❤️');
+  if(p.hearts>=5&&Math.random()<.5){S.coins+=25;if(here)floatAt(q.x,q.y-46,'+🪙25');toast(`${p.name} found 🪙25 under the sofa for you!`,2800);return true}
+  return false;
+}
+// an auto feeder feeds every hungry pet in Your House, all by itself
+function autoFeed(){
+  if(!S.home.items.some(f=>f.k==='feeder'))return;
+  const fed=[];
+  for(const p of pets())if(hungry(p)){feedPet(p);fed.push(p.name)}
+  if(fed.length)toast(`🥣 The auto feeder fed ${fed.length>2?fed.length+' pets':fed.join(' and ')}! ❤️`,2600);
 }
 function petPick(wx,wy){for(const p of roomPets()){const q=petPos(p);if(Math.abs(wx-q.x)<14&&wy>q.y-26&&wy<q.y+6)return p}return null}
 function usePet(p){
