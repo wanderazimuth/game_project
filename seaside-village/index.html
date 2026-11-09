@@ -91,7 +91,7 @@ const CROPS={
   pineapple:{n:'Pineapple',e:'🍍',seed:80,grow:300,sell:320,col:'#f2b730',rare:1},
 };
 const ITEMS={...CROPS,
-  egg:{n:'Egg',e:'🥚',sell:25},bread:{n:'Bread',e:'🍞',sell:60},cheese:{n:'Cheese',e:'🧀',sell:160},truffle:{n:'Truffle',e:'🌰',sell:90},milk:{n:'Milk',e:'🥛',sell:60},honey:{n:'Honey',e:'🍯',sell:80},
+  egg:{n:'Egg',e:'🥚',sell:25},bread:{n:'Bread',e:'🍞',sell:60},cheese:{n:'Cheese',e:'🧀',sell:160},truffle:{n:'Truffle',e:'🌰',sell:90},lavarock:{n:'Lava Rock',e:'🌋',sell:35},milk:{n:'Milk',e:'🥛',sell:60},honey:{n:'Honey',e:'🍯',sell:80},
   fish:{n:'Fish',e:'🐟',sell:30},wood:{n:'Wood',e:'🪵',sell:3},stone:{n:'Stone',e:'🪨',sell:4},
   gem:{n:'Gem',e:'💎',sell:50},shell:{n:'Seashell',e:'🐚',sell:8},mushroom:{n:'Mushroom',e:'🍄',sell:12},
   flower:{n:'Wildflower',e:'🌼',sell:5}};
@@ -163,19 +163,19 @@ function noise(rng,cell){
     const a=g[iy*gw+ix],b=g[iy*gw+ix+1],c=g[(iy+1)*gw+ix],d=g[(iy+1)*gw+ix+1];
     return a+(b-a)*tx+(c-a)*ty+(a-b-c+d)*tx*ty}}
 const hash=(x,y)=>(((x*73856093)^(y*19349663))>>>0)%1000/1000;
-const WATER=0,SAND=1,GRASS=2,TREE=1,PALM=2,ROCK=3;
+const WATER=0,SAND=1,GRASS=2,TREE=1,PALM=2,ROCK=3,VOLC=4; // VOLC: the volcano itself
 const ter=new Uint8Array(W*H),feat=new Uint8Array(W*H),depth=new Uint8Array(W*H);
 const chestAt=new Int16Array(W*H).fill(-1);
 let SPAWN,SHIP,chests=[],landTotal=0;
 const inMap=(x,y)=>x>=0&&y>=0&&x<W&&y<H;
 const N4=[[1,0],[-1,0],[0,1],[0,-1]],N8=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
 const HOME_SEED=20261108;
-let curSeed=HOME_SEED;
-function genIsland(seed=HOME_SEED){
-  feat.fill(0);chestAt.fill(-1);chests=[];landTotal=0;curSeed=seed;
+let curSeed=HOME_SEED,curKind='',VOLCANO=null; // VOLCANO: the volcano's middle tile, on Volcano Island
+function genIsland(seed=HOME_SEED,kind=''){
+  feat.fill(0);chestAt.fill(-1);chests=[];landTotal=0;curSeed=seed;curKind=kind;VOLCANO=null;
   // each new island gets its own size, lakes and forests; the home island keeps the ones it always had
   const v=seed===HOME_SEED?null:rngFrom(seed^0x5bd1e995);
-  const P=v?{rx:.36+v()*.12,ry:.34+v()*.12,lake:.66+v()*.14,forest:.52+v()*.16,trees:.5+v()*.35,palms:.06+v()*.08,rocks:.04+v()*.04}
+  const P=kind==='volcano'?{rx:.42,ry:.42,lake:2,forest:.8,trees:.25,palms:.05,rocks:.15}:v?{rx:.36+v()*.12,ry:.34+v()*.12,lake:.66+v()*.14,forest:.52+v()*.16,trees:.5+v()*.35,palms:.06+v()*.08,rocks:.04+v()*.04}
     :{rx:.45,ry:.43,lake:.72,forest:.6,trees:.7,palms:.09,rocks:.055};
   const r=rngFrom(seed),n1=noise(r,9),n2=noise(r,4),n3=noise(r,7),nf=noise(r,5);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
@@ -210,11 +210,19 @@ function genIsland(seed=HOME_SEED){
   for(let i=0;i<W*H;i++)if(ter[i]!==WATER){depth[i]=0;q.push(i)}
   for(let h=0;h<q.length;h++){const j=q[h],x=j%W,y=j/W|0;if(depth[j]>=3)continue;
     for(const[a,b]of N4){if(!inMap(x+a,y+b))continue;const k=(y+b)*W+x+a;if(depth[k]>depth[j]+1){depth[k]=depth[j]+1;q.push(k)}}}
+  // The volcano: in the middle of the island, as far from the sea as it gets
+  if(kind==='volcano'){
+    const far=new Int16Array(W*H).fill(-1),q=[];for(let i=0;i<W*H;i++)if(ter[i]===WATER){far[i]=0;q.push(i)}
+    for(let h=0;h<q.length;h++){const j=q[h],x=j%W,y=j/W|0;for(const[a,b]of N4){if(!inMap(x+a,y+b))continue;const k=(y+b)*W+x+a;if(far[k]<0){far[k]=far[j]+1;q.push(k)}}}
+    let best=-1,bs=-1;for(let i=0;i<W*H;i++){const x=i%W,y=i/W|0,sc=far[i]*10-Math.hypot(x-W/2,y-H/2)-(y>SPAWN.y-10?99:0);if(sc>bs){bs=sc;best=i}}
+    VOLCANO={x:best%W,y:best/W|0};
+    for(let y=VOLCANO.y-4;y<=VOLCANO.y+4;y++)for(let x=VOLCANO.x-4;x<=VOLCANO.x+4;x++){const i=y*W+x;if(inMap(x,y)&&ter[i]!==WATER&&Math.hypot(x-VOLCANO.x,(y-VOLCANO.y)*1.2)<3.3)feat[i]=VOLC}
+  }
   // Treasure chests, hidden away from the crash site
   const loot=['strawberry','melon','pineapple',60,80,100,120,150,200,250];
   for(let tries=0;tries<5000&&chests.length<loot.length;tries++){
     const x=2+(r()*(W-4)|0),y=2+(r()*(H-4)|0),i=y*W+x;
-    if(ter[i]===WATER||Math.hypot(x-SPAWN.x,y-SPAWN.y)<11||chests.some(c=>Math.hypot(c.x-x,c.y-y)<8))continue;
+    if(ter[i]===WATER||feat[i]===VOLC||Math.hypot(x-SPAWN.x,y-SPAWN.y)<11||chests.some(c=>Math.hypot(c.x-x,c.y-y)<8))continue;
     feat[i]=0;chestAt[i]=chests.length;chests.push({x,y,loot:loot[chests.length]});
   }
 }
@@ -225,7 +233,7 @@ let isles=loadIsles();
 const isleKey=id=>id?SAVE_KEY+'-'+id:SAVE_KEY;
 const curIsle=()=>isles.list.find(i=>i.id===isles.cur)||isles.list[0];
 function saveIsles(){try{localStorage.setItem(ISLES_KEY,JSON.stringify(isles))}catch(e){}}
-genIsland(curIsle().seed);
+genIsland(curIsle().seed,curIsle().kind);
 let featOrig=feat.slice();
 
 // ── Saved game ───────────────────────────────────────────────────────────────
@@ -240,7 +248,7 @@ function load(){
   try{const s=JSON.parse(localStorage.getItem(isleKey(isles.cur)));if(s&&s.objs)return Object.assign(freshState(),s)}catch(e){}
   return freshState();
 }
-S=load();S.seed=S.seed||curSeed;
+S=load();S.seed=S.seed||curSeed;S.kind=S.kind||curKind;
 for(const i of S.cut)feat[i]=0;
 const rev=new Uint8Array(W*H);
 for(let i=0;i<S.rev.length;i++)if(S.rev[i]==='1')rev[i]=1;
@@ -303,14 +311,15 @@ function drawTerrain(){
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;
     c.fillStyle=depth[i]===1?'#56b9e3':depth[i]===2?'#42a2da':'#2f88c9';c.fillRect(x*T,y*T,T,T)}
   const blob=(col,test,grow)=>{c.fillStyle=col;for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(test(y*W+x)){c.beginPath();c.roundRect(x*T-grow,y*T-grow,T+grow*2,T+grow*2,grow+6);c.fill()}};
-  blob('#efd79a',i=>ter[i]!==WATER,5);
-  blob('#f4e0a8',i=>ter[i]!==WATER,2);
-  blob('#7cc35d',i=>ter[i]===GRASS,3);
+  const V=curKind==='volcano',PAL=V?{s1:'#3e393a',s2:'#4a4446',g:'#6e6159',g2:'#655850',g3:'#564a43',sd:'#2f2b2c'}:{s1:'#efd79a',s2:'#f4e0a8',g:'#7cc35d',g2:'#73b955',g3:'#5fa647',sd:'#e1c47f'};
+  blob(PAL.s1,i=>ter[i]!==WATER,5);
+  blob(PAL.s2,i=>ter[i]!==WATER,2);
+  blob(PAL.g,i=>ter[i]===GRASS,3);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,h=hash(x,y),X=x*T,Y=y*T;
     if(ter[i]===GRASS){
-      if(h<.5){c.fillStyle='#73b955';c.fillRect(X+(h*40|0)%24,Y+(h*97|0)%24,8,8)}
-      c.fillStyle='#5fa647';for(let k=0;k<3;k++){const a=hash(x+k*7,y+k*3);c.fillRect(X+4+a*22,Y+6+(a*71%1)*20,2,5);c.fillRect(X+7+a*22,Y+8+(a*71%1)*20,2,3)}
-    }else if(ter[i]===SAND){c.fillStyle='#e1c47f';for(let k=0;k<4;k++){const a=hash(x+k*5,y-k*11);c.fillRect(X+3+a*26,Y+3+(a*53%1)*26,2,2)}}
+      if(h<.5){c.fillStyle=PAL.g2;c.fillRect(X+(h*40|0)%24,Y+(h*97|0)%24,8,8)}
+      c.fillStyle=PAL.g3;for(let k=0;k<3;k++){const a=hash(x+k*7,y+k*3);c.fillRect(X+4+a*22,Y+6+(a*71%1)*20,2,5);c.fillRect(X+7+a*22,Y+8+(a*71%1)*20,2,3)}
+    }else if(ter[i]===SAND){c.fillStyle=PAL.sd;for(let k=0;k<4;k++){const a=hash(x+k*5,y-k*11);c.fillRect(X+3+a*26,Y+3+(a*53%1)*26,2,2)}}
   }
 }
 drawTerrain();
@@ -387,6 +396,7 @@ unstick(player);
 
 // ── What did you tap? ────────────────────────────────────────────────────────
 function pickAt(wx,wy){
+  for(const sc of scorps)if(!sc.hide&&Math.abs(wx-sc.x)<17&&Math.abs(wy-sc.y+6)<15)return{k:'scorp',sc};
   for(const v of villagers)if(!isGuest(v.v.name)&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
   const tx=Math.floor(wx/T),ty=Math.floor(wy/T);
   for(let d=0;d<4;d++){
@@ -395,6 +405,7 @@ function pickAt(wx,wy){
     if(o&&(d===0||wy>=o.y*T-(BUILD[o.t].tall||14))){if(o.t==='path')break;return{k:'obj',o}}
     if(inShip(x,y)&&d<2)return{k:'ship'};
     if(chestHere(i)&&d===0)return{k:'chest',c:chestAt[i]};
+    if(feat[i]===VOLC)return{k:'volcano'};
     if(feat[i]&&(d===0||d===1&&feat[i]!==ROCK))return{k:'feat',i,x,y};
     if(d===0&&forageAt.has(i))return{k:'forage',i};
   }
@@ -405,11 +416,16 @@ function footprintOf(tg){
   if(tg.k==='ship')return SHIP;
   if(tg.k==='chest'){const c=chests[tg.c];return{x:c.x,y:c.y,w:1,h:1}}
   if(tg.k==='vill'){const t=tileOf(tg.v);return{x:t.x,y:t.y,w:1,h:1}}
+  if(tg.k==='scorp'){const t=tileOf(tg.sc);return{x:t.x,y:t.y,w:1,h:1}}
   return{x:tg.x??tg.i%W,y:tg.y??(tg.i/W|0),w:1,h:1};
 }
 function goToTarget(tg){
   player.steer=null;
   const pt=tileOf(player);
+  if(tg.k==='volcano'){toast('🌋 Way too hot to climb!');return}
+  if(tg.k==='scorp'){ // close enough to bonk it, or run after it
+    if(Math.hypot(tg.sc.x-player.x,tg.sc.y-player.y)<T*1.8){player.path=[];arrive(tg);return}
+    const b=tileOf(tg.sc),r=findPath(pt.x,pt.y,(x,y)=>Math.abs(x-b.x)<=1&&Math.abs(y-b.y)<=1,b);player.path=r?r.path:[];player.target=tg;return}
   if(tg.k==='ground'){
     const r=findPath(pt.x,pt.y,(x,y)=>x===tg.x&&y===tg.y,tg);
     player.target=null;player.path=r?r.path:[];
@@ -435,7 +451,8 @@ function arrive(tg){
     case'ship':shipModal();break;
     case'chest':doAct('chest',{c:tg.c});break;
     case'forage':if(forageAt.has(tg.i))act(250,'pick',()=>doAct('forage',{i:tg.i}));break;
-    case'feat':{const kind=feat[tg.i];if(kind)act(kind===ROCK?800:700,kind===ROCK?'mine':'chop',()=>doAct('feat',{i:tg.i}));break}
+    case'scorp':if(Math.hypot(tg.sc.x-player.x,tg.sc.y-player.y)<T*2.2){facePoint(tg.sc.x,tg.sc.y);act(250,'chop',()=>bonk(tg.sc))}else toast('🦂 It scuttled away — after it!');break;
+    case'feat':{const kind=feat[tg.i];if(kind===VOLC)break;if(kind)act(kind===ROCK?800:700,kind===ROCK?'mine':'chop',()=>doAct('feat',{i:tg.i}));break}
     case'obj':useObj(tg.o,act);break;
     case'furn':useFurn(tg.f);break;
     case'pet':if(roomPets().includes(tg.p))usePet(tg.p);break;
@@ -536,6 +553,92 @@ function shipModal(){
   h+=`<div class="btns"><button class="btn" data-a="fix" ${S.coins<st.cost?'disabled':''}>Fix it (🪙${st.cost})</button><button class="btn gray" data-a="close">Later</button></div>`;
   openModal(h,{fix:()=>{closeModal();doAct('fix',{stage:S.ship})}});
 }
+// ── Volcano Island: it erupts every 17 seconds, and scorpions steal your stuff ──
+const ERUPT_MS=17000;
+let scorps=[],bombs=[],sparks=[],lavaDrops=[],shake=0,lastPhase=0,stealCool=0,rumbled=false;
+const scorpOk=(x,y)=>animalOk(x,y); // fences, hedges and gates keep them out
+function scorpSpot(){
+  for(let k=0;k<300;k++){const x=2+(Math.random()*(W-4)|0),y=2+(Math.random()*(H-4)|0);
+    if(walkable(x,y)&&!objAt(y*W+x)&&Math.hypot(x-SPAWN.x,y-SPAWN.y)>11)return{x:x*T+16,y:y*T+20}}
+  return{x:SPAWN.x*T,y:(SPAWN.y-12)*T};
+}
+function spawnScorps(){scorps=curKind==='volcano'?Array.from({length:6},()=>({...scorpSpot(),wa:Math.random()*6,wt:0,loot:null,stun:0,hide:0,flee:0,dir:1,walk:0})):[]}
+function volcanoUpdate(dt){
+  if(!VOLCANO)return;
+  const phase=now()%ERUPT_MS,cx=(VOLCANO.x+.5)*T,cy=(VOLCANO.y-2.6)*T;
+  if(phase>ERUPT_MS-3000&&!rumbled){rumbled=true;if(Math.hypot(player.x-cx,player.y-cy)<T*22)toast('🌋 Rumble rumble… the volcano is about to blow!',2000)}
+  if(phase<lastPhase){ // KABOOM
+    rumbled=false;shake=1.2;
+    for(let k=0;k<10;k++){let tx,ty;for(let n=0;n<20;n++){const a=Math.random()*Math.PI*2,r=3.5+Math.random()*9;tx=Math.round(VOLCANO.x+Math.cos(a)*r);ty=Math.round(VOLCANO.y+Math.sin(a)*r*.8);if(inMap(tx,ty)&&ter[ty*W+tx]!==WATER&&feat[ty*W+tx]!==VOLC)break}
+      bombs.push({sx:cx,sy:cy,tx:tx*T+16,ty:ty*T+20,t:-k*.08,dur:1.3+Math.random()*.7,h:110+Math.random()*90})}
+    for(let k=0;k<30;k++)sparks.push({x:cx,y:cy,vx:(Math.random()-.5)*160,vy:-80-Math.random()*160,t:0,c:k%2?'#ff6a1a':'#ffd23f'});
+  }
+  lastPhase=phase;shake=Math.max(0,shake-dt);
+  for(const b of bombs){b.t+=dt;
+    if(b.t>=b.dur){b.done=1;for(let k=0;k<10;k++)sparks.push({x:b.tx,y:b.ty,vx:(Math.random()-.5)*120,vy:-40-Math.random()*90,t:0,c:k%2?'#ff6a1a':'#ffd23f'});
+      if(Math.hypot(player.x-b.tx,player.y-b.ty)<22){ // ouch!
+        const a=Math.atan2(player.y-b.ty,player.x-b.tx)||1.5;for(let k=0;k<6;k++)moveBy(player,Math.cos(a)*6,Math.sin(a)*6,walkable);
+        player.stun=1;player.path=[];player.target=null;player.act=null;floatAt(player.x,player.y-40,'💫');toast('🔥 Ouch! Hit by a lava bomb!')}
+      const tt=tileOf({x:b.tx,y:b.ty});if(walkable(tt.x,tt.y)&&lavaDrops.length<25)lavaDrops.push({x:b.tx,y:b.ty,hot:5})}}
+  bombs=bombs.filter(b=>!b.done);
+  for(const k of sparks){k.t+=dt;k.x+=k.vx*dt;k.y+=k.vy*dt;k.vy+=320*dt}sparks=sparks.filter(k=>k.t<.8);
+  // cooled lava rocks: walk over them to pick them up
+  for(const d of lavaDrops){d.hot-=dt;if(d.hot<=0&&!d.got&&Math.hypot(player.x-d.x,player.y-d.y)<18){d.got=1;doAct('lavaPick',{});floatAt(d.x,d.y-20,'+1 🌋')}}
+  lavaDrops=lavaDrops.filter(d=>!d.got);
+  stealCool=Math.max(0,stealCool-dt);
+  for(const sc of scorps){
+    if(sc.hide>0){if((sc.hide-=dt)<=0)Object.assign(sc,scorpSpot(),{loot:null,stun:0,flee:0});continue}
+    if(sc.stun>0){sc.stun-=dt;sc.walk=0;continue}
+    const dx=player.x-sc.x,dy=player.y-sc.y,d=Math.hypot(dx,dy);let vx,vy,sp;
+    if(sc.loot&&d<T*8){vx=-dx;vy=-dy;sp=T*3.1}                       // a thief runs away from you
+    else if(!sc.loot&&d<T*5&&!stealCool&&!player.stun){vx=dx;vy=dy;sp=T*2.4;if(d<15){steal(sc);continue}} // after you!
+    else{if((sc.wt-=dt)<=0){sc.wt=1+Math.random()*2;sc.wa=Math.random()*Math.PI*2}vx=Math.cos(sc.wa);vy=Math.sin(sc.wa);sp=T*.8}
+    const l=Math.hypot(vx,vy)||1,mx=vx/l*sp*dt,my=vy/l*sp*dt;let moved=false;
+    if(scorpOk(sc.x+mx,sc.y)){sc.x+=mx;moved=true}if(scorpOk(sc.x,sc.y+my)){sc.y+=my;moved=true}
+    if(!moved)sc.wa=Math.random()*Math.PI*2;
+    if(mx)sc.dir=mx<0?-1:1;sc.walk+=dt*12;
+  }
+}
+function steal(sc){
+  const ks=Object.keys(S.inv).filter(k=>S.inv[k]>0&&ITEMS[k]);stealCool=4;
+  if(ks.length){const k=ks[Math.random()*ks.length|0],n=Math.min(S.inv[k],1+(Math.random()*3|0));sc.loot={k,n};doAct('steal',{k,n});toast(`🦂 A scorpion stole ${n} ${ITEMS[k].e} ${ITEMS[k].n}! Catch it!`,2600)}
+  else if(S.coins>0){const n=Math.min(S.coins,10+(Math.random()*20|0));sc.loot={coins:n};doAct('steal',{coins:n});toast(`🦂 A scorpion stole 🪙${n}! Catch it!`,2600)}
+  else{sc.stun=1;toast('🦂 The scorpion found nothing to steal!');return}
+  floatAt(player.x,player.y-40,sc.loot.coins?`-🪙${sc.loot.coins}`:`-${sc.loot.n} ${ITEMS[sc.loot.k].e}`);
+}
+function bonk(sc){
+  if(sc.hide)return;
+  if(sc.loot){const l=sc.loot;doAct('giveBack',l);floatAt(sc.x,sc.y-30,l.coins?`+🪙${l.coins}`:`+${l.n} ${ITEMS[l.k].e}`);
+    toast(`💥 Bonk! You got your ${l.coins?'🪙'+l.coins:ITEMS[l.k].e+' '+ITEMS[l.k].n} back!`);sc.loot=null;sc.hide=20;stealCool=3}
+  else{sc.stun=2.5;floatAt(sc.x,sc.y-24,'💫');toast('💥 Bonk! Shoo, scorpion!')}
+}
+function drawVolcano(c,t){
+  const X=(VOLCANO.x+.5)*T,Y=(VOLCANO.y+2.6)*T,top=Y-5.4*T;
+  ell(c,X,Y,4.2*T,1*T,'rgba(0,0,0,.2)');
+  poly(c,'#5a4740',X-4.2*T,Y,X-1.1*T,top,X+1.1*T,top,X+4.2*T,Y);poly(c,'#6e574d',X-4.2*T,Y,X-1.1*T,top,X-.2*T,top,X-1.4*T,Y);
+  c.fillStyle='rgba(0,0,0,.15)';for(let k=0;k<5;k++){const a=hash(k,7);poly(c,'rgba(0,0,0,.12)',X+(a-.5)*5*T,Y-k*.3*T,X+(a-.5)*1.6*T,top+T,X+(a-.5)*2*T,top+T)}
+  // lava running down
+  const glow=.6+.4*Math.sin(t*3);c.strokeStyle=`rgba(255,${90+glow*60|0},20,.9)`;c.lineWidth=5;c.lineCap='round';
+  c.beginPath();c.moveTo(X-.3*T,top+4);c.quadraticCurveTo(X-.9*T,Y-3*T,X-1.6*T,Y-.6*T);c.moveTo(X+.4*T,top+4);c.quadraticCurveTo(X+.8*T,Y-2.4*T,X+1.3*T,Y-1.2*T);c.stroke();
+  ell(c,X,top+2,1.15*T,.32*T,'#3a2a26');ell(c,X,top+3,.9*T,.22*T,`rgba(255,${100+glow*80|0},30,1)`);
+  for(let k=0;k<4;k++){const a=(t*.25+k/4)%1;ell(c,X+Math.sin(k*2+a*3)*10,top-a*70,10+a*18,8+a*14,`rgba(90,85,85,${.45*(1-a)})`)}
+}
+function drawLavaRock(c,d,t){const hot=Math.max(0,d.hot/5);
+  ell(c,d.x,d.y,9,4,'rgba(0,0,0,.2)');poly(c,'#3a3233',d.x-8,d.y,d.x-5,d.y-8,d.x+3,d.y-10,d.x+8,d.y-3,d.x+6,d.y+1);
+  c.strokeStyle=hot>0?`rgba(255,${120+hot*100|0},40,${.4+hot*.6})`:'rgba(255,120,40,.35)';c.lineWidth=1.5;c.beginPath();c.moveTo(d.x-4,d.y-6);c.lineTo(d.x,d.y-3);c.lineTo(d.x+4,d.y-7);c.stroke();
+  if(hot>0){c.fillStyle=`rgba(255,150,40,${hot*.35})`;c.beginPath();c.arc(d.x,d.y-4,14,0,Math.PI*2);c.fill()}}
+function drawScorp(c,sc,t){
+  const x=sc.x,y=sc.y,s=sc.dir,w=sc.stun>0?0:Math.sin(sc.walk)*1.5,col='#9c3b22',dk='#6e2414';
+  ell(c,x,y,11,3.5,'rgba(0,0,0,.2)');
+  c.strokeStyle=dk;c.lineWidth=1.3;for(let k=-1;k<=1;k++){c.beginPath();c.moveTo(x+k*4,y-4);c.lineTo(x+k*4-3,y+1+(k%2?w:-w));c.moveTo(x+k*4,y-4);c.lineTo(x+k*4+3,y+1+(k%2?-w:w));c.stroke()}
+  ell(c,x,y-5,8,4.5,col);ell(c,x+7*s,y-6,4,3.5,col);
+  for(const sy of[-2,2]){c.strokeStyle=col;c.lineWidth=2;c.beginPath();c.moveTo(x+9*s,y-6+sy);c.lineTo(x+14*s,y-7+sy*2);c.stroke();ell(c,x+16*s,y-7+sy*2.2,3,2.2,dk)}
+  c.strokeStyle=col;c.lineWidth=3;c.lineCap='round';c.beginPath();c.moveTo(x-7*s,y-6);c.quadraticCurveTo(x-14*s,y-14,x-7*s,y-19+Math.sin(t*5)*1.5);c.stroke();
+  poly(c,dk,x-7*s,y-21,x-4*s,y-18,x-8*s,y-17);c.fillStyle='#ffd23f';c.fillRect(x+8*s-.6,y-8,1.4,1.4);
+  if(sc.stun>0){c.font='10px sans-serif';c.textAlign='center';c.fillText('💫',x,y-18)}
+  if(sc.loot)bubble(c,x,y-20,sc.loot.coins?'🪙':ITEMS[sc.loot.k].e);
+}
+
 // ── Sailing to other islands ─────────────────────────────────────────────────
 const ISLE_NAMES=['Coconut Cove','Sunny Shores','Turtle Bay','Mango Island','Seashell Isle','Palm Paradise','Starfish Point','Pirate Rock',
   'Rainbow Reef','Breezy Beach','Pelican Point','Dolphin Isle','Banana Bay','Pearl Island','Sandy Toes','Lagoon Land'];
@@ -547,8 +650,10 @@ function sailModal(){
   for(const i of isles.list){const here=i.id===isles.cur;
     h+=`<div class="irow"><span class="ie">${i.id?'🏝️':'🏠'}</span><span class="in">${cleanName(i.name)}${here?'<br><span class="ip">You are here</span>':''}</span>
       <button class="btn gray" data-a="ren" data-v="${i.id}" style="padding:0 10px">✏️</button>${here?'':`<button class="btn blue" data-a="go" data-v="${i.id}">Sail</button>`}</div>`}
+  if(!isles.list.some(i=>i.kind==='volcano'))h+=`<div class="irow"><span class="ie">🌋</span><span class="in">Volcano Island<br><span class="ip">Hot lava and sneaky scorpions — be careful!</span></span><button class="btn blue" data-a="volc">Sail</button></div>`;
   h+=`<div class="btns">${isles.list.length<MAX_ISLES?'<button class="btn" data-a="new">✨ Discover a new island</button>':''}<button class="btn gray" data-a="close">Stay here</button></div>`;
-  openModal(h,{go:id=>{closeModal();sailTo(+id)},ren:id=>nameModal(+id),new:()=>nameModal(null)});
+  openModal(h,{go:id=>{closeModal();sailTo(+id)},ren:id=>nameModal(+id),new:()=>nameModal(null),
+    volc:()=>{closeModal();if(net){toast('Stop playing together (👥) before sailing');return}const id=isles.next++;isles.list.push({id,name:'Volcano Island',seed:666013,kind:'volcano'});saveIsles();sailTo(id)}});
 }
 // name a new island (id null), or rename one of yours
 function nameModal(id,suggest){
@@ -570,18 +675,18 @@ function sailTo(id){
   saveNow();
   const carry={};for(const k of['coins','inv','found','sel','goal','job','jobN','cnt','stats'])carry[k]=S[k]; // what you bring along
   let ns=null;try{ns=JSON.parse(localStorage.getItem(isleKey(id)))}catch(e){}
-  genIsland(to.seed);
+  genIsland(to.seed,to.kind);
   if(ns&&ns.objs)ns=Object.assign(freshState(),ns);
-  else{ns=freshState();ns.seed=to.seed;ns.ship=3;ns.intro=1} // never been there: your ship is moored on the beach
+  else{ns=freshState();ns.seed=to.seed;ns.kind=to.kind||'';ns.ship=3;ns.intro=1} // never been there: your ship is moored on the beach
   Object.assign(ns,carry);isles.cur=id;saveIsles();
   enterIsland(ns);saveNow();
   sleepFade=1.2;setTitle();toast(`⛵ Welcome to ${cleanName(to.name)}!`,3000);
 }
 // set everything up for the island in ns (its land is already made by genIsland)
 function enterIsland(ns){
-  S=ns;S.seed=curSeed;featOrig=feat.slice();for(const i of S.cut)feat[i]=0;drawTerrain();
+  S=ns;S.seed=curSeed;S.kind=curKind;bombs=[];lavaDrops=[];featOrig=feat.slice();for(const i of S.cut)feat[i]=0;drawTerrain();
   landRev=0;for(let i=0;i<W*H;i++){rev[i]=S.rev[i]==='1'?1:0;fogImg.data[i*4+3]=rev[i]?0:255;if(rev[i]&&ter[i]!==WATER)landRev++}fogX.putImageData(fogImg,0,0);
-  rebuildOcc();roomCache.clear();petAt.clear();guestAt.clear();
+  rebuildOcc();roomCache.clear();petAt.clear();guestAt.clear();spawnScorps();
   if(S.day!==dayNow())newDay(true);else if(S.fg)loadForage();else genForage();
   villagers=[];S.villagers.forEach(spawnVillager);spawnAnimals();
   inside=false;visit=null;hostPos=null;outPos=null;
@@ -810,7 +915,7 @@ function doMove(o,x,y){
 const byId=id=>S.objs.find(o=>o.id===id);
 const ACT={
   forage({i}){const fi=forageAt.get(i);if(fi===undefined)return;const it=forage[fi].k;takeForage(i);give(it,1);tally('forage:'+it);floatAt((i%W)*T+16,(i/W|0)*T,`+1 ${ITEMS[it].e}`)},
-  feat({i}){const kind=feat[i],X=(i%W)*T+16,Y=(i/W|0)*T;if(!kind)return;feat[i]=0;S.cut.push(i);tally(kind===ROCK?'mine':'chop');dirty();
+  feat({i}){const kind=feat[i],X=(i%W)*T+16,Y=(i/W|0)*T;if(!kind||kind===VOLC)return;feat[i]=0;S.cut.push(i);tally(kind===ROCK?'mine':'chop');dirty();
     if(kind===ROCK){give('stone',1);if(Math.random()<.12){give('gem',1);floatAt(X,Y-14,'+1 💎');toast('Ooh, a gem! 💎')}else floatAt(X,Y,'+1 🪨')}
     else{give('wood',2);floatAt(X,Y,'+2 🪵')}},
   chest({c}){if(chests[c])openChest(c)},
@@ -838,6 +943,9 @@ const ACT={
     S.inv[r.k]-=r.n;if(!S.inv[r.k])delete S.inv[r.k];S.coins+=r.reward;S.stats.helped++;tally('help');v.req=null;dirty();refreshTray();
     const vw=villagers.find(w=>w.v===v);if(vw)floatAt(vw.x,vw.y-44,`+🪙${r.reward}`);toast(`💛 ${v.name}: “Thank you so much!”`)},
   place({t,x,y}){if(BUILD[t])doPlace(t,x,y)},
+  steal({k,n,coins}){if(coins){S.coins-=Math.min(coins,S.coins)}else if(S.inv[k]){S.inv[k]-=Math.min(n,S.inv[k]);if(!S.inv[k])delete S.inv[k];refreshTray()}dirty()},
+  giveBack({k,n,coins}){if(coins)S.coins+=coins;else if(ITEMS[k])give(k,n);dirty()},
+  lavaPick(){give('lavarock',1);tally('collect:lavarock')},
   skipJob(){if(S.job){newJob();toast('🔄 Here\'s a different job!')}},
   homePlace({k,x,y}){const F=FURN[k];if(!F)return;const why=furnWhy(k,x,y,null,S.home.items)||(S.coins<F.cost?`Need 🪙${F.cost} for ${F.n}`:'');if(why){toast(why);return}
     S.coins-=F.cost;S.home.items.push({id:S.home.next++,k,x,y,c:0});if(F.cost)floatAt((x+F.w/2)*T,y*T,`-🪙${F.cost}`);
@@ -1007,7 +1115,9 @@ function update(dt){
   if(!guestMode&&dayNow()!==S.day)newDay(false);
   if(!guestMode){visitorsComeAndGo();if((feedT-=dt)<=0){feedT=2;autoFeed()}}
   // Player
+  if(curKind==='volcano'&&!inside)volcanoUpdate(dt);
   if(player.act){if(tNow>=player.act.end){const f=player.act.fn;player.act=null;f()}}
+  else if(player.stun>0){player.stun-=dt;player.walk=0}
   else if(mode==='play'){
     let vx=0,vy=0;
     if(keys.has('arrowleft')||keys.has('a'))vx--;if(keys.has('arrowright')||keys.has('d'))vx++;
@@ -1302,7 +1412,8 @@ function draw(t){
   if(inside){drawInside(t);return}
   const z=zoom(),s=z*dpr;
   ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#2f88c9';ctx.fillRect(0,0,cv.width,cv.height);
-  ctx.setTransform(s,0,0,s,(cssW/2-cam.x*z)*dpr,(cssH/2-cam.y*z)*dpr);
+  const sh=shake>0?shake*5:0,shx=(Math.random()-.5)*sh,shy=(Math.random()-.5)*sh; // the ground shakes when the volcano blows
+  ctx.setTransform(s,0,0,s,(cssW/2-cam.x*z+shx)*dpr,(cssH/2-cam.y*z+shy)*dpr);
   ctx.imageSmoothingEnabled=false;ctx.drawImage(terC,0,0);
   const x0=Math.max(0,Math.floor((cam.x-cssW/2/z)/T)-1),x1=Math.min(W-1,Math.ceil((cam.x+cssW/2/z)/T)+1);
   const y0=Math.max(0,Math.floor((cam.y-cssH/2/z)/T)-1),y1=Math.min(H-1,Math.ceil((cam.y+cssH/2/z)/T)+3);
@@ -1316,10 +1427,14 @@ function draw(t){
   if(mode==='build'){ctx.strokeStyle='rgba(255,255,255,.12)';ctx.lineWidth=1;ctx.beginPath();
     for(let x=x0;x<=x1+1;x++){ctx.moveTo(x*T,y0*T);ctx.lineTo(x*T,(y1+1)*T)}for(let y=y0;y<=y1+1;y++){ctx.moveTo(x0*T,y*T);ctx.lineTo((x1+1)*T,y*T)}ctx.stroke()}
   for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){const i=y*W+x;
-    if(feat[i])list.push([(y+1)*T-4,()=>drawTree(ctx,x,y,feat[i],t)]);
+    if(feat[i]&&feat[i]!==VOLC)list.push([(y+1)*T-4,()=>drawTree(ctx,x,y,feat[i],t)]);
     if(chestHere(i))list.push([(y+1)*T-4,()=>drawChest(ctx,chestAt[i],t)]);
     if(forageAt.has(i)&&!objAt(i))list.push([(y+1)*T-8,()=>drawForage(ctx,forage[forageAt.get(i)],t)])}
   list.push([(SHIP.y+SHIP.h)*T,()=>drawShip(ctx,t)]);
+  if(VOLCANO){list.push([(VOLCANO.y+3)*T,()=>drawVolcano(ctx,t)]);
+    for(const d of lavaDrops)list.push([d.y,()=>drawLavaRock(ctx,d,t)]);
+    for(const sc of scorps)if(!sc.hide)list.push([sc.y,()=>drawScorp(ctx,sc,t)]);
+    for(const b of bombs){const p=Math.min(1,b.t/b.dur);ell(ctx,b.tx,b.ty,6+p*8,3+p*4,`rgba(0,0,0,${.12+p*.25})`)}}
   for(const a of animals)list.push([a.y,()=>drawAnimal(ctx,a,t)]);
   for(const v of villagers)if(!isGuest(v.v.name))list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-40,'❗')}]);
   list.push([player.y,()=>drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t)]);
@@ -1335,6 +1450,10 @@ function draw(t){
     ctx.globalAlpha=.6;drawObj(ctx,{t:gt,x:ghost.x,y:ghost.y,id:lifted?lifted.id:S.nextId,last:now()},t,true);ctx.globalAlpha=1;
     ctx.fillStyle=ok?'rgba(80,255,120,.25)':'rgba(255,60,60,.3)';ctx.fillRect(ghost.x*T,ghost.y*T,b.w*T,b.h*T);
     ctx.strokeStyle=ok?'#5f5':'#f55';ctx.lineWidth=2;ctx.strokeRect(ghost.x*T+1,ghost.y*T+1,b.w*T-2,b.h*T-2)}
+  // lava bombs in the air
+  for(const b of bombs){const p=Math.min(1,b.t/b.dur),x=b.sx+(b.tx-b.sx)*p,y=b.sy+(b.ty-b.sy)*p-Math.sin(p*Math.PI)*b.h;
+    ell(ctx,x,y,6,6,'#ff6a1a');ell(ctx,x-1.5,y-1.5,3,3,'#ffd23f')}
+  for(const k of sparks){ctx.globalAlpha=Math.max(0,1-k.t/.8);ell(ctx,k.x,k.y,2.2,2.2,k.c)}ctx.globalAlpha=1;
   // Fog over the parts of the island you haven't seen
   ctx.imageSmoothingEnabled=true;ctx.drawImage(fogC,0,0,W,H,0,0,W*T,H*T);
   // Villager chat
@@ -1349,7 +1468,7 @@ function draw(t){
     const light=(wx,wy,r)=>{const sx=(cssW/2+(wx-cam.x)*z)*dpr,sy=(cssH/2+(wy-cam.y)*z)*dpr,R=r*z*dpr;
       if(sx<-R||sy<-R||sx>darkC.width+R||sy>darkC.height+R)return;
       const g=darkX.createRadialGradient(sx,sy,0,sx,sy,R);g.addColorStop(0,'rgba(0,0,0,1)');g.addColorStop(1,'rgba(0,0,0,0)');darkX.fillStyle=g;darkX.fillRect(sx-R,sy-R,R*2,R*2)};
-    light(player.x,player.y-14,70);if(friend&&!friend.in)light(friend.x,friend.y-14,70);
+    light(player.x,player.y-14,70);if(VOLCANO)light((VOLCANO.x+.5)*T,(VOLCANO.y-2.5)*T,150);if(friend&&!friend.in)light(friend.x,friend.y-14,70);
     for(const o of S.objs){if(o.t==='lamp')light(o.x*T+16,o.y*T-12,110);else if(o.t==='house'||o.t==='cabin')light(o.x*T+32,o.y*T+42,55);else if(o.t==='myhouse')light(o.x*T+48,o.y*T+40,70);else if(o.t==='campfire')light(o.x*T+16,o.y*T+16,95);else if(o.t==='lighthouse')light(o.x*T+32,o.y*T-58,130)}
     darkX.globalCompositeOperation='source-over';
     ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(darkC,0,0);
@@ -1361,6 +1480,8 @@ function draw(t){
   for(const f of floats){ctx.globalAlpha=Math.min(1,(1.6-f.t)*2);ctx.font='bold 15px system-ui,sans-serif';ctx.lineWidth=3;ctx.strokeStyle='rgba(60,30,0,.7)';
     ctx.strokeText(f.txt,f.x,f.y-f.t*30);ctx.fillStyle='#fff6c8';ctx.fillText(f.txt,f.x,f.y-f.t*30)}
   ctx.globalAlpha=1;for(const p of confetti)rect(ctx,p.x,p.y,5,3,p.c);
+  if(VOLCANO){const left=ERUPT_MS-now()%ERUPT_MS;if(left<3000){ctx.setTransform(dpr,0,0,dpr,0,0);ctx.font='bold 34px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.lineWidth=5;ctx.strokeStyle='rgba(60,10,0,.8)';const txt=`🌋 ${Math.ceil(left/1000)}`;ctx.strokeText(txt,cssW/2,128);ctx.fillStyle='#ffd23f';ctx.fillText(txt,cssW/2,128)}}
   drawSleep();
 }
 
@@ -1914,12 +2035,12 @@ let lastTraySig='';
 function applySnap(m){
   const first=!guestMode,old=S;
   clockOff=m.now-Date.now();S=m.s;
-  if((S.seed||HOME_SEED)!==curSeed){genIsland(S.seed||HOME_SEED);featOrig=feat.slice();drawTerrain();roomCache.clear()}
+  if((S.seed||HOME_SEED)!==curSeed){genIsland(S.seed||HOME_SEED,S.kind||'');featOrig=feat.slice();drawTerrain();roomCache.clear()}
   feat.set(featOrig);for(const i of S.cut)feat[i]=0;
   landRev=0;
   for(let i=0;i<W*H;i++){const r=S.rev[i]==='1'||!first&&rev[i]?1:0;rev[i]=r;fogImg.data[i*4+3]=r?0:255;if(r&&ter[i]!==WATER)landRev++}
   fogX.putImageData(fogImg,0,0);
-  rebuildOcc();loadForage();
+  rebuildOcc();loadForage();if(curKind!=='volcano')scorps=[];else if(!scorps.length)spawnScorps();
   const who=s=>JSON.stringify(s.villagers.map(v=>[v.name,v.house]));
   if(first||who(old)!==who(S)){villagers=[];S.villagers.forEach(spawnVillager)}
   else for(const vw of villagers)vw.v=S.villagers.find(v=>v.name===vw.v.name)||vw.v;
@@ -1944,7 +2065,7 @@ function netTick(dt){
 }
 
 // ── Start ────────────────────────────────────────────────────────────────────
-S.villagers.forEach(spawnVillager);spawnAnimals();
+S.villagers.forEach(spawnVillager);spawnAnimals();spawnScorps();
 reveal(Math.floor(player.x/T),Math.floor(player.y/T),6);
 setMode('play');setTitle();
 if(!S.intro){
