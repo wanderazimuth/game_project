@@ -91,7 +91,7 @@ const CROPS={
   pineapple:{n:'Pineapple',e:'🍍',seed:80,grow:300,sell:320,col:'#f2b730',rare:1},
 };
 const ITEMS={...CROPS,
-  egg:{n:'Egg',e:'🥚',sell:25},bread:{n:'Bread',e:'🍞',sell:60},cheese:{n:'Cheese',e:'🧀',sell:160},truffle:{n:'Truffle',e:'🌰',sell:90},lavarock:{n:'Lava Rock',e:'🌋',sell:35},milk:{n:'Milk',e:'🥛',sell:60},honey:{n:'Honey',e:'🍯',sell:80},
+  egg:{n:'Egg',e:'🥚',sell:25},bread:{n:'Bread',e:'🍞',sell:60},cheese:{n:'Cheese',e:'🧀',sell:160},truffle:{n:'Truffle',e:'🌰',sell:90},lavarock:{n:'Lava Rock',e:'🌋',sell:35},icecrystal:{n:'Ice Crystal',e:'🧊',sell:50},milk:{n:'Milk',e:'🥛',sell:60},honey:{n:'Honey',e:'🍯',sell:80},
   fish:{n:'Fish',e:'🐟',sell:30},wood:{n:'Wood',e:'🪵',sell:3},stone:{n:'Stone',e:'🪨',sell:4},
   gem:{n:'Gem',e:'💎',sell:50},shell:{n:'Seashell',e:'🐚',sell:8},mushroom:{n:'Mushroom',e:'🍄',sell:12},
   flower:{n:'Wildflower',e:'🌼',sell:5}};
@@ -163,7 +163,7 @@ function noise(rng,cell){
     const a=g[iy*gw+ix],b=g[iy*gw+ix+1],c=g[(iy+1)*gw+ix],d=g[(iy+1)*gw+ix+1];
     return a+(b-a)*tx+(c-a)*ty+(a-b-c+d)*tx*ty}}
 const hash=(x,y)=>(((x*73856093)^(y*19349663))>>>0)%1000/1000;
-const WATER=0,SAND=1,GRASS=2,TREE=1,PALM=2,ROCK=3,VOLC=4; // VOLC: the volcano itself
+const WATER=0,SAND=1,GRASS=2,ICE=3,TREE=1,PALM=2,ROCK=3,VOLC=4; // ICE: a frozen lake (ground); VOLC: the volcano itself (a feature)
 const ter=new Uint8Array(W*H),feat=new Uint8Array(W*H),depth=new Uint8Array(W*H);
 const chestAt=new Int16Array(W*H).fill(-1);
 let SPAWN,SHIP,chests=[],landTotal=0;
@@ -175,7 +175,7 @@ function genIsland(seed=HOME_SEED,kind=''){
   feat.fill(0);chestAt.fill(-1);chests=[];landTotal=0;curSeed=seed;curKind=kind;VOLCANO=null;
   // each new island gets its own size, lakes and forests; the home island keeps the ones it always had
   const v=seed===HOME_SEED?null:rngFrom(seed^0x5bd1e995);
-  const P=kind==='volcano'?{rx:.42,ry:.42,lake:2,forest:2,trees:0,palms:0,lone:0,rocks:.22,sandRocks:.12}:v?{rx:.36+v()*.12,ry:.34+v()*.12,lake:.66+v()*.14,forest:.52+v()*.16,trees:.5+v()*.35,palms:.06+v()*.08,rocks:.04+v()*.04}
+  const P=kind==='ice'?{rx:.42,ry:.41,lake:.6,forest:.55,trees:.55,palms:0,lone:.02,rocks:.06,sandRocks:.02}:kind==='volcano'?{rx:.42,ry:.42,lake:2,forest:2,trees:0,palms:0,lone:0,rocks:.22,sandRocks:.12}:v?{rx:.36+v()*.12,ry:.34+v()*.12,lake:.66+v()*.14,forest:.52+v()*.16,trees:.5+v()*.35,palms:.06+v()*.08,rocks:.04+v()*.04}
     :{rx:.45,ry:.43,lake:.72,forest:.6,trees:.7,palms:.09,rocks:.055};
   const r=rngFrom(seed),n1=noise(r,9),n2=noise(r,4),n3=noise(r,7),nf=noise(r,5);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
@@ -193,6 +193,10 @@ function genIsland(seed=HOME_SEED,kind=''){
       for(const[a,b]of N4){const k=(y+b)*W+x+a;if(inMap(x+a,y+b)&&ter[k]!==WATER&&comp[k]<0){comp[k]=id;q.push(k)}}}
     if(n>bestN){bestN=n;best=id}id++}
   for(let i=0;i<W*H;i++)if(ter[i]!==WATER&&comp[i]!==best)ter[i]=WATER;
+  // On Ice Island the lakes are frozen: water the sea doesn't reach turns to ice
+  if(kind==='ice'){const sea=new Uint8Array(W*H),q=[0];sea[0]=1;
+    for(let h=0;h<q.length;h++){const j=q[h],x=j%W,y=j/W|0;for(const[a,b]of N4){const k=(y+b)*W+x+a;if(inMap(x+a,y+b)&&!sea[k]&&ter[k]===WATER){sea[k]=1;q.push(k)}}}
+    for(let i=0;i<W*H;i++)if(ter[i]===WATER&&!sea[i])ter[i]=ICE}
   // The crash site: the south beach, in the middle
   const cx=W>>1;let sy=H-1;while(sy>0&&ter[sy*W+cx]===WATER)sy--;
   SHIP={x:cx-1,y:sy-1,w:3,h:2};SPAWN={x:cx,y:sy-3};
@@ -222,7 +226,7 @@ function genIsland(seed=HOME_SEED,kind=''){
   const loot=['strawberry','melon','pineapple',60,80,100,120,150,200,250];
   for(let tries=0;tries<5000&&chests.length<loot.length;tries++){
     const x=2+(r()*(W-4)|0),y=2+(r()*(H-4)|0),i=y*W+x;
-    if(ter[i]===WATER||feat[i]===VOLC||Math.hypot(x-SPAWN.x,y-SPAWN.y)<11||chests.some(c=>Math.hypot(c.x-x,c.y-y)<8))continue;
+    if(ter[i]===WATER||ter[i]===ICE||feat[i]===VOLC||Math.hypot(x-SPAWN.x,y-SPAWN.y)<11||chests.some(c=>Math.hypot(c.x-x,c.y-y)<8))continue;
     feat[i]=0;chestAt[i]=chests.length;chests.push({x,y,loot:loot[chests.length]});
   }
 }
@@ -309,12 +313,16 @@ const terC=document.createElement('canvas');terC.width=W*T;terC.height=H*T;
 function drawTerrain(){
   const c=terC.getContext('2d');
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;
-    c.fillStyle=curKind==='volcano'?(depth[i]===1?'#ff8a1f':depth[i]===2?'#ef5a16':'#c63a12'):depth[i]===1?'#56b9e3':depth[i]===2?'#42a2da':'#2f88c9';c.fillRect(x*T,y*T,T,T)}
+    c.fillStyle=curKind==='volcano'?(depth[i]===1?'#ff8a1f':depth[i]===2?'#ef5a16':'#c63a12'):curKind==='ice'?(depth[i]===1?'#6fa9cf':depth[i]===2?'#4f8bb8':'#2f6795'):depth[i]===1?'#56b9e3':depth[i]===2?'#42a2da':'#2f88c9';c.fillRect(x*T,y*T,T,T)}
   const blob=(col,test,grow)=>{c.fillStyle=col;for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(test(y*W+x)){c.beginPath();c.roundRect(x*T-grow,y*T-grow,T+grow*2,T+grow*2,grow+6);c.fill()}};
-  const V=curKind==='volcano',PAL=V?{s1:'#3e393a',s2:'#4a4446',g:'#6e6159',g2:'#655850',g3:'#564a43',sd:'#2f2b2c'}:{s1:'#efd79a',s2:'#f4e0a8',g:'#7cc35d',g2:'#73b955',g3:'#5fa647',sd:'#e1c47f'};
+  const V=curKind==='volcano',PAL=V?{s1:'#3e393a',s2:'#4a4446',g:'#6e6159',g2:'#655850',g3:'#564a43',sd:'#2f2b2c'}:curKind==='ice'?{s1:'#b9cddd',s2:'#c9dae8',g:'#f2f7fb',g2:'#e7eff7',g3:'#cfdeec',sd:'#a9bfd2'}:{s1:'#efd79a',s2:'#f4e0a8',g:'#7cc35d',g2:'#73b955',g3:'#5fa647',sd:'#e1c47f'};
   blob(PAL.s1,i=>ter[i]!==WATER,5);
   blob(PAL.s2,i=>ter[i]!==WATER,2);
   blob(PAL.g,i=>ter[i]===GRASS,3);
+  blob('#a9dcf2',i=>ter[i]===ICE,1);
+  c.strokeStyle='rgba(255,255,255,.7)';c.lineWidth=2;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;if(ter[i]!==ICE)continue;const h=hash(x,y);
+    if(h<.5){c.beginPath();c.moveTo(x*T+6+h*10,y*T+24);c.lineTo(x*T+16+h*10,y*T+12);c.moveTo(x*T+12+h*10,y*T+26);c.lineTo(x*T+18+h*10,y*T+18);c.stroke()}}
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,h=hash(x,y),X=x*T,Y=y*T;
     if(ter[i]===GRASS){
       if(h<.5){c.fillStyle=PAL.g2;c.fillRect(X+(h*40|0)%24,Y+(h*97|0)%24,8,8)}
@@ -397,6 +405,7 @@ unstick(player);
 // ── What did you tap? ────────────────────────────────────────────────────────
 function pickAt(wx,wy){
   for(const sc of scorps)if(!sc.hide&&Math.abs(wx-sc.x)<17&&Math.abs(wy-sc.y+6)<15)return{k:'scorp',sc};
+  for(const cr of critters){const big=cr.kind==='bear';if(Math.abs(wx-cr.x)<(big?20:13)&&wy<cr.y+5&&wy>cr.y-(big?32:24))return{k:'critter',cr}}
   for(const v of villagers)if(!isGuest(v.v.name)&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
   const tx=Math.floor(wx/T),ty=Math.floor(wy/T);
   for(let d=0;d<4;d++){
@@ -418,6 +427,7 @@ function footprintOf(tg){
   if(tg.k==='chest'){const c=chests[tg.c];return{x:c.x,y:c.y,w:1,h:1}}
   if(tg.k==='vill'){const t=tileOf(tg.v);return{x:t.x,y:t.y,w:1,h:1}}
   if(tg.k==='scorp'){const t=tileOf(tg.sc);return{x:t.x,y:t.y,w:1,h:1}}
+  if(tg.k==='critter'){const t=tileOf(tg.cr);return{x:t.x,y:t.y,w:1,h:1}}
   return{x:tg.x??tg.i%W,y:tg.y??(tg.i/W|0),w:1,h:1};
 }
 function goToTarget(tg){
@@ -425,11 +435,14 @@ function goToTarget(tg){
   const pt=tileOf(player);
   if(tg.k==='volcano'){toast('🌋 Way too hot to climb!');return}
   if(tg.k==='fire'){toast('🔥 That\'s a fire flower — if you touch it, it burns something in your bag!',2800);return}
+  if(tg.k==='critter'){
+    if(Math.hypot(tg.cr.x-player.x,tg.cr.y-player.y)<T*1.8){player.path=[];arrive(tg);return}
+    const b=tileOf(tg.cr),r=findPath(pt.x,pt.y,(x,y)=>Math.abs(x-b.x)<=1&&Math.abs(y-b.y)<=1,b,avoid);player.path=r?r.path:[];player.target=tg;return}
   if(tg.k==='scorp'){ // close enough to bonk it, or run after it
     if(Math.hypot(tg.sc.x-player.x,tg.sc.y-player.y)<T*1.8){player.path=[];arrive(tg);return}
     const b=tileOf(tg.sc),r=findPath(pt.x,pt.y,(x,y)=>Math.abs(x-b.x)<=1&&Math.abs(y-b.y)<=1,b);player.path=r?r.path:[];player.target=tg;return}
   if(tg.k==='ground'){
-    const g=(x,y)=>x===tg.x&&y===tg.y,r=findPath(pt.x,pt.y,g,tg,noFire)||findPath(pt.x,pt.y,g,tg);
+    const g=(x,y)=>x===tg.x&&y===tg.y,r=findPath(pt.x,pt.y,g,tg,avoid)||findPath(pt.x,pt.y,g,tg);
     player.target=null;player.path=r?r.path:[];
     if(r&&!r.ok&&!walkable(tg.x,tg.y)&&rev[tg.y*W+tg.x])toast(feat[tg.y*W+tg.x]?'Tap a tree 🌳 to chop it, or a rock to mine it':'Can\'t walk there');
     return;
@@ -439,7 +452,7 @@ function goToTarget(tg){
     if(onIt&&x>=f.x&&x<f.x+f.w&&y>=f.y&&y<f.y+f.h)return true;
     return x>=f.x-1&&x<=f.x+f.w&&y>=f.y-1&&y<=f.y+f.h&&!(x>=f.x&&x<f.x+f.w&&y>=f.y&&y<f.y+f.h);
   };
-  const r=findPath(pt.x,pt.y,goal,null,noFire)||findPath(pt.x,pt.y,goal,null);
+  const r=findPath(pt.x,pt.y,goal,null,avoid)||findPath(pt.x,pt.y,goal,null);
   if(!r){toast('Can\'t get there — chop trees 🪓 to make a way');return}
   if(tg.k==='vill')tg.v.wait=Math.max(tg.v.wait,4),tg.v.path=[];
   player.path=r.path;player.target=tg;player.act=null;
@@ -453,6 +466,7 @@ function arrive(tg){
     case'ship':shipModal();break;
     case'chest':doAct('chest',{c:tg.c});break;
     case'forage':if(forageAt.has(tg.i))act(250,'pick',()=>doAct('forage',{i:tg.i}));break;
+    case'critter':if(Math.hypot(tg.cr.x-player.x,tg.cr.y-player.y)<T*2.4){facePoint(tg.cr.x,tg.cr.y);feedCritter(tg.cr)}else toast('It wandered off!');break;
     case'scorp':if(Math.hypot(tg.sc.x-player.x,tg.sc.y-player.y)<T*2.2){facePoint(tg.sc.x,tg.sc.y);act(250,'chop',()=>bonk(tg.sc))}else toast('🦂 It scuttled away — after it!');break;
     case'feat':{const kind=feat[tg.i];if(kind===VOLC)break;if(kind)act(kind===ROCK?800:700,kind===ROCK?'mine':'chop',()=>doAct('feat',{i:tg.i}));break}
     case'obj':useObj(tg.o,act);break;
@@ -564,7 +578,7 @@ function scorpSpot(){
     if(walkable(x,y)&&!objAt(y*W+x)&&Math.hypot(x-SPAWN.x,y-SPAWN.y)>11)return{x:x*T+16,y:y*T+20}}
   return{x:SPAWN.x*T,y:(SPAWN.y-12)*T};
 }
-function spawnScorps(){scorps=curKind==='volcano'?Array.from({length:6},()=>({...scorpSpot(),wa:Math.random()*6,wt:0,loot:null,stun:0,hide:0,flee:0,dir:1,walk:0})):[]}
+function spawnScorps(){spawnCritters();scorps=curKind==='volcano'?Array.from({length:6},()=>({...scorpSpot(),wa:Math.random()*6,wt:0,loot:null,stun:0,hide:0,flee:0,dir:1,walk:0})):[]}
 function volcanoUpdate(dt){
   if(!VOLCANO)return;
   const phase=now()%ERUPT_MS,cx=(VOLCANO.x+.5)*T,cy=(VOLCANO.y-2.6)*T;
@@ -610,6 +624,8 @@ function fireAt(x,y){
   return o&&o.t==='flowers'||forageAt.has(i)&&forage[forageAt.get(i)].k==='fireflower';
 }
 const noFire=(x,y)=>walkable(x,y)&&!fireAt(x,y);
+// tap-to-walk keeps off fire flowers and the ice when there's another way
+const avoid=(x,y)=>noFire(x,y)&&ter[y*W+x]!==ICE;
 function burn(){
   for(let k=0;k<12;k++)sparks.push({x:player.x,y:player.y-6,vx:(Math.random()-.5)*110,vy:-40-Math.random()*90,t:0,c:k%2?'#ff6a1a':'#ffd23f'});
   const ks=Object.keys(S.inv).filter(k=>S.inv[k]>0&&ITEMS[k]);
@@ -657,6 +673,85 @@ function drawScorp(c,sc,t){
   if(sc.loot)bubble(c,x,y-20,sc.loot.coins?'🪙':ITEMS[sc.loot.k].e);
 }
 
+// ── Ice Island: snow, slippery frozen lakes, penguins and polar bears ────────
+let critters=[];
+function spawnCritters(){
+  critters=curKind!=='ice'?[]:[...Array(10)].map((_,k)=>({kind:k<7?'peng':'bear',...scorpSpot(),wa:Math.random()*6,wt:0,dir:1,walk:0,happy:0,calm:0,still:false}));
+}
+const onIce=e=>{const t=tileOf(e);return inMap(t.x,t.y)&&ter[t.y*W+t.x]===ICE};
+const noIce=(x,y)=>walkable(x,y)&&ter[y*W+x]!==ICE;
+// stepping onto the ice: whoosh, all the way across in a straight line
+function maybeSlide(ox,oy){
+  const mx=player.x-ox,my=player.y-oy;if(!(mx||my)||!onIce(player))return;const l=Math.hypot(mx,my);
+  player.slide={vx:mx/l,vy:my/l,dest:player.path.length?player.path[player.path.length-1]:null,tg:player.target};
+  player.path=[];player.target=null;player.steer=null;floatAt(player.x,player.y-38,'Wheee!');
+}
+function slideStep(dt){
+  const sl=player.slide,sp=T*5.5*dt,bx=player.x,by=player.y;moveBy(player,sl.vx*sp,sl.vy*sp,walkable);player.walk=0;
+  if(Math.hypot(player.x-bx,player.y-by)>sp*.3&&onIce(player))return;
+  player.slide=null; // off the ice, or bumped into something: carry on to where you were going
+  if(sl.dest!=null){const gx=sl.dest%W,gy=sl.dest/W|0,pt=tileOf(player),g=(x,y)=>x===gx&&y===gy;
+    const r=findPath(pt.x,pt.y,g,null,noIce)||findPath(pt.x,pt.y,g,null);if(r){player.path=r.path;player.target=sl.tg}}
+  else if(sl.tg)player.target=sl.tg;
+}
+function iceUpdate(dt){
+  for(const cr of critters){
+    cr.happy=Math.max(0,cr.happy-dt);cr.calm=Math.max(0,cr.calm-dt);
+    if(cr.happy>0){cr.walk=0;continue}
+    const dx=player.x-cr.x,dy=player.y-cr.y,d=Math.hypot(dx,dy);let vx,vy,sp;
+    if(cr.kind==='bear'&&!cr.calm&&d<T*4&&!player.stun&&!player.slide){vx=dx;vy=dy;sp=T*1.7;if(d<18){bearHit(cr);continue}} // here comes the bear!
+    else{if((cr.wt-=dt)<=0){cr.wt=1+Math.random()*3;cr.wa=Math.random()*Math.PI*2;cr.still=Math.random()<.4}
+      if(cr.still){cr.walk=0;continue}vx=Math.cos(cr.wa);vy=Math.sin(cr.wa);sp=cr.kind==='bear'?T*.6:T*.9}
+    const l=Math.hypot(vx,vy)||1,mx=vx/l*sp*dt,my=vy/l*sp*dt;let moved=false;
+    if(animalOk(cr.x+mx,cr.y)){cr.x+=mx;moved=true}if(animalOk(cr.x,cr.y+my)){cr.y+=my;moved=true}
+    if(!moved)cr.wa=Math.random()*Math.PI*2;if(mx)cr.dir=mx<0?-1:1;cr.walk+=dt*10;
+  }
+}
+function bearHit(cr){
+  const a=Math.atan2(player.y-cr.y,player.x-cr.x)||1.5;for(let k=0;k<8;k++)moveBy(player,Math.cos(a)*6,Math.sin(a)*6,walkable);
+  player.stun=.8;player.path=[];player.target=null;player.act=null;floatAt(cr.x,cr.y-34,'ROAR!');
+  if(S.inv.fish){doAct('steal',{k:'fish',n:1});cr.calm=25;floatAt(player.x,player.y-40,'-1 🐟');toast('🐻‍❄️ ROAR! The polar bear gobbled a 🐟 fish from your bag!',2800)}
+  else{cr.calm=6;toast('🐻‍❄️ ROAR! Polar bears love 🐟 fish — bring one next time!',2800)}
+}
+function feedCritter(cr){
+  const bear=cr.kind==='bear';
+  if(!S.inv.fish){toast(bear?'🐻‍❄️ Grrr… polar bears love 🐟 fish':'🐧 Squawk! Penguins love 🐟 fish');cr.happy=.6;return}
+  cr.happy=1.5;
+  if(bear){doAct('trade',{from:'fish',to:'icecrystal',coins:40});cr.calm=90;floatAt(cr.x,cr.y-34,'+🪙40 +🧊');toast('🐻‍❄️ The polar bear loved the fish! It gave you 🪙40 and an 🧊 Ice Crystal, then curled up for a nap')}
+  else{doAct('trade',{from:'fish',to:'icecrystal'});floatAt(cr.x,cr.y-28,'+🧊');toast('🐧 The penguin gobbled the fish and gave you an 🧊 Ice Crystal!')}
+}
+function drawCritterRaw(c,cr,t){
+  const q={x:cr.x,y:cr.y,dir:cr.dir<0?'left':'right',walk:cr.walk,happy:cr.happy};
+  if(cr.kind==='peng'){drawPet(c,{k:'penguin',v:0,id:1},q,t);return}
+  const x=cr.x,s=cr.dir,st=cr.walk?Math.sin(cr.walk)*2:0,y=cr.y-(cr.happy>0?Math.abs(Math.sin(cr.happy*8))*4:0);
+  ell(c,x,cr.y,16,4.5,'rgba(0,0,0,.18)');
+  for(const dx of[-9,-4,4,9])rect(c,x+dx*s-2.5,y-10+(dx<0?st:-st),5,10,'#e6ecf1',2);
+  ell(c,x,y-14,15,9.5,'#f4f6f8');ell(c,x-2*s,y-12,10,5,'rgba(180,200,215,.25)');ell(c,x+14*s,y-19,7.5,6.5,'#f4f6f8');
+  ell(c,x+10*s,y-25,2.6,2.6,'#f4f6f8');ell(c,x+17*s,y-25,2.6,2.6,'#f4f6f8');ell(c,x+19*s,y-17,4,3,'#e6ecf1');ell(c,x+22*s,y-18,1.8,1.4,'#222');
+  c.fillStyle='#222';c.fillRect(x+15*s-.8,y-22,1.8,1.8);
+  if(cr.calm>8){c.font='11px sans-serif';c.textAlign='center';c.fillText('💤',x+8*s,y-34)}
+}
+const drawCritter=(...a)=>plain(drawCritterRaw)(...a);
+// gently falling snow
+function drawSnowfall(t){
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='rgba(255,255,255,.85)';
+  for(let k=0;k<80;k++){const sp=.5+(k%5)/5,x=((k*97.3+t*14*sp+Math.sin(t+k)*12)%cssW+cssW)%cssW,y=(k*53.7+t*34*sp)%cssH;ctx.beginPath();ctx.arc(x,y,1+(k%3)*.7,0,Math.PI*2);ctx.fill()}
+}
+function iglooRaw(c,o,t,icon,night){
+  const w=BUILD[o.t].w*T,X=o.x*T,Y=o.y*T,cx=X+w/2,base=Y+60,rx=w/2-5,ry=w>64?44:40;
+  ell(c,cx,base+2,rx+4,6,'rgba(0,0,0,.12)');
+  c.fillStyle='#f4f9fd';c.beginPath();c.ellipse(cx,base,rx,ry,0,Math.PI,0);c.fill();
+  c.strokeStyle='rgba(120,160,190,.55)';c.lineWidth=1.2;
+  for(let k=1;k<4;k++){const yy=base-k*ry/4,hw=rx*Math.sqrt(1-(k/4)**2);c.beginPath();c.moveTo(cx-hw,yy);c.lineTo(cx+hw,yy);c.stroke();
+    for(let j=-3;j<=3;j++){const xx=cx+j*hw/3.5+(k%2)*hw/7;if(Math.abs(xx-cx)<hw-3){c.beginPath();c.moveTo(xx,yy);c.lineTo(xx,yy+ry/4);c.stroke()}}}
+  c.fillStyle='#e3eef7';c.beginPath();c.ellipse(cx,base,13,18,0,Math.PI,0);c.fill();
+  c.fillStyle='#2f4a66';c.beginPath();c.ellipse(cx,base,8,13,0,Math.PI,0);c.fill();
+  if(night>.2&&!icon){c.fillStyle='rgba(255,220,120,.85)';c.beginPath();c.ellipse(cx,base,8,13,0,Math.PI,0);c.fill()}
+  c.fillStyle='#8a5a2c';c.fillRect(cx-1,base-ry-14,2,16);poly(c,o.t==='myhouse'?'#e74c3c':ROOFS[o.id%ROOFS.length],cx+1,base-ry-14,cx+13,base-ry-10,cx+1,base-ry-6);
+  if(o.t==='myhouse'){ell(c,cx+rx*.55,base-ry*.45,6,6,'#fff');c.font='9px sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillStyle='#e74c3c';c.fillText('❤',cx+rx*.55,base-ry*.45+1)}
+}
+const igloo=(...a)=>plain(iglooRaw)(...a); // igloos keep their own snowy colors
+
 // ── Sailing to other islands ─────────────────────────────────────────────────
 const ISLE_NAMES=['Coconut Cove','Sunny Shores','Turtle Bay','Mango Island','Seashell Isle','Palm Paradise','Starfish Point','Pirate Rock',
   'Rainbow Reef','Breezy Beach','Pelican Point','Dolphin Isle','Banana Bay','Pearl Island','Sandy Toes','Lagoon Land'];
@@ -668,9 +763,11 @@ function sailModal(){
   for(const i of isles.list){const here=i.id===isles.cur;
     h+=`<div class="irow"><span class="ie">${i.id?'🏝️':'🏠'}</span><span class="in">${cleanName(i.name)}${here?'<br><span class="ip">You are here</span>':''}</span>
       <button class="btn gray" data-a="ren" data-v="${i.id}" style="padding:0 10px">✏️</button>${here?'':`<button class="btn blue" data-a="go" data-v="${i.id}">Sail</button>`}</div>`}
+  if(!isles.list.some(i=>i.kind==='ice'))h+=`<div class="irow"><span class="ie">🧊</span><span class="in">Ice Island<br><span class="ip">Snow, slippery ice, penguins and polar bears!</span></span><button class="btn blue" data-a="ice">Sail</button></div>`;
   if(!isles.list.some(i=>i.kind==='volcano'))h+=`<div class="irow"><span class="ie">🌋</span><span class="in">Volcano Island<br><span class="ip">Hot lava and sneaky scorpions — be careful!</span></span><button class="btn blue" data-a="volc">Sail</button></div>`;
   h+=`<div class="btns">${isles.list.length<MAX_ISLES?'<button class="btn" data-a="new">✨ Discover a new island</button>':''}<button class="btn gray" data-a="close">Stay here</button></div>`;
   openModal(h,{go:id=>{closeModal();sailTo(+id)},ren:id=>nameModal(+id),new:()=>nameModal(null),
+    ice:()=>{closeModal();if(net){toast('Stop playing together (👥) before sailing');return}const id=isles.next++;isles.list.push({id,name:'Ice Island',seed:424242,kind:'ice'});saveIsles();sailTo(id)},
     volc:()=>{closeModal();if(net){toast('Stop playing together (👥) before sailing');return}const id=isles.next++;isles.list.push({id,name:'Volcano Island',seed:666013,kind:'volcano'});saveIsles();sailTo(id)}});
 }
 // name a new island (id null), or rename one of yours
@@ -870,6 +967,7 @@ function canPlace(t,x,y){
     if(b.on==='shore'){if(ter[k]!==WATER||!N4.some(([a,c])=>inMap(X+a,Y+c)&&ter[(Y+c)*W+X+a]!==WATER))return'Docks go in the water, next to the beach'}
     else if(b.on==='water'){if(ter[k]!==WATER)return'Bridges go over water'}
     else if(ter[k]===WATER)return'Can\'t build on water';
+    else if(ter[k]===ICE)return'Too slippery to build on the ice!';
   }
   return'';
 }
@@ -965,6 +1063,7 @@ const ACT={
   steal({k,n,coins}){if(coins){S.coins-=Math.min(coins,S.coins)}else if(S.inv[k]){S.inv[k]-=Math.min(n,S.inv[k]);if(!S.inv[k])delete S.inv[k];refreshTray()}dirty()},
   giveBack({k,n,coins}){if(coins)S.coins+=coins;else if(ITEMS[k])give(k,n);dirty()},
   lavaPick(){give('lavarock',1);tally('collect:lavarock')},
+  trade({from,to,coins}){if(!S.inv[from])return;S.inv[from]--;if(!S.inv[from])delete S.inv[from];if(to)give(to,1);if(coins)S.coins+=coins;refreshTray();dirty()},
   skipJob(){if(S.job){newJob();toast('🔄 Here\'s a different job!')}},
   homePlace({k,x,y}){const F=FURN[k];if(!F)return;const why=furnWhy(k,x,y,null,S.home.items)||(S.coins<F.cost?`Need 🪙${F.cost} for ${F.n}`:'');if(why){toast(why);return}
     S.coins-=F.cost;S.home.items.push({id:S.home.next++,k,x,y,c:0});if(F.cost)floatAt((x+F.w/2)*T,y*T,`-🪙${F.cost}`);
@@ -1135,9 +1234,12 @@ function update(dt){
   if(!guestMode){visitorsComeAndGo();if((feedT-=dt)<=0){feedT=2;autoFeed()}}
   // Player
   if(curKind==='volcano'&&!inside)volcanoUpdate(dt);
+  if(curKind==='ice'&&!inside)iceUpdate(dt);
   if(player.act){if(tNow>=player.act.end){const f=player.act.fn;player.act=null;f()}}
   else if(player.stun>0){player.stun-=dt;player.walk=0}
+  else if(player.slide)slideStep(dt);
   else if(mode==='play'){
+    const ox=player.x,oy=player.y;
     let vx=0,vy=0;
     if(keys.has('arrowleft')||keys.has('a'))vx--;if(keys.has('arrowright')||keys.has('d'))vx++;
     if(keys.has('arrowup')||keys.has('w'))vy--;if(keys.has('arrowdown')||keys.has('s'))vy++;
@@ -1146,6 +1248,7 @@ function update(dt){
     if(vx||vy){const l=Math.hypot(vx,vy);vx/=l;vy/=l;player.path=[];player.target=null;moveBy(player,vx*sp*dt,vy*sp*dt,pWalk());
       player.dir=Math.abs(vx)>Math.abs(vy)?(vx<0?'left':'right'):(vy<0?'up':'down');player.walk+=dt*10}
     else if(!followPath(player,sp,dt)){player.walk=0;if(player.target){const tg=player.target;player.target=null;arrive(tg)}}
+    if(curKind==='ice'&&!inside)maybeSlide(ox,oy);
   }
   const pt=tileOf(player),pk=pt.y*W+pt.x;
   if(inside){if(pt.x===DOOR_X&&pt.y===RH&&!player.path.length)exitHouse();else petsWander(dt)}
@@ -1206,43 +1309,57 @@ const VNAMES={farm:'Ash Farmland',myhouse:'Your Volcano House',path:'Obsidian Pa
   flowers:'Fire Flowers',tree:'Fire Tree',bench:'Stone Bench',lamp:'Lava Lamp',campfire:'Lava Pit',picnic:'Stone Table',statue:'Obsidian Statue',playground:'Rock Playground',
   windmill:'Steam Mill',well:'Magma Well',house:'Basalt House',cabin:'Stone Cabin',coop:'Stone Coop',hive:'Fire Hive',dock:'Dock',barn:'Basalt Barn',pond:'Lava Pond',
   pigpen:'Mud Pen',bakery:'Lava Oven Bakery',creamery:'Stone Creamery',greenhouse:'Glowhouse',bin:'Stone Bin',market:'Ember Market',fountain:'Lava Fountain',lighthouse:'Fire Beacon'};
-const bname=t=>curKind==='volcano'&&VNAMES[t]||BUILD[t].n;
-let themed=false; // true while drawing Volcano Island's version of something
-const volcCache=new Map();
-// wood turns to charred basalt, water and glass to glowing lava, plants to fire, white to ash
-function volc(col){
-  if(volcCache.has(col))return volcCache.get(col);
+const INAMES={farm:'Frost Farmland',myhouse:'Your Igloo',path:'Ice Path',fence:'Icicle Fence',gate:'Icicle Gate',hedge:'Snow Hedge',bridge:'Ice Bridge',
+  flowers:'Frost Flowers',tree:'Snowy Pine',bench:'Ice Bench',lamp:'Ice Lantern',campfire:'Cozy Fire',picnic:'Ice Table',statue:'Ice Statue',playground:'Snow Playground',
+  windmill:'Frosty Windmill',well:'Ice Well',house:'Igloo',cabin:'Guest Igloo',coop:'Snowy Coop',hive:'Frost Hive',dock:'Ice Dock',barn:'Snowy Barn',pond:'Frozen Pond',
+  pigpen:'Snowy Pen',bakery:'Cocoa Bakery',creamery:'Ice Cream Shop',greenhouse:'Warm Greenhouse',bin:'Ice Bin',market:'Frost Market',fountain:'Ice Fountain',lighthouse:'Ice Lighthouse'};
+const bname=t=>curKind==='volcano'&&VNAMES[t]||curKind==='ice'&&INAMES[t]||BUILD[t].n;
+let themed=null; // the color change to draw with, while drawing Volcano or Ice Island's version of something
+const themeFor=()=>curKind==='volcano'?volc:curKind==='ice'?icy:null;
+// a color change, made from a rule that turns one hue/saturation/lightness into another
+function hslMap(rule){const cache=new Map();return col=>{
+  if(cache.has(col))return cache.get(col);
   let r,g,b,a=1,m;
   if((m=/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(col))){let h=m[1];if(h.length===3)h=h.replace(/./g,'$&$&');r=parseInt(h.slice(0,2),16);g=parseInt(h.slice(2,4),16);b=parseInt(h.slice(4,6),16)}
   else if((m=/^rgba?\(([^)]+)\)$/.exec(col))){[r,g,b,a=1]=m[1].split(',').map(Number)}
-  else{volcCache.set(col,col);return col}
+  else{cache.set(col,col);return col}
   r/=255;g/=255;b/=255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b);let l=(mx+mn)/2,s=0,h=0;
   if(mx!==mn){const d=mx-mn;s=l>.5?d/(2-mx-mn):d/(mx+mn);h=(mx===r?(g-b)/d+(g<b?6:0):mx===g?(b-r)/d+2:(r-g)/d+4)*60}
+  [h,s,l]=rule(h,s,l);
+  const q=l<.5?l*(1+s):l+s-l*s,p=2*l-q,f=t=>{t=(t%360+360)%360/360;return t<1/6?p+(q-p)*6*t:t<.5?q:t<2/3?p+(q-p)*(2/3-t)*6:p};
+  const out=`rgba(${Math.round(f(h+120)*255)},${Math.round(f(h)*255)},${Math.round(f(h-120)*255)},${a})`;
+  cache.set(col,out);return out}}
+// Ice Island: white turns to snow, water and glass to ice, leaves to frost, wood to icy planks
+const icy=hslMap((h,s,l)=>{
+  if(l>.86||s<.15)return[205,.35,.72+l*.24];
+  if(h>=175&&h<265)return[195,.75,Math.min(.8,.5+l*.3)];
+  if(h>=70&&h<175)return[175,.35,.45+l*.35];
+  if(h>=15&&h<50&&!(s>.65&&l>.45))return[210,.22,.42+l*.4];
+  return[h,s,l]});
+// wood turns to charred basalt, water and glass to glowing lava, plants to fire, white to ash
+const volc=hslMap((h,s,l)=>{
   if(l>.86||s<.15){s=.06;l=.16+l*.48}                       // white and grey: ash and basalt
   else if(h>=175&&h<265){h=24;s=.95;l=Math.min(.62,.42+l*.22)}  // water, sky and glass: lava glow
   else if(h>=70&&h<175){h=10;s=.85;l=l*.85}                  // leaves: fire
   else if(h>=265&&h<330){s*=.5;l*=.7}
   else if(h>=15&&h<50&&!(s>.65&&l>.45)){h=12;s*=.3;l=.13+l*.42} // wood and roofs: charcoal
-  const q=l<.5?l*(1+s):l+s-l*s,p=2*l-q,f=t=>{t=(t%360+360)%360/360;return t<1/6?p+(q-p)*6*t:t<.5?q:t<2/3?p+(q-p)*(2/3-t)*6:p};
-  const out=`rgba(${Math.round(f(h+120)*255)},${Math.round(f(h)*255)},${Math.round(f(h-120)*255)},${a})`;
-  volcCache.set(col,out);return out;
-}
+  return[h,s,l]});
 const FS=Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype,'fillStyle'),SS=Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype,'strokeStyle');
 // let a canvas draw in the volcano style while `themed` is on
 function themeCtx(c){
   if(c._themed)return;c._themed=1;
-  Object.defineProperty(c,'fillStyle',{get(){return FS.get.call(this)},set(v){FS.set.call(this,themed&&typeof v==='string'?volc(v):v)}});
-  Object.defineProperty(c,'strokeStyle',{get(){return SS.get.call(this)},set(v){SS.set.call(this,themed&&typeof v==='string'?volc(v):v)}});
+  Object.defineProperty(c,'fillStyle',{get(){return FS.get.call(this)},set(v){FS.set.call(this,themed&&typeof v==='string'?themed(v):v)}});
+  Object.defineProperty(c,'strokeStyle',{get(){return SS.get.call(this)},set(v){SS.set.call(this,themed&&typeof v==='string'?themed(v):v)}});
 }
 // draw fn in the volcano style if you're on Volcano Island (people, pets and speech bubbles keep their colors)
 function styled(c,on,fn){themeCtx(c);const was=themed;themed=on;try{fn()}finally{themed=was}}
-const plain=fn=>(...a)=>{const was=themed;themed=false;try{return fn(...a)}finally{themed=was}};
+const plain=fn=>(...a)=>{const was=themed;themed=null;try{return fn(...a)}finally{themed=was}};
 
 const bubble=plain(bubbleRaw);
 function bubbleRaw(c,x,y,txt){rect(c,x-13,y-26,26,24,'rgba(255,255,255,.95)',8);poly(c,'rgba(255,255,255,.95)',x-4,y-3,x+4,y-3,x,y+3);
   c.font=`15px ${EMOJI_FONT}`;c.textAlign='center';c.textBaseline='middle';c.fillText(txt,x,y-13)}
 const ROOFS=['#d9534f','#4a8fd9','#4fae5c','#9b59b6','#f0ad4e','#e8739a'],WALLS=['#fff4dc','#ffe9c7','#f3f0ff','#e8f7ff'];
-function drawObj(c,o,t,icon){styled(c,curKind==='volcano',()=>drawObjIn(c,o,t,icon))}
+function drawObj(c,o,t,icon){styled(c,themeFor(),()=>drawObjIn(c,o,t,icon))}
 function drawObjIn(c,o,t,icon){
   const X=o.x*T,Y=o.y*T,night=icon?0:nightness();
   switch(o.t){
@@ -1313,21 +1430,21 @@ function drawObjIn(c,o,t,icon){
   case'hive':rect(c,X+8,Y+24,3,7,'#6b4a2a');rect(c,X+21,Y+24,3,7,'#6b4a2a');rect(c,X+6,Y+17,20,8,'#e7a925',3);rect(c,X+7,Y+10,18,8,'#f2c43d',3);rect(c,X+8,Y+4,16,7,'#f6d35b',3);
     ell(c,X+16,Y+21,3,2,'#5a3b10');if(!icon)for(let k=0;k<3;k++){const a=t*2+k*2.1;ell(c,X+16+Math.cos(a)*13,Y+8+Math.sin(a*1.7)*7,2,1.6,'#222');ell(c,X+16+Math.cos(a)*13,Y+7+Math.sin(a*1.7)*7,1.6,1,'rgba(255,255,255,.8)')}break;
   case'bin':rect(c,X+3,Y+11,26,18,'#a0682f',3);rect(c,X+3,Y+18,26,3,'#7b4b20');rect(c,X+1,Y+6,30,7,'#7b4b20',3);ell(c,X+16,Y+24,4,3,'#ffd24a');break;
-  case'house':{const roof=ROOFS[o.id%ROOFS.length],wall=WALLS[o.id%WALLS.length];
+  case'house':if(curKind==='ice'){igloo(c,o,t,icon,night);break}{const roof=ROOFS[o.id%ROOFS.length],wall=WALLS[o.id%WALLS.length];
     rect(c,X+44,Y+4,8,16,'#8b5a3c');rect(c,X+6,Y+26,52,36,wall,3);rect(c,X+6,Y+56,52,6,'rgba(0,0,0,.08)');
     poly(c,roof,X+1,Y+30,X+32,Y+2,X+63,Y+30);poly(c,'rgba(0,0,0,.15)',X+1,Y+30,X+63,Y+30,X+60,Y+27,X+4,Y+27);
     const win=night>.2?'#ffe27a':'#9fd8ff';
     for(const wx of[X+12,X+42]){rect(c,wx,Y+36,11,11,win,2);c.fillStyle='#fff';c.fillRect(wx+5,Y+36,1.5,11);c.fillRect(wx,Y+41,11,1.5)}
     rect(c,X+26,Y+42,12,20,'#8b5a3c',3);ell(c,X+35,Y+53,1.4,1.4,'#ffd24a');break}
-  case'myhouse':rect(c,X+68,Y-16,10,24,'#9a5b3c',2);rect(c,X+6,Y+18,84,44,'#fff6e6',4);rect(c,X+6,Y+56,84,6,'rgba(0,0,0,.08)');
+  case'myhouse':if(curKind==='ice')igloo(c,o,t,icon,night);else{rect(c,X+68,Y-16,10,24,'#9a5b3c',2);rect(c,X+6,Y+18,84,44,'#fff6e6',4);rect(c,X+6,Y+56,84,6,'rgba(0,0,0,.08)');
     poly(c,'#3d7fc4',X,Y+24,X+48,Y-22,X+96,Y+24);poly(c,'#2f66a3',X,Y+24,X+96,Y+24,X+92,Y+20,X+4,Y+20);
     for(let k=0;k<7;k++)ell(c,X+6+k*14,Y+24,7,4,'#2f66a3');
     ell(c,X+48,Y+4,8,8,'#fff6e6');c.font='11px sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillStyle='#e74c3c';c.fillText('❤',X+48,Y+5);
     for(const wx of[X+14,X+66]){rect(c,wx,Y+30,16,14,night>.2?'#ffe27a':'#9fd8ff',2);c.fillStyle='#fff';c.fillRect(wx+7,Y+30,2,14);c.fillRect(wx,Y+36,16,2);
       rect(c,wx-2,Y+44,20,5,'#8a5a2c',2);for(let f=0;f<4;f++)ell(c,wx+1+f*5,Y+43,2.4,2.4,['#ff6b8b','#ffd23f','#b980ff','#ff8c42'][f])}
-    rect(c,X+40,Y+36,16,26,'#c0392b',4);ell(c,X+52,Y+50,1.6,1.6,'#ffd24a');ell(c,X+48,Y+63,11,2.5,'#7bc96f');
+    rect(c,X+40,Y+36,16,26,'#c0392b',4);ell(c,X+52,Y+50,1.6,1.6,'#ffd24a');ell(c,X+48,Y+63,11,2.5,'#7bc96f')}
     if(!icon&&pets().some(hungry))bubble(c,X+48,Y-24,'🐾');else if(!icon&&guests().length)bubble(c,X+48,Y-24,'👋');break;
-  case'cabin':rect(c,X+43,Y+4,9,18,'#8f96a3',2);rect(c,X+6,Y+26,52,36,'#9c6233',3);
+  case'cabin':if(curKind==='ice'){igloo(c,o,t,icon,night);break}rect(c,X+43,Y+4,9,18,'#8f96a3',2);rect(c,X+6,Y+26,52,36,'#9c6233',3);
     for(let k=0;k<6;k++){c.fillStyle='#7d4b24';c.fillRect(X+6,Y+31+k*6,52,1.6);ell(c,X+7,Y+28+k*6,3,3,'#c08a52');ell(c,X+57,Y+28+k*6,3,3,'#c08a52')}
     poly(c,'#4e3b2a',X,Y+30,X+32,Y+4,X+64,Y+30);poly(c,'#3a2b1e',X,Y+30,X+64,Y+30,X+61,Y+26,X+3,Y+26);
     rect(c,X+26,Y+40,12,22,'#5a3418',3);ell(c,X+35,Y+52,1.4,1.4,'#ffd24a');
@@ -1389,7 +1506,9 @@ function drawCropRaw(c,o,t){
 }
 function drawTree(c,x,y,kind,t){
   const X=x*T+16,Y=y*T+28,h=hash(x,y),sw=Math.sin(t*1.3+h*6)*1.2;
-  if(kind===TREE){ell(c,X,Y,11,4,'rgba(0,0,0,.18)');rect(c,X-4,Y-14,8,15,'#7a4f2a',2);
+  if(kind===TREE&&curKind==='ice'){ell(c,X,Y,10,4,'rgba(0,0,0,.15)');rect(c,X-3,Y-9,6,10,'#6b4a2a',2);
+    for(let k=0;k<3;k++){const w=15-k*4,yy=Y-8-k*10;poly(c,'#2f6b4a',X-w+sw*.5,yy,X+w+sw*.5,yy,X+sw,yy-14);poly(c,'#f4f9fd',X-w*.55+sw*.5,yy-6,X+w*.55+sw*.5,yy-6,X+sw,yy-14)}}
+  else if(kind===TREE){ell(c,X,Y,11,4,'rgba(0,0,0,.18)');rect(c,X-4,Y-14,8,15,'#7a4f2a',2);
     ell(c,X+sw,Y-24,15,13,'#2f7d32');ell(c,X-6+sw,Y-28,9,8,'#3c9a3e');ell(c,X+5+sw,Y-32,9,8,'#45a847');ell(c,X-1+sw,Y-36,6,5,'#5cbf54');
     if(h>.7){ell(c,X-6,Y-22,2,2,'#e63946');ell(c,X+6,Y-26,2,2,'#e63946')}}
   else if(kind===PALM){ell(c,X,Y,10,4,'rgba(0,0,0,.15)');c.strokeStyle='#9a6a3a';c.lineWidth=5;c.lineCap='round';c.beginPath();c.moveTo(X,Y);c.quadraticCurveTo(X+8,Y-20,X+4+sw,Y-38);c.stroke();
@@ -1488,7 +1607,7 @@ function drawLava(c,x0,y0,x1,y1,t){
 function draw(t){
   if(inside){drawInside(t);return}
   const z=zoom(),s=z*dpr;
-  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=curKind==='volcano'?'#c63a12':'#2f88c9';ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=curKind==='volcano'?'#c63a12':curKind==='ice'?'#2f6795':'#2f88c9';ctx.fillRect(0,0,cv.width,cv.height);
   const sh=shake>0?shake*5:0,shx=(Math.random()-.5)*sh,shy=(Math.random()-.5)*sh; // the ground shakes when the volcano blows
   ctx.setTransform(s,0,0,s,(cssW/2-cam.x*z+shx)*dpr,(cssH/2-cam.y*z+shy)*dpr);
   ctx.imageSmoothingEnabled=false;ctx.drawImage(terC,0,0);
@@ -1513,6 +1632,7 @@ function draw(t){
     for(const sc of scorps)if(!sc.hide)list.push([sc.y,()=>drawScorp(ctx,sc,t)]);
     for(const b of bombs){const p=Math.min(1,b.t/b.dur);ell(ctx,b.tx,b.ty,6+p*8,3+p*4,`rgba(0,0,0,${.12+p*.25})`)}}
   for(const a of animals)list.push([a.y,()=>drawAnimal(ctx,a,t)]);
+  for(const cr of critters)list.push([cr.y,()=>drawCritter(ctx,cr,t)]);
   for(const v of villagers)if(!isGuest(v.v.name))list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-40,'❗')}]);
   list.push([player.y,()=>drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t)]);
   if(friend&&!friend.in)list.push([friend.y,()=>drawPerson(ctx,friend.x,friend.y,guestMode?PLAYER_LOOK:FRIEND_LOOK,friend.dir,friend.walk,friend.act,t)]);
@@ -1557,6 +1677,7 @@ function draw(t){
   for(const f of floats){ctx.globalAlpha=Math.min(1,(1.6-f.t)*2);ctx.font='bold 15px system-ui,sans-serif';ctx.lineWidth=3;ctx.strokeStyle='rgba(60,30,0,.7)';
     ctx.strokeText(f.txt,f.x,f.y-f.t*30);ctx.fillStyle='#fff6c8';ctx.fillText(f.txt,f.x,f.y-f.t*30)}
   ctx.globalAlpha=1;for(const p of confetti)rect(ctx,p.x,p.y,5,3,p.c);
+  if(curKind==='ice')drawSnowfall(t);
   if(VOLCANO){const left=ERUPT_MS-now()%ERUPT_MS;if(left<3000){ctx.setTransform(dpr,0,0,dpr,0,0);ctx.font='bold 34px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.lineWidth=5;ctx.strokeStyle='rgba(60,10,0,.8)';const txt=`🌋 ${Math.ceil(left/1000)}`;ctx.strokeText(txt,cssW/2,128);ctx.fillStyle='#ffd23f';ctx.fillText(txt,cssW/2,128)}}
   drawSleep();
@@ -1822,7 +1943,7 @@ function inUp(e,d,quick,w){
   else if(FURN[f.k].col)doAct('homeColor',{id:f.id});
   else toast(`${FURN[f.k].e} ${FURN[f.k].n}`);
 }
-function drawFurn(c,f,t,icon){styled(c,curKind==='volcano',()=>drawFurnIn(c,f,t,icon))}
+function drawFurn(c,f,t,icon){styled(c,themeFor(),()=>drawFurnIn(c,f,t,icon))}
 function drawFurnIn(c,f,t,icon){
   const F=FURN[f.k],X=f.x*T,Y=f.y*T,col=FCOLS[f.c||0],shade='rgba(0,0,0,.14)';
   switch(f.k){
@@ -2039,7 +2160,7 @@ function drawInside(t){
   const z=zoom(),s=z*dpr;
   ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#2b2236';ctx.fillRect(0,0,cv.width,cv.height);
   ctx.setTransform(s,0,0,s,(cssW/2-cam.x*z)*dpr,(cssH/2-cam.y*z)*dpr);
-  styled(ctx,curKind==='volcano',()=>drawRoom(ctx));
+  styled(ctx,themeFor(),()=>drawRoom(ctx));
   const H=room().items;
   for(const f of H)if(FURN[f.k].wall)drawFurn(ctx,f,t);
   for(const f of H)if(FURN[f.k].walk)drawFurn(ctx,f,t);
