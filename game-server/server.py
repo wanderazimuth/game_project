@@ -37,6 +37,7 @@ GAMES = {
     "rogue": ("rogue", "Rogue", "The 1980 classic: explore the Dungeons of Doom and find the Amulet of Yendor"),
     "rogue-deluxe": ("rogue-deluxe", "Rogue+", "Classic Rogue with pixel art, pinch zoom and easy phone controls"),
     "roguish": ("roguish", "Roguish", "Rogue+ with new rules: the Dungeons of Doom, reworked"),
+    "brogue": ("brogue", "Brogue", "Brogue CE, the 2009 roguelike: 26 levels of traps, allies and strange magic"),
     "zombie-apocalypse": ("zombie-apocalypse", "Zombie Apocalypse", "Zombies invade the town! Shoot them, grab coins and buy better guns at the shop."),
     "seaside-village": ("seaside-village", "Seaside Village", "Shipwrecked on an island! Grow crops, ship them for coins and build a seaside village."),
 }

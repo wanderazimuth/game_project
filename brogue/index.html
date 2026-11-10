@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Brogue</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;color:#ddd;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  -webkit-user-select:none;user-select:none;touch-action:none;-webkit-touch-callout:none}
+#app{position:fixed;inset:0;display:flex;flex-direction:column}
+#view{flex:1;position:relative;overflow:hidden;min-height:0}
+#screen{position:absolute;left:0;top:0;transform-origin:0 0;image-rendering:auto}
+#bar{display:flex;gap:6px;padding:5px 6px calc(5px + env(safe-area-inset-bottom));background:#111;border-top:1px solid #333;overflow-x:auto}
+#bar button,#bar a{flex:none;min-width:44px;height:40px;padding:0 10px;border-radius:8px;border:1px solid #444;background:#222;color:#eee;
+  font:inherit;font-size:15px;display:flex;align-items:center;justify-content:center;text-decoration:none;touch-action:manipulation}
+#bar button:active{background:#444}
+#bar .grow{flex:1}
+#typer{position:absolute;left:-1000px;top:0;width:10px;height:10px;opacity:0}
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;padding:16px;z-index:5}
+#overlay[hidden]{display:none}
+.card{max-width:420px;width:100%;background:#15131a;border:1px solid #3a3346;border-radius:12px;padding:20px;line-height:1.45}
+.card h1{font-size:26px;color:#e8c46a;margin-bottom:6px;font-family:Georgia,serif;letter-spacing:.06em}
+.card p{font-size:14px;margin:8px 0;color:#bbb}
+.card input{width:100%;font:inherit;font-size:16px;padding:8px 10px;border-radius:8px;border:1px solid #555;background:#000;color:#fff;margin-top:4px}
+.card button{margin-top:14px;width:100%;height:46px;font:inherit;font-size:17px;border-radius:9px;border:0;background:#c79a3a;color:#000;font-weight:600}
+.card .small{font-size:12px;color:#888}
+.card a{color:#9ab}
+#toast{position:fixed;left:50%;top:12px;transform:translateX(-50%);background:#222c;border:1px solid #555;border-radius:8px;padding:6px 12px;
+  font-size:14px;z-index:6;display:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="view"><canvas id="screen"></canvas></div>
+  <div id="bar">
+    <button data-key="-1" title="Escape: cancel, close a menu">Esc</button>
+    <button data-key="-2" title="Enter: confirm">⏎</button>
+    <button id="kbd" title="Type letters (the phone's keyboard)">⌨</button>
+    <button data-key="i" title="Inventory">🎒</button>
+    <button data-key="x" title="Explore">🧭</button>
+    <button data-key="z" title="Rest a turn">💤</button>
+    <button data-key="s" title="Search">🔎</button>
+    <span class="grow"></span>
+    <button id="zoomOut" title="Zoom out">－</button>
+    <button id="zoomIn" title="Zoom in">＋</button>
+    <button id="fit" title="Fit the whole screen">⤢</button>
+    <a href="/" title="Back to the arcade">⌂</a>
+  </div>
+</div>
+<input id="typer" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+<div id="toast"></div>
+<div id="overlay">
+  <div class="card" id="card">
+    <h1>BROGUE</h1>
+    <p>Dive into the Dungeons of Doom for the Amulet of Yendor, 26 levels down. Brogue: Community Edition,
+      the 2009 roguelike by Brian Walker.</p>
+    <p><b>Tap</b> a spot to walk there, and tap things to use them. <b>Hold</b> on anything to see what it is.
+      <b>Pinch</b> to zoom and drag to look around. The bar has Escape, Enter and a keyboard for Brogue's letter keys.
+      Turn your phone sideways for a bigger view.</p>
+    <label class="small" for="name">Name for the arcade's high scores</label>
+    <input id="name" maxlength="16" placeholder="Rogue">
+    <button id="play">Play</button>
+    <p class="small">Saves stay on this device. Brogue CE is free software under the
+      <a href="LICENSE.txt">GNU AGPL v3</a>: <a href="https://github.com/wanderazimuth/game_project/tree/main/brogue-port">this
+      port's source</a> and <a href="https://github.com/tmewett/BrogueCE/tree/v1.15.1">Brogue CE 1.15.1's</a>.</p>
+  </div>
+</div>
+<script>
+'use strict';
+const COLS = 100, ROWS = 34;   // Brogue's screen, in characters
+const CW = 10, CH = 18;        // a cell at zoom 1, in CSS pixels
+const RES = Math.min(4, Math.max(2, Math.ceil((window.devicePixelRatio || 1) * 1.5)));  // canvas pixels per CSS pixel
+const $ = (id) => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } },
+};
+
+// ── The screen: Brogue plots characters; repaint the changed cells each frame ──
+const canvas = $('screen'), ctx = canvas.getContext('2d');
+canvas.width = COLS * CW * RES; canvas.height = ROWS * CH * RES;
+canvas.style.width = COLS * CW + 'px'; canvas.style.height = ROWS * CH + 'px';
+ctx.scale(RES, RES);
+ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+ctx.font = `${CH - 3}px "DejaVu Sans Mono", Menlo, Consolas, "Segoe UI Symbol", monospace`;
+const cells = new Array(COLS * ROWS).fill(null);
+const dirty = new Set();
+// Brogue's own font has these; phones' fonts often don't.
+const SWAP = { 0x1F780: 0x25C2, 0x29F2: 0x2296, 0x29F3: 0x229D };
+const rgb = (r, g, b) => `rgb(${r * 2.55 | 0},${g * 2.55 | 0},${b * 2.55 | 0})`;
+
+function paint() {
+  for (const i of dirty) {
+    const c = cells[i], x = (i % COLS) * CW, y = (i / COLS | 0) * CH;
+    ctx.fillStyle = c.bg; ctx.fillRect(x, y, CW, CH);
+    if (c.ch > 32) { ctx.fillStyle = c.fg; ctx.fillText(String.fromCodePoint(SWAP[c.ch] || c.ch), x + CW / 2, y + CH / 2 + 1); }
+  }
+  dirty.clear();
+  requestAnimationFrame(paint);
+}
+requestAnimationFrame(paint);
+
+// ── Input, queued for the game to pick up ──
+const queue = [];
+const mods = { shift: false, ctrl: false };
+const UI = { KEY: 0, DOWN: 1, UP: 2, MOVE: 3, RDOWN: 4, RUP: 5 };
+const SPECIAL = { Escape: -1, Enter: -2, Backspace: -3, Delete: -3, Tab: -4,
+                  ArrowLeft: -5, ArrowRight: -6, ArrowUp: -7, ArrowDown: -8 };
+function key(k, ctrl = false, shift = false) { queue.push([UI.KEY, k, 0, ctrl ? 1 : 0, shift ? 1 : 0]); }
+function mouse(type, cell) { queue.push([type, cell.x, cell.y, mods.ctrl ? 1 : 0, mods.shift ? 1 : 0]); }
+
+window.BrogueUI = {
+  plot(x, y, ch, fr, fg, fb, br, bg, bb) {
+    const i = y * COLS + x, c = { ch, fg: rgb(fr, fg, fb), bg: rgb(br, bg, bb) }, old = cells[i];
+    if (old && old.ch === c.ch && old.fg === c.fg && old.bg === c.bg) return;
+    cells[i] = c; dirty.add(i);
+  },
+  next() { return queue.shift(); },
+  modifier(which) { return which === 0 ? mods.shift : mods.ctrl; },
+  gameOver(kind, score, depth, description) { postScore(kind, score, depth, description); sync(); },
+  exit() {
+    sync();
+    $('card').innerHTML = '<h1>BROGUE</h1><p>The game has closed.</p><button id="again">Play again</button>';
+    $('overlay').hidden = false;
+    $('again').onclick = () => location.reload();
+  },
+};
+
+addEventListener('keydown', (e) => {
+  mods.shift = e.shiftKey; mods.ctrl = e.ctrlKey;
+  if (!$('overlay').hidden) return;
+  if (e.key in SPECIAL) { key(SPECIAL[e.key], e.ctrlKey, e.shiftKey); e.preventDefault(); return; }
+  if (e.target === $('typer') && !e.ctrlKey) return;  // the phone keyboard's letters come through 'input'
+  if (e.key.length === 1 && !e.metaKey && !e.altKey) {
+    // Ctrl+letter is a Brogue command too (e.g. Ctrl+X), sent as the letter with ctrl held.
+    const k = e.shiftKey && !e.ctrlKey && /^[a-z]$/.test(e.key) ? e.key.toUpperCase() : e.key;
+    key(k.codePointAt(0), e.ctrlKey, e.shiftKey);
+    e.preventDefault();
+  }
+});
+addEventListener('keyup', (e) => { mods.shift = e.shiftKey; mods.ctrl = e.ctrlKey; });
+$('typer').addEventListener('input', (e) => {
+  for (const ch of e.target.value) key(ch.codePointAt(0));
+  e.target.value = '';
+});
+$('kbd').onclick = () => { const t = $('typer'); document.activeElement === t ? t.blur() : t.focus(); };
+document.querySelectorAll('#bar [data-key]').forEach((b) => b.onclick = () => {
+  const k = b.dataset.key;
+  key(/^-\d$/.test(k) ? Number(k) : k.codePointAt(0));
+});
+
+// ── Zoom and pan ──
+const view = $('view');
+let cam = { s: 1, x: 0, y: 0 };
+function fitScale() { return Math.min(view.clientWidth / (COLS * CW), view.clientHeight / (ROWS * CH)); }
+function clampCam() {
+  const w = COLS * CW * cam.s, h = ROWS * CH * cam.s, vw = view.clientWidth, vh = view.clientHeight;
+  cam.x = w <= vw ? (vw - w) / 2 : Math.min(0, Math.max(vw - w, cam.x));
+  cam.y = h <= vh ? (vh - h) / 2 : Math.min(0, Math.max(vh - h, cam.y));
+  canvas.style.transform = `translate(${cam.x}px,${cam.y}px) scale(${cam.s})`;
+}
+function zoomAt(s, px, py) {
+  s = Math.min(6, Math.max(fitScale(), s));
+  cam.x = px - (px - cam.x) * s / cam.s; cam.y = py - (py - cam.y) * s / cam.s; cam.s = s;
+  clampCam();
+}
+function fit() { cam.s = fitScale(); clampCam(); }
+$('fit').onclick = fit;
+$('zoomIn').onclick = () => zoomAt(cam.s * 1.4, view.clientWidth / 2, view.clientHeight / 2);
+$('zoomOut').onclick = () => zoomAt(cam.s / 1.4, view.clientWidth / 2, view.clientHeight / 2);
+addEventListener('resize', () => { const wasFit = cam.s <= fitScale() * 1.01; if (wasFit) fit(); else clampCam(); });
+view.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const r = view.getBoundingClientRect();
+  zoomAt(cam.s * (e.deltaY < 0 ? 1.15 : 1 / 1.15), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+
+function cellAt(e) {
+  const r = view.getBoundingClientRect();
+  const x = Math.floor((e.clientX - r.left - cam.x) / (CW * cam.s)), y = Math.floor((e.clientY - r.top - cam.y) / (CH * cam.s));
+  return x >= 0 && x < COLS && y >= 0 && y < ROWS ? { x, y } : null;
+}
+
+// ── Mouse: as on the desktop. Touch: tap = click, hold = look, drag = pan, pinch = zoom ──
+const pointers = new Map();
+let gest = null, lastCell = null;
+const HOLD_MS = 350, SLOP = 9;
+view.addEventListener('contextmenu', (e) => e.preventDefault());
+view.addEventListener('pointerdown', (e) => {
+  view.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (e.pointerType === 'mouse') {
+    const c = cellAt(e);
+    if (c) mouse(e.button === 2 ? UI.RDOWN : UI.DOWN, c);
+    return;
+  }
+  if (pointers.size === 2) {
+    clearTimeout(gest && gest.timer);
+    const [a, b] = [...pointers.values()];
+    gest = { type: 'pinch', d0: Math.hypot(a.x - b.x, a.y - b.y), s0: cam.s };
+    return;
+  }
+  const start = { x: e.clientX, y: e.clientY }, c = cellAt(e);
+  gest = { type: 'tap', start, cam0: { x: cam.x, y: cam.y }, cell: c,
+           timer: setTimeout(() => { if (gest && gest.type === 'tap' && c) { gest.type = 'look'; mouse(UI.MOVE, c); } }, HOLD_MS) };
+});
+view.addEventListener('pointermove', (e) => {
+  if (e.pointerType === 'mouse') {
+    const c = cellAt(e);
+    if (c && (!lastCell || c.x !== lastCell.x || c.y !== lastCell.y)) { lastCell = c; mouse(UI.MOVE, c); }
+    return;
+  }
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (!gest) return;
+  if (gest.type === 'pinch' && pointers.size >= 2) {
+    const [a, b] = [...pointers.values()], r = view.getBoundingClientRect();
+    zoomAt(gest.s0 * Math.hypot(a.x - b.x, a.y - b.y) / gest.d0, (a.x + b.x) / 2 - r.left, (a.y + b.y) / 2 - r.top);
+  } else if (gest.type === 'look') {
+    const c = cellAt(e);   // slide a held finger to look at other things
+    if (c && (!gest.cell || c.x !== gest.cell.x || c.y !== gest.cell.y)) { gest.cell = c; mouse(UI.MOVE, c); }
+  } else if (gest.type === 'tap' || gest.type === 'pan') {
+    const dx = e.clientX - gest.start.x, dy = e.clientY - gest.start.y;
+    if (gest.type === 'tap' && Math.hypot(dx, dy) > SLOP) { gest.type = 'pan'; clearTimeout(gest.timer); }
+    if (gest.type === 'pan') { cam.x = gest.cam0.x + dx; cam.y = gest.cam0.y + dy; clampCam(); }
+  }
+});
+function pointerEnd(e) {
+  pointers.delete(e.pointerId);
+  if (e.pointerType === 'mouse') {
+    const c = cellAt(e);
+    if (c && e.type === 'pointerup') mouse(e.button === 2 ? UI.RUP : UI.UP, c);
+    return;
+  }
+  if (!gest) return;
+  clearTimeout(gest.timer);
+  if (gest.type === 'tap' && gest.cell && e.type === 'pointerup') {
+    // Brogue acts on where the mouse is, so move there first, then click.
+    mouse(UI.MOVE, gest.cell); mouse(UI.DOWN, gest.cell); mouse(UI.UP, gest.cell);
+  }
+  if (gest.type !== 'pinch' || !pointers.size) gest = null;
+}
+view.addEventListener('pointerup', pointerEnd);
+view.addEventListener('pointercancel', pointerEnd);
+
+// ── Saves and high scores live in Brogue's files, kept in IndexedDB ──
+// The game's files live in memory; sync copies them to IndexedDB. It runs shortly after the
+// game finishes writing, renaming or deleting a file, so a save survives an immediate reload.
+let syncing = false, again = false;
+function sync() {
+  if (!window.Module || !Module.FS) return;
+  if (syncing) { again = true; return; }
+  syncing = true;
+  Module.FS.syncfs(false, () => {
+    syncing = false;
+    if (again) { again = false; sync(); }
+  });
+}
+function syncSoon() { clearTimeout(syncSoon.timer); syncSoon.timer = setTimeout(sync, 300); }
+addEventListener('pagehide', sync);
+document.addEventListener('visibilitychange', () => { if (document.hidden) sync(); });
+
+function toast(text) {
+  const t = $('toast'); t.textContent = text; t.style.display = 'block';
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => { t.style.display = 'none'; }, 4000);
+}
+
+function postScore(kind, score, depth, description) {
+  if (score <= 0) return;  // e.g. quitting a fresh game: nothing for the board
+  const won = kind === 2 || kind === 3;  // GAMEOVER_VICTORY, GAMEOVER_SUPERVICTORY
+  const body = { name: store.get('brogue-name', 'Rogue').slice(0, 16), score,
+                 label: won ? `🏆 ${score}` : `${score} · D${depth}` };
+  fetch('/scores/brogue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    .then((r) => r.json())
+    .then((list) => {
+      const rank = list.findIndex((s) => s.name === body.name && s.score === body.score) + 1;
+      toast(rank ? `Arcade high scores: #${rank}` : 'Score sent to the arcade');
+    })
+    .catch(() => toast("Couldn't reach the arcade for high scores"));
+}
+
+// ── Start ──
+$('name').value = store.get('brogue-name', '');
+$('play').onclick = () => {
+  store.set('brogue-name', ($('name').value || 'Rogue').trim().slice(0, 16) || 'Rogue');
+  $('overlay').hidden = true;
+  fit();
+  for (let i = 0; i < cells.length; i++) { cells[i] = { ch: 32, fg: '#000', bg: '#000' }; dirty.add(i); }
+  window.Module = {
+    print: (t) => console.log(t), printErr: (t) => console.warn(t),
+    preRun: [() => {
+      const FS = Module.FS;
+      FS.mkdir('/brogue');
+      FS.mount(Module.IDBFS, {}, '/brogue');
+      FS.chdir('/brogue');
+      for (const op of ['close', 'rename', 'unlink']) {
+        const real = FS[op];
+        FS[op] = function (...args) { const r = real.apply(this, args); syncSoon(); return r; };
+      }
+      Module.addRunDependency('saves');
+      FS.syncfs(true, (err) => {
+        if (err) console.warn('loading saves failed', err);
+        Module.removeRunDependency('saves');
+      });
+    }],
+  };
+  const s = document.createElement('script');
+  s.src = 'brogue.js';
+  s.onerror = () => { toast("Couldn't load the game"); $('overlay').hidden = false; };
+  document.body.appendChild(s);
+};
+fit();
+</script>
+</body>
+</html>
