@@ -57,7 +57,7 @@ a { color: #0ff; }
 // (or a neutral) planet the two numbers subtract; the side with ships left owns it.
 // RANGE is how far a fleet can fly (center to center), so empires grow planet by planet.
 // A home world its first owner still holds makes HOME_BONUS times the resources.
-const COST = 10, SPEED = 70, RANGE = 400, HOME_BONUS = 2;
+const COST = 10, SPEED = 70, RANGE = 400, HOME_BONUS = 2, CLASH_DIST = 14;
 const COLORS = ['#4fc3ff', '#ff5a5a', '#7dff6a', '#ffc94a', '#d77dff', '#ff8ad8', '#4affd8', '#ff9a3a'];
 const COLOR_NAMES = ['blue', 'red', 'green', 'yellow', 'purple', 'pink', 'teal', 'orange'];
 const NEUTRAL = '#6c7388';
@@ -77,7 +77,10 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem('star-colony-' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem('star-colony-' + k, JSON.stringify(v)); } catch (e) {} },
 };
-const settings = Object.assign({ size: 'medium', ai: 3, level: 'normal', speed: 1 }, store.get('settings', {}));
+// pace scales the whole game clock (production, flight, AI); 0.75 "Normal" is a quarter slower than the
+// first version's 1×. clash: fleets of different players that meet in space fight there.
+const settings = Object.assign({ size: 'medium', ai: 3, level: 'normal', pace: .75, clash: 'off' }, store.get('settings', {}));
+delete settings.speed;
 let myName = store.get('name', '');
 
 // ── Game state ────────────────────────────────────────────────────────────────
@@ -141,7 +144,7 @@ function newGame(players) {
     planets: genUniverse(size.n, players.length),
     fleets: [],
     players: players.map((p, i) => Object.assign({ id: i, color: COLORS[i], alive: true, think: 1 + Math.random() }, p)),
-    time: 0, speed: settings.speed, level: settings.level, over: false, winner: -1, sizeLabel: size.label,
+    time: 0, speed: settings.pace, clash: settings.clash === 'on', booms: [], level: settings.level, over: false, winner: -1, sizeLabel: size.label,
   };
 }
 
@@ -177,6 +180,30 @@ function arrive(f) {
   }
 }
 
+// Fleets of different players that pass close to each other fight: the numbers subtract and
+// the bigger fleet flies on with what's left (an even fight wipes out both).
+let nextBoomId = 1;
+function clashFleets() {
+  const pos = G.fleets.map(fleetPos);
+  for (let i = 0; i < G.fleets.length; i++) {
+    const a = G.fleets[i];
+    if (a.done) continue;
+    for (let j = i + 1; j < G.fleets.length; j++) {
+      const b = G.fleets[j];
+      if (b.done || b.o === a.o) continue;
+      if (Math.hypot(pos[i].x - pos[j].x, pos[i].y - pos[j].y) > CLASH_DIST) continue;
+      const lost = Math.min(a.n, b.n);
+      a.n -= lost; b.n -= lost;
+      if (a.n <= 0) a.done = true;
+      if (b.n <= 0) b.done = true;
+      G.booms.push({ id: nextBoomId++, x: (pos[i].x + pos[j].x) / 2, y: (pos[i].y + pos[j].y) / 2, r: 6 + Math.sqrt(lost) * 4, age: 0 });
+      if (a.o === me || b.o === me) blip(120, .15);
+      if (a.done) break;
+    }
+  }
+  G.fleets = G.fleets.filter(f => !f.done);
+}
+
 function sim(dt) {
   dt *= G.speed;
   G.time += dt;
@@ -190,6 +217,7 @@ function sim(dt) {
     if (f.t >= f.d) { arrive(f); f.done = true; }
   }
   G.fleets = G.fleets.filter(f => !f.done);
+  if (G.clash) clashFleets();
   for (const pl of G.players) {
     if (!pl.alive || pl.kind !== 'ai') continue;
     pl.think -= dt;
@@ -347,6 +375,15 @@ function draw() {
     cx.setLineDash([]);
   }
 
+  // Space battles
+  for (const b of G.booms) {
+    const k = b.age / .8;
+    cx.globalAlpha = 1 - k;
+    cx.fillStyle = '#ffd27a'; cx.beginPath(); cx.arc(sx(b.x), sy(b.y), b.r * z * (.5 + k), 0, Math.PI * 2); cx.fill();
+    cx.strokeStyle = '#fff'; cx.lineWidth = 2; cx.beginPath(); cx.arc(sx(b.x), sy(b.y), b.r * z * (1 + 2 * k), 0, Math.PI * 2); cx.stroke();
+  }
+  cx.globalAlpha = 1;
+
   // Fleet trails and ships
   for (const f of G.fleets) {
     const pos = fleetPos(f), b = G.planets[f.to], col = G.players[f.o].color;
@@ -420,7 +457,7 @@ function draw() {
   });
   cx.globalAlpha = 1;
   cx.textAlign = 'right'; cx.fillStyle = '#678';
-  cx.fillText(clock(G.time), VW - 10, 16);
+  cx.fillText(clock(G.time / G.speed), VW - 10, 16);
 
   if (info && G.planets[info.id]) {
     const p = G.planets[info.id];
@@ -577,6 +614,8 @@ setInterval(() => {
   let dt = Math.min(5, (now - lastSim) / 1000);
   lastSim = now;
   if (!G) return;
+  for (const b of G.booms) b.age += dt;
+  G.booms = G.booms.filter(b => b.age < .8);
   if (role === 'guest') {
     for (const f of G.fleets) f.t = Math.min(f.d, f.t + SPEED * G.speed * dt);   // smooth flight between updates
     return;
@@ -650,6 +689,7 @@ function how() {
     <p><b>Tap</b> your planets to select them, then <b>tap</b> another planet to launch ships there. Or <b>drag</b> from your planet to the target (drag to your own planet to send reinforcements). The buttons at the bottom pick how many ships go: 25%, 50%, 75% or 100%.</p>
     <p>Ships can only fly so far: the dashed circle around a selected planet shows its range, so grow your empire planet by planet. Your <b>home world</b> makes double resources while you hold it.</p>
     <p>When your ships land on a planet you don't own, the numbers subtract. Whoever has ships left keeps the planet.</p>
+    <p>With <b>Fleets fight in space</b> turned on, enemy fleets that pass each other fight on the way: the numbers subtract and the bigger fleet flies on.</p>
     <p>Gray planets are neutral and don't grow — easy pickings early on. Eliminate every enemy ship and planet to win!</p>
     <p>Keys: 1–4 send %, A select all, F fit, P pause, Esc clear.</p>
     <button class="big" id="back">◀ Back</button>`, { back: title });
@@ -662,11 +702,12 @@ function settingsHTML(humans, editable = true) {
   return `<div class="row">Universe ${seg('size', SIZES.map(s => [s.key, s.label]))}</div>
     <div class="row">AI opponents <div class="seg">${editable ? `<button data-ai="-1">−</button>` : ''}<span>${settings.ai}</span>${editable ? `<button data-ai="1">+</button>` : ''}</div></div>
     <div class="row">AI skill ${seg('level', Object.entries(LEVELS).map(([k, v]) => [k, v.label]))}</div>
-    <div class="row">Game speed ${seg('speed', [[1, '1×'], [1.5, '1.5×'], [2, '2×']])}</div>`;
+    <div class="row">Game speed ${seg('pace', [[.5, 'Slow'], [.75, 'Normal'], [1, 'Fast'], [1.5, 'Faster']])}</div>
+    <div class="row">Fleets fight in space ${seg('clash', [['off', 'Off'], ['on', 'On']])}</div>`;
 }
 function bindSettings(redraw, humans) {
   ov.querySelectorAll('[data-set]').forEach(b => b.onclick = () => {
-    const k = b.dataset.set; settings[k] = k === 'speed' ? +b.dataset.v : b.dataset.v;
+    const k = b.dataset.set; settings[k] = k === 'pace' ? +b.dataset.v : b.dataset.v;
     store.set('settings', settings); redraw();
   });
   ov.querySelectorAll('[data-ai]').forEach(b => b.onclick = () => {
@@ -707,7 +748,7 @@ function askQuit() {
 function showLost() {
   if (G.over) return;
   selected.clear();
-  showMsg(`<h2>💥 You were eliminated</h2><p>Your last planet fell after ${clock(G.time)}.</p>
+  showMsg(`<h2>💥 You were eliminated</h2><p>Your last planet fell after ${clock(G.time / G.speed)}.</p>
     <button class="big" id="watch">👀 Watch the rest</button><button class="big alt" id="menu">Menu</button>`, { watch: hideMsg, menu: title });
 }
 
@@ -724,12 +765,12 @@ function showResult() {
   if (won) {
     blip(523); setTimeout(() => blip(659), 120); setTimeout(() => blip(784), 240);
     const score = Math.round(opponents * 1000 * { easy: .5, normal: 1, hard: 1.6 }[G.level] + G.planets.length * 10 + Math.max(0, 1200 - G.time / G.speed));
-    const label = `Won vs ${opponents} · ${G.sizeLabel} · ${clock(G.time)}`;
+    const label = `Won vs ${opponents} · ${G.sizeLabel} · ${clock(G.time / G.speed)}`;
     fetch('/scores/star-colony', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: myName, score, label }) }).catch(() => {});
-    showMsg(`<h1>Victory!</h1><p>The whole universe is yours after ${clock(G.time)}.</p><p>Score: ${score.toLocaleString()}</p>${endButtons()}`, endHandlers());
+    showMsg(`<h1>Victory!</h1><p>The whole universe is yours after ${clock(G.time / G.speed)}.</p><p>Score: ${score.toLocaleString()}</p>${endButtons()}`, endHandlers());
   } else {
     showMsg(`<h2>${w ? `<span class="dot" style="background:${w.color}"></span>${esc(w.name)} rules the universe` : 'Nobody survived'}</h2>
-      <p>Game over after ${clock(G.time)}.</p>${endButtons()}`, endHandlers());
+      <p>Game over after ${clock(G.time / G.speed)}.</p>${endButtons()}`, endHandlers());
   }
 }
 function endButtons() {
@@ -796,7 +837,7 @@ function startHost() {
   newGame([...humans, ...aiPlayers(settings.ai, 0)]);
   announce(true);
   netSend({
-    t: 'start', sizeLabel: G.sizeLabel, speed: G.speed, level: G.level,
+    t: 'start', sizeLabel: G.sizeLabel, speed: G.speed, clash: G.clash, level: G.level,
     planets: G.planets.map(p => [Math.round(p.x), Math.round(p.y), Math.round(p.r * 10) / 10, p.rate, p.home === undefined ? -1 : p.home]),
     players: G.players.map(p => ({ name: p.name, kind: p.kind, seat: p.seat })),
   });
@@ -810,6 +851,7 @@ function broadcastState() {
     p: G.planets.map(p => [p.owner, Math.floor(p.ships), Math.round(p.res * 10) / 10]),
     f: G.fleets.map(f => [f.id, f.o, f.from, f.to, f.n, Math.round(f.t)]),
     al: G.players.map(p => p.alive ? 1 : 0), k: G.players.map(p => p.kind),
+    b: G.booms.filter(b => b.age < .3).map(b => [b.id, Math.round(b.x), Math.round(b.y), Math.round(b.r)]),
   });
 }
 
@@ -873,7 +915,7 @@ function onGuestMsg(m) {
     G = {
       planets: m.planets.map(([x, y, r, rate, home], id) => Object.assign({ id, x, y, r, rate, owner: -1, ships: 0, res: 0 }, home >= 0 ? { home } : {})),
       fleets: [], players: m.players.map((p, i) => ({ id: i, name: p.name, kind: p.kind, seat: p.seat, color: COLORS[i], alive: true })),
-      time: 0, speed: m.speed, level: m.level, over: false, winner: -1, sizeLabel: m.sizeLabel,
+      time: 0, speed: m.speed, clash: m.clash, booms: [], seenBooms: new Set(), level: m.level, over: false, winner: -1, sizeLabel: m.sizeLabel,
     };
     me = G.players.findIndex(p => p.seat === net.seat);
     pendingState && applyState(pendingState);
@@ -903,6 +945,12 @@ function applyState(m) {
     pl.alive = !!a;
   });
   m.k.forEach((k, i) => G.players[i].kind = k);
+  for (const [id, x, y, r] of m.b || []) {
+    if (G.seenBooms.has(id)) continue;
+    G.seenBooms.add(id);
+    G.booms.push({ id, x, y, r, age: 0 });
+    if (G.fleets.some(f => f.o === me && Math.hypot(fleetPos(f).x - x, fleetPos(f).y - y) < 40)) blip(120, .15);
+  }
   G.time = m.time;
   if (m.over && !G.over) { G.over = true; G.winner = m.winner; showResult(); }
 }
