@@ -40,6 +40,7 @@ GAMES = {
     "brogue": ("brogue", "Brogue", "Brogue CE, the 2009 roguelike: 26 levels of traps, allies and strange magic"),
     "zombie-apocalypse": ("zombie-apocalypse", "Zombie Apocalypse", "Zombies invade the town! Shoot them, grab coins and buy better guns at the shop."),
     "seaside-village": ("seaside-village", "Seaside Village", "Shipwrecked on an island! Grow crops, ship them for coins and build a seaside village."),
+    "star-colony": ("star-colony", "Star Colony", "Launch fleets from your home world and colonize the galaxy — vs AI or up to 8 players on the LAN"),
 }
 
 # What makes the arcade an installable app: url_path -> (file in app/, content type).
@@ -472,6 +473,15 @@ CODE_ROOMS = {}
 CODE_LOCK = threading.Lock()
 CODE_PATH = re.compile(r"^/ws/(castle-siege|zombie-apocalypse|seaside-village)/(\d{3})(\?host=1)?$")
 
+# Games for up to 8 devices (Star Colony): a host and up to 7 guests share a room code.
+# The host's browser runs the game. Guests' messages go to the host (tagged with their
+# seat), and the host's go to every guest, or to one when they carry "to": seat.
+# GET /rooms/<game> lists the open rooms so guests on the LAN can tap one to join.
+PARTY_SEATS = 8
+PARTY_ROOMS = {}   # "game/code" -> room dict
+PARTY_LOCK = threading.Lock()
+PARTY_PATH = re.compile(r"^/ws/(star-colony)/(\d{3})(\?host=1)?$")
+
 
 class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -500,6 +510,19 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
         m = CODE_PATH.match(self.path)
         if m:
             self.handle_code_room_ws(m.group(1) + "/" + m.group(2), bool(m.group(3)))
+            return
+
+        m = PARTY_PATH.match(self.path)
+        if m:
+            self.handle_party_ws(m.group(1), m.group(2), bool(m.group(3)))
+            return
+
+        if self.path.startswith("/rooms/"):
+            game = self.path[7:].strip("/")
+            with PARTY_LOCK:
+                rooms = [{"code": k.split("/")[1], "name": r["name"], "players": r["players"], "started": r["started"]}
+                         for k, r in PARTY_ROOMS.items() if k.startswith(game + "/") and r["host"]]
+            self.send_json(rooms)
             return
 
         # All-scores page
@@ -913,6 +936,109 @@ class ArcadeHandler(http.server.SimpleHTTPRequestHandler):
             with CODE_LOCK:
                 if not room[0] and CODE_ROOMS.get(code) is room:
                     del CODE_ROOMS[code]
+
+    # --- Party rooms: one host and up to 7 guests (see PARTY_ROOMS) ---
+    def handle_party_ws(self, game, code, host):
+        key = self.headers.get("Sec-WebSocket-Key")
+        if not key:
+            self.send_error(400, "Missing Sec-WebSocket-Key")
+            return
+        self.protocol_version = "HTTP/1.1"
+        self.send_response(101, "Switching Protocols")
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", ws_accept_key(key))
+        self.end_headers()
+
+        write_lock = threading.Lock()
+        me = (self, write_lock)
+        room_key = game + "/" + code
+        reject = seat = None
+        with PARTY_LOCK:
+            room = PARTY_ROOMS.get(room_key)
+            if host:
+                if room and room["host"]:
+                    reject = "code_taken"
+                else:
+                    room = PARTY_ROOMS[room_key] = {"host": me, "guests": {}, "name": "", "players": 1, "started": False}
+                    seat = 0
+            elif not room or not room["host"]:
+                reject = "no_room"
+            elif room["started"]:
+                reject = "started"
+            else:
+                free = [s for s in range(1, PARTY_SEATS) if s not in room["guests"]]
+                if free:
+                    seat = free[0]
+                    room["guests"][seat] = me
+                else:
+                    reject = "room_full"
+        if reject:
+            self.ws_send(write_lock, {"type": reject})
+            try:
+                self.connection.sendall(ws_build_frame(0x8, b""))
+            except OSError:
+                pass
+            return
+
+        self.ws_send(write_lock, {"type": "seat", "seat": seat})
+        if not host:
+            room["host"][0].ws_send(room["host"][1], {"type": "join", "seat": seat})
+        try:
+            while True:
+                frame = ws_decode_frame(self.ws_recv_exact)
+                if frame is None:
+                    break
+                opcode, payload = frame
+                if opcode == 0x8:
+                    break
+                if opcode == 0x9:
+                    try:
+                        self.connection.sendall(ws_build_frame(0xA, payload))
+                    except OSError:
+                        break
+                    continue
+                if opcode != 0x1:
+                    continue
+                try:
+                    msg = json.loads(payload.decode("utf-8"))
+                except (ValueError, UnicodeDecodeError):
+                    continue
+                if not isinstance(msg, dict):
+                    continue
+                if host and msg.get("t") == "room":   # the host describes its room for /rooms/<game>
+                    with PARTY_LOCK:
+                        room["name"] = str(msg.get("name", ""))[:16]
+                        room["players"] = int(msg.get("players", 1))
+                        room["started"] = bool(msg.get("started"))
+                    continue
+                with PARTY_LOCK:
+                    if host:
+                        to = msg.get("to")
+                        targets = [c for s, c in room["guests"].items() if to is None or s == to]
+                    else:
+                        msg["from"] = seat
+                        targets = [room["host"]] if room["host"] else []
+                for conn, lock in targets:
+                    conn.ws_send(lock, msg)
+        except (ConnectionError, OSError):
+            pass
+        finally:
+            with PARTY_LOCK:
+                if host:
+                    room["host"] = None
+                    guests = list(room["guests"].values())
+                    if PARTY_ROOMS.get(room_key) is room:
+                        del PARTY_ROOMS[room_key]
+                else:
+                    room["guests"].pop(seat, None)
+                    guests = []
+                    the_host = room["host"]
+            if host:
+                for conn, lock in guests:
+                    conn.ws_send(lock, {"type": "host_left"})
+            elif the_host:
+                the_host[0].ws_send(the_host[1], {"type": "leave", "seat": seat})
 
     def relay_peer_status(self, clients, lock):
         with lock:

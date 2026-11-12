@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Star Colony</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow: hidden; background: #05060f; color: #fff; font-family: 'Courier New', monospace; touch-action: none; user-select: none; -webkit-user-select: none; }
+canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#bar { position: fixed; left: 0; right: 0; bottom: 0; display: none; gap: 6px; padding: 8px; padding-bottom: max(8px, env(safe-area-inset-bottom)); justify-content: center; flex-wrap: wrap; background: linear-gradient(transparent, rgba(5,6,15,.9) 40%); }
+#bar button { background: #141a3a; color: #cde; border: 1px solid #2c3870; border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; min-width: 44px; }
+#bar button.on { background: #0b5c7a; border-color: #0ff; color: #fff; }
+#hint { position: fixed; left: 0; right: 0; bottom: 62px; text-align: center; color: #8aa; font-size: 12px; pointer-events: none; display: none; padding: 0 12px; }
+#toast { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); background: rgba(20,26,58,.92); border: 1px solid #2c3870; border-radius: 8px; padding: 6px 14px; font-size: 13px; display: none; pointer-events: none; max-width: 90%; text-align: center; }
+#ov { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(5,6,15,.82); overflow-y: auto; padding: 20px 16px; }
+#ov.hide { display: none; }
+.box { background: linear-gradient(135deg, #141a3a, #0a0d24); border: 1px solid #2c3870; border-radius: 14px; padding: 22px; width: 100%; max-width: 420px; text-align: center; margin: auto; }
+.box h1 { font-size: 1.9rem; letter-spacing: 3px; text-transform: uppercase; text-shadow: 0 0 18px #0ff, 0 0 36px #08f; margin-bottom: 8px; }
+.box h2 { color: #0ff; font-size: 1.15rem; margin-bottom: 12px; }
+.box p { color: #9ab; font-size: .85rem; margin: 8px 0; line-height: 1.4; }
+.box button.big { display: block; width: 100%; margin: 8px 0; padding: 12px; background: #0b3d5c; color: #fff; border: 1px solid #0ff; border-radius: 10px; font: inherit; font-size: 1rem; }
+.box button.big.alt { background: #1a1f44; border-color: #3a4890; }
+.box button.big:disabled { opacity: .4; }
+.box input { width: 100%; padding: 10px; font: inherit; font-size: 1rem; background: #05060f; color: #fff; border: 1px solid #3a4890; border-radius: 8px; text-align: center; margin: 6px 0; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 0; font-size: .85rem; color: #bcd; }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.seg button { background: #1a1f44; color: #9ab; border: 1px solid #2c3870; border-radius: 6px; padding: 6px 8px; font: inherit; font-size: .8rem; }
+.seg button.on { background: #0b5c7a; color: #fff; border-color: #0ff; }
+.seg span { min-width: 26px; display: inline-block; text-align: center; color: #fff; padding-top: 6px; }
+.plist { text-align: left; margin: 10px 0; font-size: .85rem; }
+.plist div { padding: 4px 0; border-bottom: 1px solid #1a1f44; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
+.code { font-size: 2.4rem; letter-spacing: 8px; color: #0ff; margin: 4px 0; }
+.rooms button { display: block; width: 100%; margin: 6px 0; padding: 10px; background: #0b3d5c; color: #fff; border: 1px solid #0ff; border-radius: 8px; font: inherit; text-align: left; }
+.err { color: #ff8a8a !important; }
+a { color: #0ff; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="hint"></div>
+<div id="bar">
+  <button data-pct="0.25">25%</button><button data-pct="0.5" class="on">50%</button><button data-pct="0.75">75%</button><button data-pct="1">100%</button>
+  <button id="allBtn" title="Select all your planets (A)">All</button>
+  <button id="fitBtn" title="Fit the whole universe (F)">⤢</button>
+  <button id="pauseBtn" title="Pause (P)">⏸</button>
+  <button id="quitBtn" title="Quit">✕</button>
+</div>
+<div id="toast"></div>
+<div id="ov"></div>
+<script>
+'use strict';
+// ── Rules ─────────────────────────────────────────────────────────────────────
+// Every owned planet makes resources at its own rate; each COST resources becomes one
+// spacecraft on the planet. Fleets fly at SPEED. When a fleet lands on another player's
+// (or a neutral) planet the two numbers subtract; the side with ships left owns it.
+const COST = 10, SPEED = 70;
+const COLORS = ['#4fc3ff', '#ff5a5a', '#7dff6a', '#ffc94a', '#d77dff', '#ff8ad8', '#4affd8', '#ff9a3a'];
+const COLOR_NAMES = ['blue', 'red', 'green', 'yellow', 'purple', 'pink', 'teal', 'orange'];
+const NEUTRAL = '#6c7388';
+const SIZES = [
+  { key: 'small', label: 'Small', n: 14 }, { key: 'medium', label: 'Medium', n: 24 },
+  { key: 'large', label: 'Large', n: 40 }, { key: 'huge', label: 'Huge', n: 60 }, { key: 'vast', label: 'Vast', n: 90 },
+];
+const LEVELS = {   // seconds between AI decisions, share of ships kept home, how much it overkills by
+  easy: { think: 2.8, reserve: .35, margin: 1.5, label: 'Easy' },
+  normal: { think: 1.5, reserve: .2, margin: 1.25, label: 'Normal' },
+  hard: { think: .75, reserve: .1, margin: 1.12, label: 'Hard' },
+};
+const AI_NAMES = ['Zorg', 'Nebula Queen', 'Captain Nova', 'The Swarm', 'Admiral Kree', 'Dr. Quasar', 'Void Lord'];
+const MAX_PLAYERS = 8;
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('star-colony-' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('star-colony-' + k, JSON.stringify(v)); } catch (e) {} },
+};
+const settings = Object.assign({ size: 'medium', ai: 3, level: 'normal', speed: 1 }, store.get('settings', {}));
+let myName = store.get('name', '');
+
+// ── Game state ────────────────────────────────────────────────────────────────
+// G is the same shape for everyone; only the solo player and the LAN host run sim() on it.
+// Guests get G from the host's 's' messages.
+let G = null, me = 0, role = null;   // role: 'solo' | 'host' | 'guest'
+let net = null;                      // { ws, code, host, seat, lobby: [{seat,name}], closed }
+let nextFleetId = 1;
+
+function genUniverse(n, nPlayers) {
+  n = Math.max(n, nPlayers * 4);
+  const side = Math.sqrt(n) * 150, W = side * 1.35, H = side;
+  const ps = [];
+  for (let tries = 0; ps.length < n && tries < 40000; tries++) {
+    const r = 11 + Math.random() * 15;
+    const x = r + Math.random() * (W - 2 * r), y = r + Math.random() * (H - 2 * r);
+    if (ps.every(p => Math.hypot(p.x - x, p.y - y) > p.r + r + 40)) ps.push({ x, y, r });
+  }
+  ps.forEach((p, i) => {
+    p.id = i;
+    p.rate = Math.round(2 + (p.r - 11) / 15 * 8);           // 2..10 resources a second
+    p.owner = -1;
+    p.ships = Math.round(p.rate * 1.5 + Math.random() * 8 + 2);
+    p.res = 0;
+  });
+  // Home worlds as far apart as possible: each new one is the planet farthest from the others.
+  const homes = [ps[Math.floor(Math.random() * ps.length)]];
+  while (homes.length < nPlayers) {
+    let best = null, bestD = -1;
+    for (const p of ps) {
+      if (homes.includes(p)) continue;
+      const d = Math.min(...homes.map(h => Math.hypot(h.x - p.x, h.y - p.y)));
+      if (d > bestD) { bestD = d; best = p; }
+    }
+    homes.push(best);
+  }
+  homes.sort(() => Math.random() - .5);
+  homes.forEach((h, i) => { h.owner = i; h.r = Math.max(h.r, 22); h.rate = 10; h.ships = 30; h.home = i; });
+  return ps;
+}
+
+function newGame(players) {
+  nextFleetId = 1;
+  const size = SIZES.find(s => s.key === settings.size) || SIZES[1];
+  G = {
+    planets: genUniverse(size.n, players.length),
+    fleets: [],
+    players: players.map((p, i) => Object.assign({ id: i, color: COLORS[i], alive: true, think: 1 + Math.random() }, p)),
+    time: 0, speed: settings.speed, level: settings.level, over: false, winner: -1, sizeLabel: size.label,
+  };
+}
+
+function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+function sendShips(owner, from, to, n) {
+  n = Math.floor(Math.min(n, from.ships));
+  if (n < 1 || from === to || from.owner !== owner) return;
+  from.ships -= n;
+  G.fleets.push({ id: nextFleetId++, o: owner, from: from.id, to: to.id, n, t: 0, d: Math.max(1, dist(from, to) - from.r - to.r) });
+}
+
+function sendOrder(owner, fromIds, toId, frac) {
+  const to = G.planets[toId];
+  if (!to) return;
+  for (const id of fromIds) {
+    const p = G.planets[id];
+    if (p && p.owner === owner) sendShips(owner, p, to, p.ships * frac);
+  }
+}
+
+function arrive(f) {
+  const p = G.planets[f.to];
+  if (p.owner === f.o) { p.ships += f.n; return; }
+  p.ships -= f.n;
+  if (p.ships < 0) {
+    const was = p.owner;
+    p.owner = f.o; p.ships = -p.ships; p.res = 0;
+    if (f.o === me) blip(660);
+    else if (was === me) blip(180);
+  }
+}
+
+function sim(dt) {
+  dt *= G.speed;
+  G.time += dt;
+  for (const p of G.planets) {
+    if (p.owner < 0) continue;
+    p.res += p.rate * dt;
+    if (p.res >= COST) { const k = Math.floor(p.res / COST); p.ships += k; p.res -= k * COST; }
+  }
+  for (const f of G.fleets) {
+    f.t += SPEED * dt;
+    if (f.t >= f.d) { arrive(f); f.done = true; }
+  }
+  G.fleets = G.fleets.filter(f => !f.done);
+  for (const pl of G.players) {
+    if (!pl.alive || pl.kind !== 'ai') continue;
+    pl.think -= dt;
+    if (pl.think <= 0) { aiThink(pl); pl.think = LEVELS[G.level].think * (.7 + Math.random() * .6); }
+  }
+  if (G.over) return;
+  for (const pl of G.players) {
+    if (pl.alive && !G.planets.some(p => p.owner === pl.id) && !G.fleets.some(f => f.o === pl.id)) {
+      pl.alive = false;
+      toast(pl.id === me ? '💥 You were eliminated!' : `💥 ${pl.name} was eliminated!`);
+      if (pl.id === me) showLost();
+    }
+  }
+  const alive = G.players.filter(p => p.alive);
+  if (alive.length <= 1) endGame(alive.length ? alive[0].id : -1);
+}
+
+// ── AI ────────────────────────────────────────────────────────────────────────
+// Each think it first covers planets about to fall, then picks the best-value target it can
+// take with ships from its nearest planets, and launches enough to win with some to spare.
+function aiThink(pl) {
+  const L = LEVELS[G.level];
+  const mine = G.planets.filter(p => p.owner === pl.id);
+  if (!mine.length) return;
+  const inc = G.planets.map(() => ({ mine: 0, enemy: 0 }));
+  for (const f of G.fleets) inc[f.to][f.o === pl.id ? 'mine' : 'enemy'] += f.n;
+  const threat = p => Math.max(0, inc[p.id].enemy - inc[p.id].mine - p.ships);
+  const guard = p => p.home === pl.id ? 10 : 0;   // keeps a few ships home so a rush can't end it in seconds
+  const avail = p => Math.max(0, Math.floor(Math.min(p.ships * (1 - L.reserve), p.ships - guard(p))) - inc[p.id].enemy);
+
+  for (const p of mine) {
+    let need = threat(p);
+    if (need <= 0) continue;
+    need += 3;
+    for (const q of mine.filter(q => q !== p && threat(q) === 0).sort((a, b) => dist(a, p) - dist(b, p))) {
+      if (need <= 0) break;
+      const k = Math.min(avail(q), need);
+      if (k >= 1) { sendShips(pl.id, q, p, k); inc[p.id].mine += k; need -= k; }
+    }
+  }
+
+  const attacks = G.level === 'hard' ? 2 : 1;
+  for (let a = 0; a < attacks; a++) {
+    let best = null;
+    for (const t of G.planets) {
+      if (t.owner === pl.id) continue;
+      const used = [];
+      let acc = 0, need = Infinity;
+      for (const q of mine.slice().sort((x, y) => dist(x, t) - dist(y, t))) {
+        const k = avail(q);
+        if (k < 1) continue;
+        used.push(q); acc += k;
+        const eta = dist(q, t) / SPEED;
+        const grow = t.owner >= 0 ? t.rate / COST * eta : 0;
+        need = Math.ceil((t.ships + grow + inc[t.id].enemy * (t.owner >= 0 ? 0 : .5) - inc[t.id].mine) * L.margin + 2);
+        if (acc >= need) break;
+      }
+      if (!used.length || need <= 2 || acc < need) continue;
+      const far = dist(used[used.length - 1], t) / SPEED;
+      let score = (t.rate + (t.owner >= 0 ? 3 : 0) + (t.home !== undefined && t.owner === t.home ? 4 : 0)) / (need + far * 4 + 5);
+      if (G.level === 'easy') score *= .5 + Math.random();
+      if (!best || score > best.score) best = { t, used, need, score };
+    }
+    if (!best) return;
+    let left = best.need;
+    for (const q of best.used) {
+      const k = Math.min(avail(q), left);
+      if (k >= 1) { sendShips(pl.id, q, best.t, k); left -= k; inc[best.t.id].mine += k; }
+    }
+  }
+}
+
+// ── View ──────────────────────────────────────────────────────────────────────
+const cv = document.getElementById('cv'), cx = cv.getContext('2d');
+let VW = 0, VH = 0, DPR = 1;
+const cam = { x: 0, y: 0, z: 1 };
+const stars = Array.from({ length: 260 }, () => ({ x: Math.random(), y: Math.random(), s: Math.random() * 1.4 + .3, a: Math.random() * .6 + .2 }));
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  VW = innerWidth; VH = innerHeight;
+  cv.width = VW * DPR; cv.height = VH * DPR;
+}
+addEventListener('resize', resize); resize();
+const sx = x => (x - cam.x) * cam.z + VW / 2, sy = y => (y - cam.y) * cam.z + VH / 2;
+const wx = x => (x - VW / 2) / cam.z + cam.x, wy = y => (y - VH / 2) / cam.z + cam.y;
+
+function fit() {
+  if (!G) return;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of G.planets) { x0 = Math.min(x0, p.x - p.r); y0 = Math.min(y0, p.y - p.r); x1 = Math.max(x1, p.x + p.r); y1 = Math.max(y1, p.y + p.r); }
+  const top = Math.min(VH * .4, 26 + 18 * G.players.length), bottom = 80;   // keep clear of the scoreboard and the buttons
+  cam.z = clampZ(Math.min((VW - 30) / (x1 - x0), (VH - top - bottom - 20) / (y1 - y0)));
+  cam.x = (x0 + x1) / 2;
+  cam.y = (y0 + y1) / 2 - ((top + VH - bottom) / 2 - VH / 2) / cam.z;
+}
+
+function fleetPos(f) {
+  const a = G.planets[f.from], b = G.planets[f.to];
+  const len = dist(a, b) || 1, ux = (b.x - a.x) / len, uy = (b.y - a.y) / len;
+  const along = a.r + Math.min(f.t, f.d);
+  return { x: a.x + ux * along, y: a.y + uy * along, ux, uy };
+}
+
+let selected = new Set(), drag = null, info = null, frac = .5;
+
+function draw() {
+  cx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  cx.fillStyle = '#05060f'; cx.fillRect(0, 0, VW, VH);
+  for (const s of stars) {
+    const x = ((s.x * VW * 1.5 - cam.x * cam.z * .06 * s.s) % VW + VW) % VW;
+    const y = ((s.y * VH * 1.5 - cam.y * cam.z * .06 * s.s) % VH + VH) % VH;
+    cx.globalAlpha = s.a; cx.fillStyle = '#fff'; cx.fillRect(x, y, s.s, s.s);
+  }
+  cx.globalAlpha = 1;
+  if (!G) return;
+  const z = cam.z;
+
+  // Lines from selected planets to the finger while dragging
+  if (drag && drag.mode === 'drag') {
+    cx.strokeStyle = 'rgba(0,255,255,.45)'; cx.lineWidth = 2; cx.setLineDash([6, 6]);
+    for (const id of selected) {
+      const p = G.planets[id];
+      cx.beginPath(); cx.moveTo(sx(p.x), sy(p.y)); cx.lineTo(drag.x, drag.y); cx.stroke();
+    }
+    cx.setLineDash([]);
+  }
+
+  // Fleet trails and ships
+  for (const f of G.fleets) {
+    const pos = fleetPos(f), b = G.planets[f.to], col = G.players[f.o].color;
+    cx.strokeStyle = col; cx.globalAlpha = .18; cx.lineWidth = 1;
+    cx.beginPath(); cx.moveTo(sx(pos.x), sy(pos.y)); cx.lineTo(sx(b.x), sy(b.y)); cx.stroke();
+    cx.globalAlpha = 1;
+    const k = Math.min(f.n, 9), sz = Math.max(3, 5 * Math.sqrt(z));
+    cx.fillStyle = col;
+    for (let i = 0; i < k; i++) {
+      const h = (f.id * 7919 + i * 104729) % 1000 / 1000, h2 = (f.id * 31 + i * 7477) % 1000 / 1000;
+      const ox = (h - .5) * 14 * Math.sqrt(k) / 2, oy = (h2 - .5) * 14 * Math.sqrt(k) / 2;
+      const px = sx(pos.x) + ox * Math.sqrt(z), py = sy(pos.y) + oy * Math.sqrt(z);
+      cx.beginPath();
+      cx.moveTo(px + pos.ux * sz * 1.4, py + pos.uy * sz * 1.4);
+      cx.lineTo(px - pos.ux * sz - pos.uy * sz * .7, py - pos.uy * sz + pos.ux * sz * .7);
+      cx.lineTo(px - pos.ux * sz + pos.uy * sz * .7, py - pos.uy * sz - pos.ux * sz * .7);
+      cx.fill();
+    }
+    cx.font = `bold ${Math.max(10, 12 * Math.sqrt(z))}px Courier New`; cx.textAlign = 'left'; cx.textBaseline = 'middle';
+    cx.fillStyle = '#fff'; cx.fillText(f.n, sx(pos.x) + 10 * Math.sqrt(z) + 4, sy(pos.y) - 8);
+  }
+
+  // Planets
+  for (const p of G.planets) {
+    const x = sx(p.x), y = sy(p.y), r = p.r * z;
+    if (x < -r - 40 || y < -r - 40 || x > VW + r + 40 || y > VH + r + 40) continue;
+    const col = p.owner >= 0 ? G.players[p.owner].color : NEUTRAL;
+    if (selected.has(p.id)) {
+      cx.strokeStyle = '#0ff'; cx.lineWidth = 3; cx.shadowColor = '#0ff'; cx.shadowBlur = 14;
+      cx.beginPath(); cx.arc(x, y, r + 7, 0, Math.PI * 2); cx.stroke(); cx.shadowBlur = 0;
+    }
+    const g = cx.createRadialGradient(x - r * .35, y - r * .35, r * .1, x, y, r);
+    g.addColorStop(0, '#fff'); g.addColorStop(.25, col); g.addColorStop(1, shade(col));
+    cx.globalAlpha = p.owner >= 0 ? 1 : .65;
+    cx.fillStyle = g; cx.beginPath(); cx.arc(x, y, r, 0, Math.PI * 2); cx.fill();
+    cx.globalAlpha = 1;
+    if (p.home !== undefined && p.owner === p.home) {   // a crown ring on a home world its owner still holds
+      cx.strokeStyle = col; cx.lineWidth = 1; cx.globalAlpha = .6;
+      cx.beginPath(); cx.arc(x, y, r + 10, 0, Math.PI * 2); cx.stroke(); cx.globalAlpha = 1;
+    }
+    if (p.owner >= 0) {   // production: resources toward the next spacecraft
+      cx.strokeStyle = col; cx.lineWidth = 2.5;
+      cx.beginPath(); cx.arc(x, y, r + 3.5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (p.res / COST)); cx.stroke();
+    }
+    cx.font = `bold ${Math.max(11, Math.min(22, r * .8))}px Courier New`;
+    cx.textAlign = 'center'; cx.textBaseline = 'middle';
+    cx.lineWidth = 3; cx.strokeStyle = 'rgba(0,0,0,.7)';
+    const txt = String(Math.floor(p.ships));
+    cx.strokeText(txt, x, y); cx.fillStyle = '#fff'; cx.fillText(txt, x, y);
+  }
+
+  // Scoreboard
+  cx.textAlign = 'left'; cx.textBaseline = 'middle'; cx.font = 'bold 12px Courier New';
+  const stats = G.players.map(pl => {
+    let planets = 0, ships = 0;
+    for (const p of G.planets) if (p.owner === pl.id) { planets++; ships += Math.floor(p.ships); }
+    for (const f of G.fleets) if (f.o === pl.id) ships += f.n;
+    return { pl, planets, ships };
+  });
+  stats.forEach((s, i) => {
+    const y = 16 + i * 18;
+    cx.globalAlpha = s.pl.alive ? 1 : .35;
+    cx.fillStyle = 'rgba(5,6,15,.6)'; cx.fillRect(4, y - 8, 230, 17);
+    cx.fillStyle = s.pl.color; cx.beginPath(); cx.arc(14, y, 5, 0, Math.PI * 2); cx.fill();
+    cx.fillStyle = s.pl.id === me ? '#fff' : '#bcd';
+    const tag = s.pl.id === me ? ' (you)' : s.pl.kind === 'ai' ? ' 🤖' : '';
+    cx.fillText((s.pl.name + tag).slice(0, 18), 24, y);
+    cx.textAlign = 'right';
+    cx.fillText(s.pl.alive ? `🪐${s.planets} 🚀${s.ships}` : 'out', 230, y);
+    cx.textAlign = 'left';
+  });
+  cx.globalAlpha = 1;
+  cx.textAlign = 'right'; cx.fillStyle = '#678';
+  cx.fillText(clock(G.time), VW - 10, 16);
+
+  if (info && G.planets[info.id]) {
+    const p = G.planets[info.id];
+    const who = p.owner < 0 ? 'Neutral' : G.players[p.owner].name;
+    const lines = [`${who}${p.home !== undefined ? ' · home world' : ''}`, `${p.rate} resources/s → ${(p.rate / COST).toFixed(1)} ships/s`, `${Math.floor(p.ships)} ships here`];
+    const bx = Math.min(VW - 230, Math.max(6, sx(p.x) - 110)), by = Math.min(VH - 130, sy(p.y) + p.r * z + 12);
+    cx.fillStyle = 'rgba(20,26,58,.92)'; cx.strokeStyle = '#2c3870'; cx.lineWidth = 1;
+    cx.fillRect(bx, by, 224, 56); cx.strokeRect(bx, by, 224, 56);
+    cx.textAlign = 'left'; cx.font = '12px Courier New'; cx.fillStyle = '#cde';
+    lines.forEach((l, i) => cx.fillText(l, bx + 8, by + 12 + i * 16));
+  }
+}
+
+function shade(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgb(${(n >> 16) * .3 | 0},${(n >> 8 & 255) * .3 | 0},${(n & 255) * .3 | 0})`;
+}
+function clock(t) { t = Math.floor(t); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; }
+
+// ── Input ─────────────────────────────────────────────────────────────────────
+// Tap your planets to select them (tap again to drop one), then tap a target to launch.
+// Or drag from your planet to any planet, your own included. Drag empty space to pan,
+// pinch or scroll to zoom.
+const pointers = new Map();
+function planetAt(x, y) {
+  let best = null, bd = Infinity;
+  for (const p of G.planets) {
+    const d = Math.hypot(sx(p.x) - x, sy(p.y) - y) - p.r * cam.z;
+    if (d < 16 && d < bd) { bd = d; best = p; }
+  }
+  return best;
+}
+const myPlayer = () => G && G.players[me];
+const canPlay = () => G && !G.over && myPlayer().alive && !G.paused;
+
+cv.addEventListener('pointerdown', e => {
+  if (!G) return;
+  cv.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pointers.size === 1) {
+    drag = { mode: 'pending', x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, hit: planetAt(e.clientX, e.clientY), cam: { ...cam } };
+  } else if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    drag = { mode: 'pinch', d: Math.hypot(a.x - b.x, a.y - b.y), z: cam.z, wx: wx((a.x + b.x) / 2), wy: wy((a.y + b.y) / 2) };
+  }
+});
+cv.addEventListener('pointermove', e => {
+  if (!pointers.has(e.pointerId) || !drag) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (drag.mode === 'pinch' && pointers.size >= 2) {
+    const [a, b] = [...pointers.values()];
+    cam.z = clampZ(drag.z * Math.hypot(a.x - b.x, a.y - b.y) / drag.d);
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    cam.x = drag.wx - (mx - VW / 2) / cam.z; cam.y = drag.wy - (my - VH / 2) / cam.z;
+    return;
+  }
+  drag.x = e.clientX; drag.y = e.clientY;
+  if (drag.mode === 'pending' && Math.hypot(drag.x - drag.x0, drag.y - drag.y0) > 10) {
+    if (drag.hit && drag.hit.owner === me && canPlay()) { drag.mode = 'drag'; selected.add(drag.hit.id); info = null; }
+    else drag.mode = 'pan';
+  }
+  if (drag.mode === 'pan') {
+    cam.x = drag.cam.x - (drag.x - drag.x0) / cam.z; cam.y = drag.cam.y - (drag.y - drag.y0) / cam.z;
+  } else if (drag.mode === 'drag') {
+    const p = planetAt(drag.x, drag.y);
+    if (p && p.owner === me && p !== drag.over && !selected.has(p.id)) selected.add(p.id);   // sweep over planets to add them
+    drag.over = p;
+  }
+});
+function pointerEnd(e) {
+  if (!pointers.has(e.pointerId)) return;
+  pointers.delete(e.pointerId);
+  if (!drag) return;
+  if (drag.mode === 'pinch') { if (pointers.size === 0) drag = null; else drag = { mode: 'none' }; return; }
+  if (drag.mode === 'pending') tap(drag.hit);
+  else if (drag.mode === 'drag') {
+    const t = planetAt(drag.x, drag.y);
+    if (t) { selected.delete(t.id); launch(t); }
+    else selected.clear();
+  }
+  drag = null;
+}
+cv.addEventListener('pointerup', pointerEnd);
+cv.addEventListener('pointercancel', pointerEnd);
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  const mx = wx(e.clientX), my = wy(e.clientY);
+  cam.z = clampZ(cam.z * Math.exp(-e.deltaY * .0015));
+  cam.x = mx - (e.clientX - VW / 2) / cam.z; cam.y = my - (e.clientY - VH / 2) / cam.z;
+}, { passive: false });
+const clampZ = z => Math.max(.1, Math.min(4, z));
+
+function tap(p) {
+  if (!p) { selected.clear(); info = null; return; }
+  if (p.owner === me && canPlay()) {
+    if (selected.has(p.id)) selected.delete(p.id); else selected.add(p.id);
+    info = selected.size ? null : { id: p.id };
+    return;
+  }
+  if (selected.size && canPlay()) { launch(p); return; }
+  info = info && info.id === p.id ? null : { id: p.id };
+}
+
+function launch(target) {
+  const from = [...selected].filter(id => id !== target.id);
+  selected.clear();
+  if (!from.length || !canPlay()) return;
+  blip(440, .05);
+  if (role === 'guest') netSend({ t: 'send', ids: from, to: target.id, frac });
+  else sendOrder(me, from, target.id, frac);
+}
+
+document.querySelectorAll('#bar [data-pct]').forEach(b => b.onclick = () => setFrac(+b.dataset.pct));
+function setFrac(f) {
+  frac = f;
+  document.querySelectorAll('#bar [data-pct]').forEach(b => b.classList.toggle('on', +b.dataset.pct === f));
+}
+document.getElementById('allBtn').onclick = selectAll;
+function selectAll() {
+  if (!canPlay()) return;
+  const mine = G.planets.filter(p => p.owner === me);
+  if (mine.every(p => selected.has(p.id))) selected.clear();
+  else mine.forEach(p => selected.add(p.id));
+  info = null;
+}
+document.getElementById('fitBtn').onclick = fit;
+document.getElementById('pauseBtn').onclick = togglePause;
+document.getElementById('quitBtn').onclick = askQuit;
+addEventListener('keydown', e => {
+  if (!G || document.activeElement.tagName === 'INPUT') return;
+  if (e.key >= '1' && e.key <= '4') setFrac([.25, .5, .75, 1][e.key - 1]);
+  else if (e.key === 'a' || e.key === 'A') selectAll();
+  else if (e.key === 'f' || e.key === 'F') fit();
+  else if (e.key === 'p' || e.key === 'P') togglePause();
+  else if (e.key === 'Escape') { selected.clear(); info = null; }
+});
+
+function togglePause() {
+  if (role !== 'solo' || !G || G.over) return;
+  G.paused = !G.paused;
+  if (G.paused) showMsg(`<h2>⏸ Paused</h2><button class="big" id="resume">▶ Resume</button>`, { resume: togglePause });
+  else hideMsg();
+}
+
+// ── Loop ──────────────────────────────────────────────────────────────────────
+// The simulation runs on a timer, not on animation frames, so a LAN host keeps the game
+// going even with its tab in the background.
+let lastSim = performance.now(), lastBroadcast = 0;
+setInterval(() => {
+  const now = performance.now();
+  let dt = Math.min(5, (now - lastSim) / 1000);
+  lastSim = now;
+  if (!G) return;
+  if (role === 'guest') {
+    for (const f of G.fleets) f.t = Math.min(f.d, f.t + SPEED * G.speed * dt);   // smooth flight between updates
+    return;
+  }
+  if (G.paused) return;
+  while (dt > 0) { const s = Math.min(dt, .05); sim(s); dt -= s; }
+  if (role === 'host' && now - lastBroadcast > 100) { lastBroadcast = now; broadcastState(); }
+}, 33);
+function frame() { draw(); requestAnimationFrame(frame); }
+requestAnimationFrame(frame);
+
+// ── Sound ─────────────────────────────────────────────────────────────────────
+let actx = null;
+function blip(f, len = .12) {
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.frequency.value = f; o.type = 'triangle';
+    g.gain.setValueAtTime(.08, actx.currentTime); g.gain.exponentialRampToValueAtTime(.001, actx.currentTime + len);
+    o.connect(g).connect(actx.destination); o.start(); o.stop(actx.currentTime + len);
+  } catch (e) {}
+}
+
+// ── Screens ───────────────────────────────────────────────────────────────────
+const ov = document.getElementById('ov');
+function showMsg(html, handlers = {}) {
+  ov.dataset.screen = '';
+  ov.innerHTML = `<div class="box">${html}</div>`;
+  ov.classList.remove('hide');
+  for (const id in handlers) { const el = document.getElementById(id); if (el) el.onclick = handlers[id]; }
+}
+function hideMsg() { ov.classList.add('hide'); }
+let toastT = 0;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.style.display = 'block';
+  clearTimeout(toastT); toastT = setTimeout(() => el.style.display = 'none', 3000);
+}
+function esc(s) { return String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`); }
+function setPlaying(on) {
+  document.getElementById('bar').style.display = on ? 'flex' : 'none';
+  document.getElementById('pauseBtn').style.display = role === 'solo' ? '' : 'none';
+  const hint = document.getElementById('hint');
+  hint.style.display = on ? 'block' : 'none';
+  hint.textContent = 'Tap your planets, then tap a target · or drag from your planet · drag space to pan, pinch to zoom';
+  clearTimeout(hint.t); hint.t = setTimeout(() => hint.style.display = 'none', 9000);
+}
+
+function title() {
+  netClose(); G = null; role = null; selected.clear(); info = null; setPlaying(false);
+  showMsg(`<h1>Star Colony</h1>
+    <p>Launch spacecraft from your home world, colonize planets and wipe out every enemy fleet.</p>
+    <input id="nameIn" maxlength="14" placeholder="Your name" value="${esc(myName)}" autocomplete="off">
+    <button class="big" id="solo">🚀 Play vs AI</button>
+    <button class="big" id="host">📡 Host a LAN game</button>
+    <button class="big" id="join">🔗 Join a LAN game</button>
+    <button class="big alt" id="how">❓ How to play</button>
+    <p><a href="/">← Back to Arcade</a></p>`,
+    { solo: () => { saveName() && soloSetup(); }, host: () => { saveName() && hostGame(); }, join: () => { saveName() && joinMenu(); }, how });
+}
+function saveName() {
+  const inp = document.getElementById('nameIn');
+  myName = (inp.value.trim() || 'Commander').slice(0, 14);
+  store.set('name', myName);
+  return true;
+}
+function how() {
+  showMsg(`<h2>❓ How to play</h2>
+    <p>The universe is a field of planets. You start with one home world.</p>
+    <p>Every planet you own makes <b>resources</b>; the ring around it fills up, and each ${COST} resources build one <b>spacecraft</b>. Bigger planets make more.</p>
+    <p><b>Tap</b> your planets to select them, then <b>tap</b> another planet to launch ships there. Or <b>drag</b> from your planet to the target (drag to your own planet to send reinforcements). The buttons at the bottom pick how many ships go: 25%, 50%, 75% or 100%.</p>
+    <p>When your ships land on a planet you don't own, the numbers subtract. Whoever has ships left keeps the planet.</p>
+    <p>Gray planets are neutral and don't grow — easy pickings early on. Eliminate every enemy ship and planet to win!</p>
+    <p>Keys: 1–4 send %, A select all, F fit, P pause, Esc clear.</p>
+    <button class="big" id="back">◀ Back</button>`, { back: title });
+}
+
+function settingsHTML(humans, editable = true) {
+  const maxAi = MAX_PLAYERS - humans, minAi = humans > 1 ? 0 : 1;
+  settings.ai = Math.max(minAi, Math.min(maxAi, settings.ai));
+  const seg = (key, opts) => `<div class="seg">${opts.map(([v, l]) => `<button ${editable ? '' : 'disabled'} data-set="${key}" data-v="${v}" class="${settings[key] == v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  return `<div class="row">Universe ${seg('size', SIZES.map(s => [s.key, s.label]))}</div>
+    <div class="row">AI opponents <div class="seg">${editable ? `<button data-ai="-1">−</button>` : ''}<span>${settings.ai}</span>${editable ? `<button data-ai="1">+</button>` : ''}</div></div>
+    <div class="row">AI skill ${seg('level', Object.entries(LEVELS).map(([k, v]) => [k, v.label]))}</div>
+    <div class="row">Game speed ${seg('speed', [[1, '1×'], [1.5, '1.5×'], [2, '2×']])}</div>`;
+}
+function bindSettings(redraw, humans) {
+  ov.querySelectorAll('[data-set]').forEach(b => b.onclick = () => {
+    const k = b.dataset.set; settings[k] = k === 'speed' ? +b.dataset.v : b.dataset.v;
+    store.set('settings', settings); redraw();
+  });
+  ov.querySelectorAll('[data-ai]').forEach(b => b.onclick = () => {
+    settings.ai = Math.max(humans > 1 ? 0 : 1, Math.min(MAX_PLAYERS - humans, settings.ai + +b.dataset.ai));
+    store.set('settings', settings); redraw();
+  });
+}
+
+function soloSetup() {
+  showMsg(`<h2>🚀 New universe</h2>${settingsHTML(1)}
+    <button class="big" id="go">Launch ▶</button><button class="big alt" id="back">◀ Back</button>`, { go: startSolo, back: title });
+  bindSettings(soloSetup, 1);
+}
+function aiPlayers(n, from) {
+  return Array.from({ length: n }, (_, i) => ({ name: AI_NAMES[(from + i) % AI_NAMES.length], kind: 'ai' }));
+}
+function startSolo() {
+  role = 'solo'; me = 0;
+  newGame([{ name: myName, kind: 'human' }, ...aiPlayers(settings.ai, 0)]);
+  beginPlay();
+}
+function beginPlay() {
+  selected.clear(); info = null; hideMsg(); fit(); setPlaying(true);
+  const home = G.planets.find(p => p.owner === me);
+  toast(`You are ${COLOR_NAMES[me]} — your home world is selected`);
+  if (home) selected.add(home.id);
+}
+
+function askQuit() {
+  if (!G) return;
+  const wasPaused = G.paused;
+  if (role === 'solo') G.paused = true;
+  const why = role === 'host' ? 'This ends the game for everyone.' : role === 'guest' ? 'The AI will take over your planets.' : '';
+  showMsg(`<h2>Quit this game?</h2><p>${why}</p><button class="big" id="yes">✕ Quit</button><button class="big alt" id="no">Keep playing</button>`,
+    { yes: title, no: () => { if (role === 'solo') G.paused = wasPaused; hideMsg(); } });
+}
+
+function showLost() {
+  if (G.over) return;
+  selected.clear();
+  showMsg(`<h2>💥 You were eliminated</h2><p>Your last planet fell after ${clock(G.time)}.</p>
+    <button class="big" id="watch">👀 Watch the rest</button><button class="big alt" id="menu">Menu</button>`, { watch: hideMsg, menu: title });
+}
+
+function endGame(winner) {
+  G.over = true; G.winner = winner;
+  if (role === 'host') broadcastState();
+  showResult();
+}
+function showResult() {
+  selected.clear();
+  const w = G.players[G.winner];
+  const won = G.winner === me;
+  const opponents = G.players.length - 1;
+  if (won) {
+    blip(523); setTimeout(() => blip(659), 120); setTimeout(() => blip(784), 240);
+    const score = Math.round(opponents * 1000 * { easy: .5, normal: 1, hard: 1.6 }[G.level] + G.planets.length * 10 + Math.max(0, 1200 - G.time / G.speed));
+    const label = `Won vs ${opponents} · ${G.sizeLabel} · ${clock(G.time)}`;
+    fetch('/scores/star-colony', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: myName, score, label }) }).catch(() => {});
+    showMsg(`<h1>Victory!</h1><p>The whole universe is yours after ${clock(G.time)}.</p><p>Score: ${score.toLocaleString()}</p>${endButtons()}`, endHandlers());
+  } else {
+    showMsg(`<h2>${w ? `<span class="dot" style="background:${w.color}"></span>${esc(w.name)} rules the universe` : 'Nobody survived'}</h2>
+      <p>Game over after ${clock(G.time)}.</p>${endButtons()}`, endHandlers());
+  }
+}
+function endButtons() {
+  return role === 'guest' ? `<p>Waiting for the host to start another game…</p><button class="big alt" id="menu">Leave</button>`
+    : `<button class="big" id="again">Play again ▶</button><button class="big alt" id="menu">Menu</button>`;
+}
+function endHandlers() {
+  return { menu: title, again: role === 'host' ? hostLobby : soloSetup };
+}
+
+// ── LAN play ──────────────────────────────────────────────────────────────────
+// The host's browser runs the game; guests send their launches and draw the host's updates.
+function netClose() {
+  if (net) { net.closed = true; try { net.ws.close(); } catch (e) {} }
+  net = null;
+}
+function netSend(m) { if (net && net.ws.readyState === 1) net.ws.send(JSON.stringify(m)); }
+function connect(code, host) {
+  netClose();
+  const n = net = { code, host, seat: -1, lobby: [], closed: false };
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  try { n.ws = new WebSocket(`${proto}//${location.host}/ws/star-colony/${code}${host ? '?host=1' : ''}`); }
+  catch (e) { joinMenu("Couldn't connect 😕"); return; }
+  n.ws.onmessage = e => { if (net === n) onNet(JSON.parse(e.data)); };
+  n.ws.onclose = () => { if (net === n && !n.closed) netLost(); };
+}
+function netLost() {
+  const wasGuest = role === 'guest';
+  netClose();
+  if (G && role === 'host') { toast('📡 Lost the server — the game goes on here'); role = 'solo'; return; }
+  G = null; setPlaying(false);
+  showMsg(`<h2>📡 Disconnected</h2><p>${wasGuest ? 'Lost the connection to the host 😢' : "Couldn't reach the arcade server 😕"}</p>
+    <button class="big alt" id="menu">Menu</button>`, { menu: title });
+}
+
+function hostGame() {
+  role = 'host'; G = null;
+  connect(String(100 + Math.floor(Math.random() * 900)), true);
+  showMsg(`<h2>📡 Opening a room…</h2>`);
+}
+function hostLobby() {
+  role = 'host'; G = null; setPlaying(false); selected.clear();
+  if (!net) { netLost(); return; }
+  const humans = 1 + net.lobby.length;
+  showMsg(`<h2>📡 Your LAN game</h2>
+    <p>Friends on the Wi-Fi open Star Colony, tap 🔗 Join and pick your game, or type the code:</p>
+    <div class="code">${net.code}</div>
+    <div class="plist"><div><span class="dot" style="background:${COLORS[0]}"></span>${esc(myName)} (you, host)</div>
+      ${net.lobby.map((g, i) => `<div><span class="dot" style="background:${COLORS[i + 1]}"></span>${esc(g.name)}</div>`).join('')}
+      ${humans < MAX_PLAYERS ? `<div style="color:#567">⏳ waiting for players… (up to ${MAX_PLAYERS})</div>` : ''}</div>
+    ${settingsHTML(humans)}
+    <button class="big" id="go">Launch for everyone ▶</button><button class="big alt" id="menu">✕ Close room</button>`,
+    { go: startHost, menu: title });
+  bindSettings(hostLobby, humans);
+  announce(false);
+  netSend({ t: 'lobby', players: [{ name: myName }, ...net.lobby].map(p => p.name), settings, humans });
+}
+function announce(started) {
+  netSend({ t: 'room', name: myName, players: 1 + net.lobby.length, started });
+}
+function startHost() {
+  me = 0;
+  const humans = [{ name: myName, kind: 'human', seat: 0 }, ...net.lobby.map(g => ({ name: g.name, kind: 'remote', seat: g.seat }))];
+  newGame([...humans, ...aiPlayers(settings.ai, 0)]);
+  announce(true);
+  netSend({
+    t: 'start', sizeLabel: G.sizeLabel, speed: G.speed, level: G.level,
+    planets: G.planets.map(p => [Math.round(p.x), Math.round(p.y), Math.round(p.r * 10) / 10, p.rate, p.home === undefined ? -1 : p.home]),
+    players: G.players.map(p => ({ name: p.name, kind: p.kind, seat: p.seat })),
+  });
+  broadcastState();
+  beginPlay();
+}
+function broadcastState() {
+  if (!net || !G) return;
+  netSend({
+    t: 's', time: Math.round(G.time * 10) / 10, over: G.over, winner: G.winner,
+    p: G.planets.map(p => [p.owner, Math.floor(p.ships), Math.round(p.res * 10) / 10]),
+    f: G.fleets.map(f => [f.id, f.o, f.from, f.to, f.n, Math.round(f.t)]),
+    al: G.players.map(p => p.alive ? 1 : 0), k: G.players.map(p => p.kind),
+  });
+}
+
+function onNet(m) {
+  if (m.type === 'code_taken') { connect(String(100 + Math.floor(Math.random() * 900)), true); return; }
+  if (m.type === 'no_room') { joinMenu(`Nobody is hosting room ${net.code} 🤔 Check the code!`); return; }
+  if (m.type === 'room_full') { joinMenu(`Room ${net.code} is full (${MAX_PLAYERS} players).`); return; }
+  if (m.type === 'started') { joinMenu(`That game has already started.`); return; }
+  if (m.type === 'seat') {
+    net.seat = m.seat;
+    if (net.host) hostLobby();
+    else { netSend({ t: 'hello', name: myName }); showMsg(`<h2>🔗 Joined room ${net.code}</h2><p>Saying hello…</p>`); }
+    return;
+  }
+  if (net.host) onHostMsg(m); else onGuestMsg(m);
+}
+
+function onHostMsg(m) {
+  if (m.type === 'join') return;   // their hello comes next
+  if (m.type === 'leave') {
+    const i = net.lobby.findIndex(g => g.seat === m.seat);
+    if (i >= 0) {
+      const g = net.lobby.splice(i, 1)[0];
+      if (!G) { toast(`${g.name} left`); hostLobby(); }
+    }
+    const pl = G && G.players.find(p => p.seat === m.seat && p.kind === 'remote');
+    if (pl) { pl.kind = 'ai'; toast(`${pl.name} left — the AI takes over`); }
+    return;
+  }
+  if (m.t === 'hello') {
+    if (G) return;
+    net.lobby.push({ seat: m.from, name: String(m.name || 'Guest').slice(0, 14) });
+    blip(523);
+    hostLobby();
+    return;
+  }
+  if (m.t === 'send' && G && !G.over) {
+    const pl = G.players.find(p => p.seat === m.from && p.kind === 'remote');
+    if (pl && pl.alive && Array.isArray(m.ids)) sendOrder(pl.id, m.ids.slice(0, 200), m.to | 0, Math.max(0, Math.min(1, +m.frac || 0)));
+  }
+}
+
+function onGuestMsg(m) {
+  if (m.type === 'host_left') {
+    netClose(); G = null; setPlaying(false);
+    showMsg(`<h2>📡 The host closed the game</h2><button class="big alt" id="menu">Menu</button>`, { menu: title });
+    return;
+  }
+  if (m.t === 'lobby') {
+    if (G && !G.over) return;
+    G = null; setPlaying(false); role = 'guest';
+    Object.assign(settings, m.settings);
+    showMsg(`<h2>🔗 Room ${net.code}</h2>
+      <div class="plist">${m.players.map((n, i) => `<div><span class="dot" style="background:${COLORS[i]}"></span>${esc(n)}${i === 0 ? ' (host)' : ''}</div>`).join('')}</div>
+      ${settingsHTML(m.humans, false)}
+      <p>⏳ Waiting for the host to launch…</p><button class="big alt" id="menu">Leave</button>`, { menu: title });
+    return;
+  }
+  if (m.t === 'start') {
+    role = 'guest';
+    G = {
+      planets: m.planets.map(([x, y, r, rate, home], id) => Object.assign({ id, x, y, r, rate, owner: -1, ships: 0, res: 0 }, home >= 0 ? { home } : {})),
+      fleets: [], players: m.players.map((p, i) => ({ id: i, name: p.name, kind: p.kind, seat: p.seat, color: COLORS[i], alive: true })),
+      time: 0, speed: m.speed, level: m.level, over: false, winner: -1, sizeLabel: m.sizeLabel,
+    };
+    me = G.players.findIndex(p => p.seat === net.seat);
+    pendingState && applyState(pendingState);
+    beginPlay();
+    return;
+  }
+  if (m.t === 's') {
+    if (!G) { pendingState = m; return; }
+    applyState(m);
+  }
+}
+let pendingState = null;
+function applyState(m) {
+  pendingState = null;
+  m.p.forEach(([o, s, r], i) => {
+    const p = G.planets[i];
+    if (p.owner !== o && G.time > 0) { if (o === me) blip(660); else if (p.owner === me) blip(180); }
+    p.owner = o; p.ships = s; p.res = r;
+  });
+  G.fleets = m.f.map(([id, o, from, to, n, t]) => {
+    const a = G.planets[from], b = G.planets[to];
+    return { id, o, from, to, n, t, d: Math.max(1, dist(a, b) - a.r - b.r) };
+  });
+  m.al.forEach((a, i) => {
+    const pl = G.players[i];
+    if (pl.alive && !a) { toast(i === me ? '💥 You were eliminated!' : `💥 ${pl.name} was eliminated!`); if (i === me && !m.over) showLost(); }
+    pl.alive = !!a;
+  });
+  m.k.forEach((k, i) => G.players[i].kind = k);
+  G.time = m.time;
+  if (m.over && !G.over) { G.over = true; G.winner = m.winner; showResult(); }
+}
+
+let roomTimer = 0;
+function joinMenu(err) {
+  netClose(); G = null; role = null; setPlaying(false);
+  const render = rooms => {
+    if (ov.dataset.screen !== 'join') return;
+    const list = document.getElementById('rooms');
+    if (!list) return;
+    const open = rooms.filter(r => !r.started);
+    list.innerHTML = open.length ? open.map(r => `<button data-code="${esc(r.code)}">▶ ${esc(r.name || 'Someone')}'s galaxy · ${r.players} player${r.players > 1 ? 's' : ''} · ${esc(r.code)}</button>`).join('')
+      : `<p>No games hosted right now. Ask a friend to tap 📡 Host.</p>`;
+    list.querySelectorAll('[data-code]').forEach(b => b.onclick = () => joinCode(b.dataset.code));
+  };
+  showMsg(`<h2>🔗 Join a LAN game</h2>${err ? `<p class="err">${esc(err)}</p>` : ''}
+    <div class="rooms" id="rooms"><p>Looking for games…</p></div>
+    <p>Or type the room code:</p><input id="codeIn" inputmode="numeric" maxlength="3" autocomplete="off">
+    <button class="big" id="go">Join ▶</button><button class="big alt" id="back">◀ Back</button>`,
+    { go: () => { const c = document.getElementById('codeIn').value.replace(/\D/g, ''); if (c.length === 3) joinCode(c); }, back: title });
+  ov.dataset.screen = 'join';
+  const poll = () => fetch('/rooms/star-colony').then(r => r.json()).then(render).catch(() => render([]));
+  poll();
+  clearInterval(roomTimer);
+  roomTimer = setInterval(() => { if (ov.dataset.screen === 'join' && !ov.classList.contains('hide')) poll(); else clearInterval(roomTimer); }, 2000);
+}
+function joinCode(code) {
+  ov.dataset.screen = '';
+  role = 'guest';
+  showMsg(`<h2>🔗 Joining ${esc(code)}…</h2>`);
+  connect(code, false);
+}
+
+title();
+</script>
+</body>
+</html>

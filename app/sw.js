@@ -45,7 +45,7 @@ async function networkFirst(e, key) {
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== location.origin) return;
-  if (url.pathname.startsWith("/scores/") || url.pathname.startsWith("/ws/")) return;  // live only
+  if (url.pathname.startsWith("/scores/") || url.pathname.startsWith("/ws/") || url.pathname.startsWith("/rooms/")) return;  // live only
   // A game's own files come fresh with its page, so the two never mismatch.
   if (e.request.mode === "navigate" || FILES.includes(url.pathname)) return e.respondWith(networkFirst(e, url.pathname));
   e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request)));
