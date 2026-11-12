@@ -53,9 +53,11 @@ a { color: #0ff; }
 'use strict';
 // ── Rules ─────────────────────────────────────────────────────────────────────
 // Every owned planet makes resources at its own rate; each COST resources becomes one
-// spacecraft on the planet. Fleets fly at SPEED. When a fleet lands on another player's
+// spacecraft on the planet. Fleets fly at SPEED, up to RANGE away. When a fleet lands on another player's
 // (or a neutral) planet the two numbers subtract; the side with ships left owns it.
-const COST = 10, SPEED = 70;
+// RANGE is how far a fleet can fly (center to center), so empires grow planet by planet.
+// A home world its first owner still holds makes HOME_BONUS times the resources.
+const COST = 10, SPEED = 70, RANGE = 400, HOME_BONUS = 2;
 const COLORS = ['#4fc3ff', '#ff5a5a', '#7dff6a', '#ffc94a', '#d77dff', '#ff8ad8', '#4affd8', '#ff9a3a'];
 const COLOR_NAMES = ['blue', 'red', 'green', 'yellow', 'purple', 'pink', 'teal', 'orange'];
 const NEUTRAL = '#6c7388';
@@ -85,7 +87,22 @@ let G = null, me = 0, role = null;   // role: 'solo' | 'host' | 'guest'
 let net = null;                      // { ws, code, host, seat, lobby: [{seat,name}], closed }
 let nextFleetId = 1;
 
+// Makes universes until every planet can be reached hop by hop within RANGE.
 function genUniverse(n, nPlayers) {
+  let ps;
+  for (let i = 0; i < 50; i++) {
+    ps = genOnce(n, nPlayers);
+    const seen = new Set([0]), todo = [ps[0]];
+    while (todo.length) {
+      const a = todo.pop();
+      for (const b of ps) if (!seen.has(b.id) && dist(a, b) <= RANGE) { seen.add(b.id); todo.push(b); }
+    }
+    if (seen.size === ps.length) break;
+  }
+  return ps;
+}
+
+function genOnce(n, nPlayers) {
   n = Math.max(n, nPlayers * 4);
   const side = Math.sqrt(n) * 150, W = side * 1.35, H = side;
   const ps = [];
@@ -129,10 +146,12 @@ function newGame(players) {
 }
 
 function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+const inRange = (a, b) => dist(a, b) <= RANGE;
+const prod = p => p.home !== undefined && p.owner === p.home ? p.rate * HOME_BONUS : p.rate;
 
 function sendShips(owner, from, to, n) {
   n = Math.floor(Math.min(n, from.ships));
-  if (n < 1 || from === to || from.owner !== owner) return;
+  if (n < 1 || from === to || from.owner !== owner || !inRange(from, to)) return;
   from.ships -= n;
   G.fleets.push({ id: nextFleetId++, o: owner, from: from.id, to: to.id, n, t: 0, d: Math.max(1, dist(from, to) - from.r - to.r) });
 }
@@ -163,7 +182,7 @@ function sim(dt) {
   G.time += dt;
   for (const p of G.planets) {
     if (p.owner < 0) continue;
-    p.res += p.rate * dt;
+    p.res += prod(p) * dt;
     if (p.res >= COST) { const k = Math.floor(p.res / COST); p.ships += k; p.res -= k * COST; }
   }
   for (const f of G.fleets) {
@@ -205,7 +224,7 @@ function aiThink(pl) {
     let need = threat(p);
     if (need <= 0) continue;
     need += 3;
-    for (const q of mine.filter(q => q !== p && threat(q) === 0).sort((a, b) => dist(a, p) - dist(b, p))) {
+    for (const q of mine.filter(q => q !== p && threat(q) === 0 && inRange(q, p)).sort((a, b) => dist(a, p) - dist(b, p))) {
       if (need <= 0) break;
       const k = Math.min(avail(q), need);
       if (k >= 1) { sendShips(pl.id, q, p, k); inc[p.id].mine += k; need -= k; }
@@ -220,11 +239,12 @@ function aiThink(pl) {
       const used = [];
       let acc = 0, need = Infinity;
       for (const q of mine.slice().sort((x, y) => dist(x, t) - dist(y, t))) {
+        if (!inRange(q, t)) break;
         const k = avail(q);
         if (k < 1) continue;
         used.push(q); acc += k;
         const eta = dist(q, t) / SPEED;
-        const grow = t.owner >= 0 ? t.rate / COST * eta : 0;
+        const grow = t.owner >= 0 ? prod(t) / COST * eta : 0;
         need = Math.ceil((t.ships + grow + inc[t.id].enemy * (t.owner >= 0 ? 0 : .5) - inc[t.id].mine) * L.margin + 2);
         if (acc >= need) break;
       }
@@ -234,12 +254,29 @@ function aiThink(pl) {
       if (G.level === 'easy') score *= .5 + Math.random();
       if (!best || score > best.score) best = { t, used, need, score };
     }
-    if (!best) return;
+    if (!best) break;
     let left = best.need;
     for (const q of best.used) {
       const k = Math.min(avail(q), left);
       if (k >= 1) { sendShips(pl.id, q, best.t, k); left -= k; inc[best.t.id].mine += k; }
     }
+  }
+
+  // Ships can't fly far, so planets behind the front pass their spare ships one hop
+  // toward the nearest planet that isn't ours.
+  const others = G.planets.filter(p => p.owner !== pl.id);
+  if (!others.length) return;
+  const front = p => Math.min(...others.map(o => dist(p, o)));
+  for (const p of mine) {
+    const k = avail(p);
+    if (k < 8 || others.some(o => inRange(p, o))) continue;
+    let next = null, nd = front(p);
+    for (const q of mine) {
+      if (q === p || !inRange(p, q)) continue;
+      const d = front(q);
+      if (d < nd) { nd = d; next = q; }
+    }
+    if (next) sendShips(pl.id, p, next, k);
   }
 }
 
@@ -288,12 +325,24 @@ function draw() {
   if (!G) return;
   const z = cam.z;
 
-  // Lines from selected planets to the finger while dragging
-  if (drag && drag.mode === 'drag') {
-    cx.strokeStyle = 'rgba(0,255,255,.45)'; cx.lineWidth = 2; cx.setLineDash([6, 6]);
+  // How far the selected planets' ships can fly
+  if (selected.size) {
+    cx.fillStyle = 'rgba(0,255,255,.035)'; cx.strokeStyle = 'rgba(0,255,255,.25)'; cx.lineWidth = 1; cx.setLineDash([4, 6]);
     for (const id of selected) {
       const p = G.planets[id];
-      cx.beginPath(); cx.moveTo(sx(p.x), sy(p.y)); cx.lineTo(drag.x, drag.y); cx.stroke();
+      cx.beginPath(); cx.arc(sx(p.x), sy(p.y), RANGE * z, 0, Math.PI * 2); cx.fill(); cx.stroke();
+    }
+    cx.setLineDash([]);
+  }
+
+  // Lines from selected planets to the finger while dragging; red where it's out of range
+  if (drag && drag.mode === 'drag') {
+    const t = planetAt(drag.x, drag.y), w = t || { x: wx(drag.x), y: wy(drag.y) };
+    cx.lineWidth = 2; cx.setLineDash([6, 6]);
+    for (const id of selected) {
+      const p = G.planets[id];
+      cx.strokeStyle = inRange(p, w) ? 'rgba(0,255,255,.45)' : 'rgba(255,80,80,.5)';
+      cx.beginPath(); cx.moveTo(sx(p.x), sy(p.y)); cx.lineTo(t ? sx(t.x) : drag.x, t ? sy(t.y) : drag.y); cx.stroke();
     }
     cx.setLineDash([]);
   }
@@ -376,7 +425,7 @@ function draw() {
   if (info && G.planets[info.id]) {
     const p = G.planets[info.id];
     const who = p.owner < 0 ? 'Neutral' : G.players[p.owner].name;
-    const lines = [`${who}${p.home !== undefined ? ' · home world' : ''}`, `${p.rate} resources/s → ${(p.rate / COST).toFixed(1)} ships/s`, `${Math.floor(p.ships)} ships here`];
+    const lines = [`${who}${p.home !== undefined ? ' · home world' : ''}${prod(p) > p.rate ? ' ×2' : ''}`, `${prod(p)} resources/s → ${(prod(p) / COST).toFixed(1)} ships/s`, `${Math.floor(p.ships)} ships here`];
     const bx = Math.min(VW - 230, Math.max(6, sx(p.x) - 110)), by = Math.min(VH - 130, sy(p.y) + p.r * z + 12);
     cx.fillStyle = 'rgba(20,26,58,.92)'; cx.strokeStyle = '#2c3870'; cx.lineWidth = 1;
     cx.fillRect(bx, by, 224, 56); cx.strokeRect(bx, by, 224, 56);
@@ -476,8 +525,11 @@ function tap(p) {
 }
 
 function launch(target) {
-  const from = [...selected].filter(id => id !== target.id);
+  const all = [...selected].filter(id => id !== target.id);
+  const from = all.filter(id => inRange(G.planets[id], target));
   selected.clear();
+  if (all.length && !from.length) { toast('🚫 Out of range — ships can only fly so far'); blip(150); return; }
+  if (all.length > from.length) toast(`${all.length - from.length} planet${all.length - from.length > 1 ? 's were' : ' was'} out of range`);
   if (!from.length || !canPlay()) return;
   blip(440, .05);
   if (role === 'guest') netSend({ t: 'send', ids: from, to: target.id, frac });
@@ -596,6 +648,7 @@ function how() {
     <p>The universe is a field of planets. You start with one home world.</p>
     <p>Every planet you own makes <b>resources</b>; the ring around it fills up, and each ${COST} resources build one <b>spacecraft</b>. Bigger planets make more.</p>
     <p><b>Tap</b> your planets to select them, then <b>tap</b> another planet to launch ships there. Or <b>drag</b> from your planet to the target (drag to your own planet to send reinforcements). The buttons at the bottom pick how many ships go: 25%, 50%, 75% or 100%.</p>
+    <p>Ships can only fly so far: the dashed circle around a selected planet shows its range, so grow your empire planet by planet. Your <b>home world</b> makes double resources while you hold it.</p>
     <p>When your ships land on a planet you don't own, the numbers subtract. Whoever has ships left keeps the planet.</p>
     <p>Gray planets are neutral and don't grow — easy pickings early on. Eliminate every enemy ship and planet to win!</p>
     <p>Keys: 1–4 send %, A select all, F fit, P pause, Esc clear.</p>
