@@ -488,7 +488,7 @@ unstick(player);
 // ── What did you tap? ────────────────────────────────────────────────────────
 function pickAt(wx,wy){
   for(const sc of scorps)if(!sc.hide&&Math.abs(wx-sc.x)<17&&Math.abs(wy-sc.y+6)<15)return{k:'scorp',sc};
-  for(const cr of critters){if(cr.hide||cr.gone)continue;const big=cr.kind==='bear'||cr.kind==='rex'||cr.kind==='trike'||cr.kind==='terror'||cr.kind==='moa',tall=cr.kind==='longneck'?76:cr.kind==='rex'?50:cr.kind==='terror'?44:cr.kind==='moa'?44:0,up=cr.zz&&cr.kind==='parrot'?6:cr.kind==='parrot'||cr.kind==='bat'?24:cr.kind==='ptero'?(cr.zz?8:34):cr.kind==='ghost'?14:0;if(Math.abs(wx-cr.x)<(cr.kind==='longneck'?30:big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(tall||(big?32:24)))return{k:'critter',cr}}
+  for(const cr of critters){if(cr.hide||cr.gone)continue;const big=cr.kind==='bear'||cr.kind==='rex'||cr.kind==='trike'||!!HUNT[cr.kind]||cr.kind==='moa',tall=cr.kind==='longneck'?76:cr.kind==='rex'?50:HUNT[cr.kind]&&cr.kind!=='bear'||cr.kind==='moa'?44:0,up=cr.zz&&cr.kind==='parrot'?6:cr.kind==='parrot'||cr.kind==='bat'?24:cr.kind==='ptero'?(cr.zz?8:34):cr.kind==='ghost'?14:0;if(Math.abs(wx-cr.x)<(cr.kind==='longneck'?30:big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(tall||(big?32:24)))return{k:'critter',cr}}
   for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
   {const P=potAt();if(P&&Math.abs(wx-(P.x*T+16))<16&&wy>P.y*T-10&&wy<P.y*T+T)return{k:'pot',x:P.x,y:P.y}}
   if(festNow()){const fs=festSpot();for(const st of FEST_STALLS){const X=(fs.x+st.dx)*T,Y=(fs.y+st.dy)*T;if(wx>X-14&&wx<X+T+14&&wy>Y-46&&wy<Y+T)return{k:'fest',st}}}
@@ -805,7 +805,8 @@ function drawScorp(c,sc,t){
 let critters=[];
 function spawnCritters(){
   const kinds=curKind==='dino'?['rex','rex','longneck','longneck','longneck','trike','trike','trike','trike','ptero','ptero','ptero','terror','terror','terror','moa','moa','moa']:curKind==='haunted'?['ghost','ghost','ghost','ghost','ghost','ghost','bat','bat','bat','bat']:curKind==='pirate'?['crab','crab','crab','crab','crab','crab','crab','parrot','parrot']:curKind==='autumn'?['squirrel','squirrel','squirrel','squirrel','squirrel','squirrel']:curKind==='ice'?['peng','peng','peng','peng','peng','peng','peng','bear','bear','bear']:curKind==='jungle'?['monkey','monkey','monkey','monkey','monkey','parrot','parrot','parrot','parrot']:curKind==='volcano'?['terror','terror','terror']:[];
-  const nightOnly=curKind==='dino'||curKind==='volcano'?['terror','terror','terror','terror']:curKind==='ice'?['bear','bear','bear']:[];kinds.push(...nightOnly); // these only come out at night
+  kinds.push(...(curKind==='dino'?['chick','chick','chick']:curKind==='ice'?['frost','frost']:curKind==='volcano'?['fire','fire']:[])); // the new terror birds
+  const nightOnly=curKind==='dino'||curKind==='volcano'?['terror','terror','terror','terror']:curKind==='ice'?['bear','bear','bear','frost']:curKind==='haunted'?['ghostbird','ghostbird','ghostbird']:[];kinds.push(...nightOnly); // these only come out at night
   critters=kinds.map((kind,i)=>({kind,night:i>=kinds.length-nightOnly.length?1:0,gone:0,fly:0,loot:null,hide:0,...(kind==='crab'?sandSpot():scorpSpot()),wa:Math.random()*6,wt:0,dir:1,walk:0,happy:0,calm:0,still:false}));
 }
 const onIce=e=>{const t=tileOf(e);return inMap(t.x,t.y)&&ter[t.y*W+t.x]===ICE};
@@ -840,19 +841,24 @@ function critterUpdate(dt){
     if(cr.kind==='ghost'){ghostFloat(cr,dt);continue}
     if(cr.happy>0){cr.walk=0;continue}
     const dx=player.x-cr.x,dy=player.y-cr.y,d=Math.hypot(dx,dy);let vx,vy,sp;
-    if(HUNT[cr.kind]&&!cr.calm&&!fly&&!player.stun&&!player.slide&&!(train&&train.rider)&&(cr.chase>0||d<T*HUNT[cr.kind].see)){ // RUN! It's a terror bird (or a polar bear)!
+    if(cr.kind==='chick'){chickStep(cr,dt,d);continue}
+    if(cr.kind==='ghostbird'&&S.objs.some(o=>o.t==='lamp'&&Math.hypot(o.x*T+16-cr.x,o.y*T+16-cr.y)<T*3)){floatAt(cr.x,cr.y-40,'poof!');cr.hide=25;cr.chase=0;if(!ghostLampTold){ghostLampTold=1;toast('💡 The ghost terror bird hates the lamp light — poof!',2800)}continue}
+    if(cr.kind==='fire'&&(cr.walk>0)&&(cr.fireT=(cr.fireT||0)-dt)<=0){cr.fireT=.45;const ft=tileOf(cr);if(inMap(ft.x,ft.y)&&ter[ft.y*W+ft.x]!==WATER)flames.push({x:ft.x,y:ft.y,t:0})}
+    if(cr.rage>0)cr.rage-=dt;
+    if(HUNT[cr.kind]&&!cr.calm&&!fly&&!player.stun&&!player.slide&&!(train&&train.rider)&&(cr.chase>0||d<T*HUNT[cr.kind].see*(cr.rage>0?1.6:1))){ // RUN! It's a terror bird (or a polar bear)!
       const Hk=HUNT[cr.kind];
       if(!cr.chase){cr.chase=.01;floatAt(cr.x,cr.y-50,Hk.cry);toast(`${Hk.e} A ${Hk.name} spotted you — RUN!`,2200)}
       cr.chase+=dt;if(d>T*10||cr.chase>6){cr.chase=0;cr.calm=5;continue} // it gives up
-      if(d<(cr.kind==='bear'?18:16)){cr.chase=0;if(cr.kind==='bear'&&S.inv.fish)bearHit(cr);else terrorCatch(cr);continue} // a bear would rather have your fish
-      if(d>T*1.3&&chaseStep(cr,player,T*Hk.spd,dt))continue;
-      vx=dx;vy=dy;sp=T*Hk.spd}
+      const spd=Hk.spd*(cr.rage>0?1.2:1)*(cr.kind==='frost'&&onIce(cr)?1.5:1),reach=cr.kind==='bear'?18:16;
+      if(d<reach){cr.chase=0;if(cr.kind==='bear'&&S.inv.fish)bearHit(cr);else if(Hk.freeze)freezePlayer(cr);else terrorCatch(cr);continue} // a bear would rather have your fish
+      if(cr.kind!=='ghostbird'&&d>T*1.3&&chaseStep(cr,player,T*spd,dt))continue;
+      vx=dx;vy=dy;sp=T*spd}
     else if(HUNT[cr.kind]&&!cr.calm&&!guestMode&&(cr.prey=preyOk(cr.prey)?cr.prey:preyNear(cr))){ // …or one of your villagers!
       const Hk=HUNT[cr.kind],pv=cr.prey,pdx=pv.x-cr.x,pdy=pv.y-cr.y,pd=Math.hypot(pdx,pdy);
       if(!cr.hunt){cr.hunt=.01;pv.say=`Help! A ${Hk.name}! 😱`;pv.talkT=2.5;floatAt(cr.x,cr.y-50,Hk.cry)}
       cr.hunt+=dt;if(pd>T*10||cr.hunt>8){cr.hunt=0;cr.prey=null;cr.calm=5;continue}
       if(pd<16){hurtVillager(pv,cr);cr.hunt=0;cr.prey=null;cr.calm=12;continue}
-      if(pd>T*1.3&&chaseStep(cr,pv,T*Hk.vspd,dt))continue;
+      if(cr.kind!=='ghostbird'&&pd>T*1.3&&chaseStep(cr,pv,T*Hk.vspd,dt))continue;
       vx=pdx;vy=pdy;sp=T*Hk.vspd}
     else if(cr.kind==='rex'&&!cr.calm&&d<T*4&&!player.stun){vx=dx;vy=dy;sp=T*1.6;if(d<20){rexRoar(cr);continue}} // STOMP STOMP STOMP
     else if(cr.kind==='crab'&&!cr.calm&&d<T*1.8&&!player.stun){vx=dx;vy=dy;sp=T*1.4;if(d<16){crabPinch(cr);continue}} // snip snap!
@@ -861,9 +867,9 @@ function critterUpdate(dt){
     else if(cr.kind==='monkey'&&cr.loot&&d<T*8){vx=-dx;vy=-dy;sp=T*3.2}  // running off with your bananas
     else if(cr.kind==='monkey'&&!cr.loot&&!cr.calm&&S.inv.banana&&d<T*5&&!stealCool&&!player.stun){vx=dx;vy=dy;sp=T*2.6;if(d<15){swipe(cr);continue}} // it smells your bananas!
     else{if((cr.wt-=dt)<=0){cr.wt=1+Math.random()*3;cr.wa=Math.random()*Math.PI*2;cr.still=Math.random()<.4}
-      if(cr.still){cr.walk=0;continue}vx=Math.cos(cr.wa);vy=Math.sin(cr.wa);sp=cr.kind==='moa'?T*.8:cr.kind==='terror'?T*1.1:cr.kind==='longneck'?T*.35:cr.kind==='bear'||cr.kind==='rex'?T*.6:cr.kind==='crab'?T*.7:T*.9}
+      if(cr.still){cr.walk=0;continue}vx=Math.cos(cr.wa);vy=Math.sin(cr.wa);sp=cr.kind==='moa'?T*.8:HUNT[cr.kind]&&cr.kind!=='bear'?T*1.1:cr.kind==='longneck'?T*.35:cr.kind==='bear'||cr.kind==='rex'?T*.6:cr.kind==='crab'?T*.7:T*.9}
     const l=Math.hypot(vx,vy)||1,mx=vx/l*sp*dt,my=vy/l*sp*dt;let moved=false;
-    const ok=cr.kind==='terror'?terrorOk:animalOk;if(ok(cr.x+mx,cr.y)){cr.x+=mx;moved=true}if(ok(cr.x,cr.y+my)){cr.y+=my;moved=true}
+    const ok=critOk(cr.kind);if(ok(cr.x+mx,cr.y)){cr.x+=mx;moved=true}if(ok(cr.x,cr.y+my)){cr.y+=my;moved=true}
     if(!moved)cr.wa=Math.random()*Math.PI*2;if(mx)cr.dir=mx<0?-1:1;cr.walk+=dt*10;
   }
 }
@@ -871,7 +877,7 @@ function critterUpdate(dt){
 function terrorOk(x,y){const tx=Math.floor(x/T),ty=Math.floor(y/T);if(!inMap(tx,ty))return false;const o=objAt(ty*W+tx);return o&&(o.t==='fence'||o.t==='gate')?true:walkable(tx,ty)}
 // a terror bird runs around trees and rocks to get to e (you, or a villager)
 function chaseStep(cr,e,speed,dt){
-  if((cr.repath=(cr.repath||0)-dt)<=0){cr.repath=.35;const ct=tileOf(cr),pt=tileOf(e),r=findPath(ct.x,ct.y,(x,y)=>x===pt.x&&y===pt.y,null,(x,y)=>(cr.kind==='terror'?terrorOk:animalOk)(x*T+16,y*T+20));cr.path=r?r.path:[]}
+  if((cr.repath=(cr.repath||0)-dt)<=0){cr.repath=.35;const ct=tileOf(cr),pt=tileOf(e),r=findPath(ct.x,ct.y,(x,y)=>x===pt.x&&y===pt.y,null,(x,y)=>critOk(cr.kind)(x*T+16,y*T+20));cr.path=r?r.path:[]}
   const dir=cr.dir;if(cr.path&&cr.path.length&&followPath(cr,speed,dt)){cr.dir=cr.dir==='left'?-1:cr.dir==='right'?1:dir;return true}cr.dir=dir;return false;
 }
 const preyOk=v=>v&&villagers.includes(v)&&!v.asleep&&!v.v.hurt&&!isGuest(v.v.name);
@@ -1113,7 +1119,33 @@ function hurtVillager(vw,cr){
 }
 // the hunters: terror birds (Dino and Volcano Island) and polar bears (Ice Island) chase you and your villagers
 const HUNT={terror:{name:'terror bird',e:'🦤',cry:'SKRAAAW!',hit:'PECK!',verb:'pecked',got:'CHOMP!',spd:3.6,vspd:3.2,see:6},
-  bear:{name:'polar bear',e:'🐻‍❄️',cry:'GRRROAR!',hit:'SWIPE!',verb:'swiped',got:'GRRR!',spd:3.2,vspd:2.8,see:5}};
+  bear:{name:'polar bear',e:'🐻‍❄️',cry:'GRRROAR!',hit:'SWIPE!',verb:'swiped',got:'GRRR!',spd:3.2,vspd:2.8,see:5},
+  frost:{name:'frost terror bird',e:'❄️',cry:'SKREEEK!',hit:'BRRR!',verb:'froze',got:'BRRR!',spd:3.4,vspd:3,see:6,freeze:1},
+  fire:{name:'fire terror bird',e:'🔥',cry:'SKRAAAW!',hit:'SIZZLE!',verb:'singed',got:'SIZZLE!',spd:3.6,vspd:3.2,see:6},
+  ghostbird:{name:'ghost terror bird',e:'👻',cry:'WOOOO-SKRAW!',hit:'BOO!',verb:'spooked',got:'BOO!',spd:3,vspd:2.8,see:7}};
+// how each kind gets around: terror birds hop fences, fire birds cross lava, ghost birds float through anything
+const critOk=k=>k==='ghostbird'?(x,y)=>inMap(Math.floor(x/T),Math.floor(y/T)):k==='fire'?(x,y)=>{const tx=Math.floor(x/T),ty=Math.floor(y/T);return inMap(tx,ty)&&(ter[ty*W+tx]===WATER&&!objAt(ty*W+tx)||terrorOk(x,y))}:HUNT[k]||k==='chick'?terrorOk:animalOk;
+// a frost terror bird freezes you in a block of ice for a few seconds
+function freezePlayer(cr){
+  for(const c of critters)if(c.kind==='frost'){c.chase=0;c.calm=7}
+  player.stun=3;player.frozen=3;player.path=[];player.target=null;player.act=null;player.steer=null;player.slide=null;floatAt(cr.x,cr.y-50,'BRRR!');
+  toast('🧊 Brrr! The frost terror bird froze you in a block of ice!',2800);
+}
+// fire terror birds leave a trail of flames — step on one and something in your bag burns
+let flames=[],ghostLampTold=0;
+function flamesUpdate(dt){
+  for(const f of flames)f.t+=dt;flames=flames.filter(f=>f.t<7);
+  if(!flames.length||inside||player.stun>0)return;const pt=tileOf(player),k=flames.findIndex(f=>f.x===pt.x&&f.y===pt.y&&f.t>.3);
+  if(k>=0){flames.splice(k,1);burn()}
+}
+// terror chicks follow their parent in a line — get too close and the parent gets very angry
+function chickStep(cr,dt,d){
+  const kids=critters.filter(c=>c.kind==='chick'),i=kids.indexOf(cr),P=critters.find(c=>c.kind==='terror'&&!c.night&&!c.hide);
+  if(!P){cr.walk=0;return}
+  const gx=P.x-P.dir*(40+i*14),gy=P.y+4+i*3,dx=gx-cr.x,dy=gy-cr.y,dd=Math.hypot(dx,dy);
+  if(dd>T*8){cr.x=gx;cr.y=gy}else if(dd>3){const sp=Math.min(dd,T*4*dt);const ok=terrorOk;if(ok(cr.x+dx/dd*sp,cr.y))cr.x+=dx/dd*sp;if(ok(cr.x,cr.y+dy/dd*sp))cr.y+=dy/dd*sp;cr.dir=dx<0?-1:1;cr.walk+=dt*14}else cr.walk=0;
+  if(d<T*2&&!fly&&!player.stun&&!(train&&train.rider)&&!(P.rage>0)){P.rage=10;P.calm=0;P.chase=.01;floatAt(P.x,P.y-50,'SKRAAAW!!');toast('😡 You got too close to its chicks! The terror bird is FURIOUS — RUN!',2800)}
+}
 // caught by a terror bird: you faint, and wake up back on the beach where you landed
 function terrorCatch(cr){
   const Hk=HUNT[cr.kind]||HUNT.terror;for(const c of critters)if(HUNT[c.kind]){c.chase=0;c.calm=8}
@@ -1161,7 +1193,7 @@ function flyParrot(cr,dt){
   const sp=cr.happy>0?0:T*1.6;cr.x+=Math.cos(cr.wa)*sp*dt;cr.y+=Math.sin(cr.wa)*sp*dt;cr.dir=Math.cos(cr.wa)<0?-1:1;cr.walk+=dt*12;
 }
 const DINO_SAYS=['Skreee! Warm the giant egg in the nest every day!','Skreee! The T-Rex loves 🐟 fish!','Skreee! Triceratops love 🌼 wildflowers!',
-  'Skreee! Look for 🦴 fossils on the ground!','Skreee! The long-necks are big softies!','Skreee! Amber 🟠 hides under the tree ferns!','Skreee! Stomp stomp stomp!','Skreee! Watch out for terror birds — they\'re fast!','Skreee! Terror birds give up if you run far enough!','Skreee! Dinosaurs sleep at night — but even more terror birds come out!','Skreee! Moas are friendly — give one a pat!'];
+  'Skreee! Look for 🦴 fossils on the ground!','Skreee! The long-necks are big softies!','Skreee! Amber 🟠 hides under the tree ferns!','Skreee! Stomp stomp stomp!','Skreee! Watch out for terror birds — they\'re fast!','Skreee! Terror birds give up if you run far enough!','Skreee! Dinosaurs sleep at night — but even more terror birds come out!','Skreee! Moas are friendly — give one a pat!','Skreee! Never go near the terror chicks!'];
 const PIRATE_SAYS=['Squawk! Arrr, matey!','Squawk! Three map pieces find the gold!','Squawk! X marks the spot!','Squawk! The captain\'s chest is on the old ship!',
   'Squawk! Shiver me timbers!','Squawk! Crabs love fish!','Squawk! Pieces of eight! Pieces of eight!'];
 const PARROT_SAYS=['Squawk! Pretty bird!','Squawk! Three keys open the temple!','Squawk! Keys hide in treasure chests!','Squawk! Monkeys love bananas!',
@@ -1178,6 +1210,8 @@ function feedCritter(cr){
   if(cr.kind==='moa'){cr.happy=1.6;for(let k=0;k<3;k++)setTimeout(()=>floatAt(cr.x+(k-1)*10,cr.y-56,'❤️'),k*150);
     if(cr.gave&&cr.gave>now()){toast(['🦤 Boom-boom! The moa gives you a big fluffy hug','🦤 The moa does a happy little dance!','🦤 Boom-boom! Moas are the terror birds\' friendly cousins'][Math.random()*3|0]);return}
     cr.gave=now()+120000;doAct('giveBack',{k:'feather',n:1});floatAt(cr.x,cr.y-40,'+🪶');toast('🦤 Boom-boom! The friendly moa loves you — it gave you a 🪶 Moa Feather!',2800);return}
+  if(cr.kind==='chick'){cr.happy=1;floatAt(cr.x,cr.y-20,'peep!');toast('🐣 Peep peep! (Shh — don\'t let its parent see you!)');return}
+  if(HUNT[cr.kind]&&cr.kind!=='bear'&&cr.kind!=='terror'){floatAt(cr.x,cr.y-50,HUNT[cr.kind].cry);toast(`${HUNT[cr.kind].e} The ${HUNT[cr.kind].name} is much too fierce to make friends with — RUN!`,2600);return}
   if(cr.kind==='terror'){floatAt(cr.x,cr.y-50,'SKRAW!');toast('🦤 Terror birds are much too fierce to make friends with — RUN!',2600);return}
   if(cr.kind==='ptero'){cr.happy=2;floatAt(cr.x,cr.y-54,'🎵');toast('🦅 '+DINO_SAYS[Math.random()*DINO_SAYS.length|0],2800);return}
   if(cr.kind==='rex'){
@@ -1252,8 +1286,8 @@ function drawCritterRaw(c,cr,t){
 const zzz=(c,x,y,t)=>{c.font='13px sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText('💤',x+10,y+Math.sin(t*2+x)*2)};
 const drawCritter=(c,cr,t)=>{plain(drawCritterRaw)(c,cr,t);if(cr.zz)zzz(c,cr.x,cr.y-(ZZ_UP[cr.kind]||30),t)};
 // Dino Island's dinosaurs
-const DINOS=['rex','longneck','trike','ptero','terror','moa'],NIGHT_OWLS=['terror','bear','ghost','bat'],
-  CRIT_NAMES={rex:'T-Rex',longneck:'long-neck',trike:'triceratops',ptero:'pterodactyl',terror:'terror bird',moa:'moa',peng:'penguin',bear:'polar bear',monkey:'monkey',parrot:'parrot',crab:'crab',squirrel:'squirrel'},
+const DINOS=['rex','longneck','trike','ptero','terror','moa','frost','fire','ghostbird','chick'],NIGHT_OWLS=['terror','bear','ghost','bat','frost','fire','ghostbird','chick'],
+  CRIT_NAMES={rex:'T-Rex',longneck:'long-neck',trike:'triceratops',ptero:'pterodactyl',terror:'terror bird',moa:'moa',frost:'frost terror bird',fire:'fire terror bird',ghostbird:'ghost terror bird',chick:'terror chick',peng:'penguin',bear:'polar bear',monkey:'monkey',parrot:'parrot',crab:'crab',squirrel:'squirrel'},
   ZZ_UP={moa:50,longneck:78,rex:56,bear:40,ptero:20,parrot:18,crab:26,trike:30,peng:32,monkey:32,squirrel:30};
 function drawDino(c,cr,t){
   const s=cr.dir,x=cr.x,hop=cr.happy>0?Math.abs(Math.sin(cr.happy*8))*4:0,y=cr.y-hop,zz=cr.calm>30;
@@ -1268,16 +1302,29 @@ function drawDino(c,cr,t){
     ell(c,x+10*s,y-43,2.3,2.3,'#fff');ell(c,x+10.6*s,y-43,1.1,1.1,'#222');
     for(let k=0;k<4;k++)poly(c,dk,x-(2+k*5)*s,y-34+k*3,x-(4+k*5)*s,y-39+k*3,x-(6+k*5)*s,y-33+k*3);
     if(zz){c.font='12px sans-serif';c.textAlign='center';c.fillText('💤',x+10*s,y-56)}return}
-  if(cr.kind==='terror'||cr.kind==='moa'){const moa=cr.kind==='moa',st=cr.walk?Math.sin(cr.walk*1.4)*4:0,col=moa?'#2b2b30':'#5e4a3a',dk=moa?'#151518':'#3f3126',ch=!moa&&cr.chase>0; // a moa is a black (and friendly) terror bird
-    ell(c,x,cr.y,12,3.5,'rgba(0,0,0,.2)');c.strokeStyle='#d9a23a';c.lineWidth=2.4;c.lineCap='round';
+  if(cr.kind==='chick'){const st=cr.walk?Math.sin(cr.walk*1.6)*2:0,y2=y-(cr.walk?Math.abs(Math.sin(cr.walk*.8))*1.5:0);ell(c,x,cr.y,6,2,'rgba(0,0,0,.18)');
+    c.strokeStyle='#d9a23a';c.lineWidth=1.4;for(const k of[-1,1]){c.beginPath();c.moveTo(x+k*2,y2-6);c.lineTo(x+k*2+st*k,y2);c.stroke()}
+    ell(c,x,y2-9,6,5.5,'#8a7058');ell(c,x+1*s,y2-8,3,2.5,'#b8a080');ell(c,x+4*s,y2-14,4,3.8,'#8a7058');poly(c,'#e8a33a',x+7*s,y2-15,x+12*s,y2-14,x+7*s,y2-12);ell(c,x+5*s,y2-15,1,1,'#222');
+    for(const k of[-1,0,1])ell(c,x+4*s+k*1.5,y2-18,1,2,'#6b5a48');return}
+  if(cr.kind==='terror'||cr.kind==='moa'||cr.kind==='frost'||cr.kind==='fire'||cr.kind==='ghostbird'){
+    const moa=cr.kind==='moa',PAL={terror:['#5e4a3a','#3f3126','#8a7058'],moa:['#2b2b30','#151518','#4a4a54'],frost:['#bfe3f5','#7fb8d8','#f4fbff'],fire:['#e8501a','#a8300a','#ffb03a'],ghostbird:['#9fffc8','#5fd8a0','#e8fff2']}[cr.kind];
+    const st=cr.walk?Math.sin(cr.walk*1.4)*4:0,col=PAL[0],dk=PAL[1],ch=!moa&&(cr.chase>0||cr.rage>0); // a moa is a black (and friendly) terror bird
+    c.save();
+    if(cr.kind==='ghostbird'){c.globalAlpha=.55+.15*Math.sin(t*3+x);c.fillStyle='rgba(150,255,200,.25)';c.beginPath();c.arc(x,y-26,26,0,Math.PI*2);c.fill()}
+    else ell(c,x,cr.y,12,3.5,'rgba(0,0,0,.2)');
+    c.strokeStyle=cr.kind==='ghostbird'?'#5fd8a0':cr.kind==='frost'?'#9fc8e0':'#d9a23a';c.lineWidth=2.4;c.lineCap='round';
     for(const k of[-1,1]){const lx=x+k*3;c.beginPath();c.moveTo(lx,y-20);c.lineTo(lx+st*k*s,y-9);c.lineTo(lx+st*k*s*1.5+3*s,y);c.stroke()}
-    poly(c,dk,x-8*s,y-26,x-20*s,y-30,x-18*s,y-22,x-8*s,y-18);ell(c,x,y-24,11,8,col);ell(c,x+2*s,y-21,6,4,moa?'#4a4a54':'#8a7058');
+    const sy=y;
+    poly(c,dk,x-8*s,sy-26,x-20*s,sy-30,x-18*s,sy-22,x-8*s,sy-18);ell(c,x,sy-24,11,8,col);ell(c,x+2*s,sy-21,6,4,PAL[2]);
+    if(cr.kind==='fire')for(let k=0;k<4;k++){const fl=Math.sin(t*10+k*2)*2;ell(c,x-7*s+k*4*s,sy-31-fl,2.2,4+fl,k%2?'#ffd23f':'#ff8a1f')}
+    if(cr.kind==='frost'){c.fillStyle='#fff';for(let k=0;k<3;k++)poly(c,'#e8f6ff',x-6*s+k*5*s,sy-30,x-4*s+k*5*s,sy-36,x-2*s+k*5*s,sy-30)}
     c.strokeStyle=col;c.lineWidth=6;c.beginPath();c.moveTo(x+6*s,y-28);c.lineTo(x+9*s,y-38+(ch?3:0));c.stroke();
     const hx=x+11*s,hy=y-41+(ch?4:0);ell(c,hx,hy,6,5.5,col);poly(c,dk,hx-4*s,hy-4,hx-11*s,hy-9,hx-6*s,hy-1);
-    poly(c,'#e8a33a',hx+3*s,hy-4,hx+16*s,hy-2,hx+17*s,hy+3,hx+14*s,hy+1,hx+3*s,hy+3);
-    ell(c,hx+1*s,hy-2,2,2,ch?'#ff4a2a':'#ffd23f');ell(c,hx+1.4*s,hy-2,.9,.9,'#222');
-    if(ch){c.font='bold 12px sans-serif';c.textAlign='center';c.fillStyle='#e8401a';c.fillText('!',hx,hy-12)}
-    if(cr.calm>6){c.font='10px sans-serif';c.textAlign='center';c.fillText('💢',hx,hy-12)}return}
+    poly(c,cr.kind==='frost'?'#cfe8f8':'#e8a33a',hx+3*s,hy-4,hx+16*s,hy-2,hx+17*s,hy+3,hx+14*s,hy+1,hx+3*s,hy+3);
+    ell(c,hx+1*s,hy-2,2,2,ch?'#ff4a2a':cr.kind==='ghostbird'?'#1a5a3a':'#ffd23f');ell(c,hx+1.4*s,hy-2,.9,.9,'#222');
+    if(ch){c.font='bold 12px sans-serif';c.textAlign='center';c.fillStyle='#e8401a';c.fillText(cr.rage>0?'!!':'!',hx,hy-12)}
+    if(cr.calm>6&&!moa){c.font='10px sans-serif';c.textAlign='center';c.fillText('💢',hx,hy-12)}
+    c.restore();return}
   if(cr.kind==='longneck'){const st=cr.walk?Math.sin(cr.walk*.6)*2:0,col='#7aa6c9',dk='#5d88ab',sw=Math.sin(t*1.2+cr.x)*3;
     ell(c,x,cr.y,26,6,'rgba(0,0,0,.2)');
     for(const dx of[-14,-7,7,14])rect(c,x+dx*s-3.5,y-16+(dx<0?st:-st),7,16,dk,3);
@@ -1966,7 +2013,7 @@ function update(dt){
   const pt=tileOf(player),pk=pt.y*W+pt.x;
   if(inside){if(pt.x===DOOR_X&&pt.y===RH&&!player.path.length)exitHouse();else petsWander(dt)}
   else if(pk!==lastTile){lastTile=pk;reveal(pt.x,pt.y,4.6)}
-  trainUpdate(dt);ambUpdate(dt);festUpdate(dt);weatherUpdate(dt);
+  trainUpdate(dt);ambUpdate(dt);festUpdate(dt);weatherUpdate(dt);flamesUpdate(dt);if(player.frozen>0)player.frozen-=dt;
   // Villagers wander near home
   for(const v of villagers){
     v.talkT=Math.max(0,v.talkT-dt);
@@ -2504,7 +2551,8 @@ function draw(t){
   for(const a of animals)list.push([a.y,()=>{drawAnimal(ctx,a,t);if(a.zz)zzz(ctx,a.x,a.y-(a.kind==='cow'?34:24),t)}]);
   for(const cr of critters)if(!cr.hide&&!cr.gone)list.push([cr.y+(cr.kind==='parrot'?40:0),()=>drawCritter(ctx,cr,t)]);
   for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried)list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-40,v.v.req.hurt?'🩹':'❗')}]);
-  if(!(train&&train.rider)&&!fly)list.push([player.y,()=>drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t)]);
+  if(!(train&&train.rider)&&!fly)list.push([player.y,()=>{drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t);if(player.frozen>0){rect(ctx,player.x-13,player.y-44,26,46,'rgba(170,220,255,.55)',5);ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=1.5;ctx.strokeRect(player.x-13,player.y-44,26,46);ctx.fillStyle='rgba(255,255,255,.7)';ctx.fillRect(player.x-9,player.y-40,3,14)}}]);
+  for(const f of flames)list.push([f.y*T+20,()=>{const X=f.x*T+16,Y=f.y*T+22,a=Math.min(1,(7-f.t)/1.5),fl=Math.sin(t*12+f.x)*2;ctx.globalAlpha=a;ell(ctx,X,Y,8,3,'rgba(255,120,30,.35)');ell(ctx,X,Y-6+fl*.3,5,8+fl,'#ff6a1a');ell(ctx,X,Y-5,3,5,'#ffd23f');ctx.globalAlpha=1}]);
   if(friend&&!friend.in)list.push([friend.y,()=>drawPerson(ctx,friend.x,friend.y,guestMode?PLAYER_LOOK:FRIEND_LOOK,friend.dir,friend.walk,friend.act,t)]);
   list.sort((a,b)=>a[0]-b[0]);for(const d of list)d[1]();
   // Where you're walking to
