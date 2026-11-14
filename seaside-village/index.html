@@ -134,10 +134,12 @@ const BUILD={
   bin:{n:'Shipping Bin',cost:100,w:1,h:1,d:'Ship things for coins'},
   market:{n:'Market Stall',cost:700,w:2,h:1,tall:14,d:'Everything sells for 20% more (up to 2)'},
   fountain:{n:'Fountain',cost:400,w:2,h:2,d:'Makes the village sparkle'},
+  track:{n:'Train Track',cost:5,w:1,h:1,walk:1,flat:1,paint:1,d:'Drag to lay tracks — they can cross water and bridges too!'},
+  station:{n:'Train Station',cost:200,w:2,h:1,tall:30,d:'Put tracks next to it — build 2 stations and a train starts running!'},
   hospital:{n:'Hospital',cost:300,w:2,h:2,d:'Sells 🩹 band-aids for hurt villagers'},
   lighthouse:{n:'Lighthouse',cost:2500,w:2,h:2,tall:80,d:'Shows the whole island — go inside and decorate it!'},
 };
-const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','hospital','lighthouse'];
+const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','hospital','track','station','lighthouse'];
 let guestMode=false,guestSel='carrot'; // guestMode: you're on a friend's island
 let visit=null,hostPos=null; // visit: the villager house you're in (null: Your House)
 let inCab=false,inLight=0,inCave=false,caveLv=1; // caveLv: 1 the cave, 2 the deep cave (down through its pool) // inCab: inside the cabin (where a friend who joins your island stays); inLight: the lighthouse you're in
@@ -499,6 +501,7 @@ function footprintOf(tg){
   return{x:tg.x??tg.i%W,y:tg.y??(tg.i/W|0),w:1,h:1};
 }
 function goToTarget(tg){
+  if(train&&train.rider){toast('🚂 Choo choo! Sit back and enjoy the ride');return}
   player.steer=null;
   const pt=tileOf(player);
   if(tg.k==='volcano'){toast('🌋 Way too hot to climb!');return}
@@ -569,6 +572,7 @@ function useObj(o,act){
     case'cabin':enterCabin();break;
     case'house':{const v=villagers.find(v=>v.v.house===o.id);if(v&&isGuest(v.v.name))toast(`🏠 ${v.v.name} isn't home — they're visiting ${guestOf(v.v.name).to?'the lighthouse':'your house'}!`);else if(v&&v.inHosp)toast(`🏥 ${v.v.name} isn't home — they're at the hospital! Bring them 🩹 band-aids`,2800);else if(v&&v.asleep)toast(`💤 Shh… ${v.v.name} is fast asleep. Come back in the morning!`,2800);else if(v)enterHouse(o.id);else toast('🏠 An empty house — nobody lives here yet');break}
     case'hospital':enterHouse(o.id);break;
+    case'station':stationModal(o);break;
     case'well':toast('💧 Crops within 3 steps of the well grow 2× faster');break;
     case'market':toast('🧺 The market makes everything sell for 20% more — tap 💼 Work to work here!',2800);break;
     case'lighthouse':enterHouse(null,false,o.id);break;
@@ -800,7 +804,7 @@ function critterUpdate(dt){
     if(cr.kind==='ghost'){ghostFloat(cr,dt);continue}
     if(cr.happy>0){cr.walk=0;continue}
     const dx=player.x-cr.x,dy=player.y-cr.y,d=Math.hypot(dx,dy);let vx,vy,sp;
-    if(HUNT[cr.kind]&&!cr.calm&&!player.stun&&!player.slide&&(cr.chase>0||d<T*HUNT[cr.kind].see)){ // RUN! It's a terror bird (or a polar bear)!
+    if(HUNT[cr.kind]&&!cr.calm&&!player.stun&&!player.slide&&!(train&&train.rider)&&(cr.chase>0||d<T*HUNT[cr.kind].see)){ // RUN! It's a terror bird (or a polar bear)!
       const Hk=HUNT[cr.kind];
       if(!cr.chase){cr.chase=.01;floatAt(cr.x,cr.y-50,Hk.cry);toast(`${Hk.e} A ${Hk.name} spotted you — RUN!`,2200)}
       cr.chase+=dt;if(d>T*10||cr.chase>6){cr.chase=0;cr.calm=5;continue} // it gives up
@@ -1187,7 +1191,7 @@ function sailTo(id,hello){
 }
 // set everything up for the island in ns (its land is already made by genIsland)
 function enterIsland(ns){
-  S=ns;S.seed=curSeed;S.kind=curKind;bombs=[];lavaDrops=[];placeCave();featOrig=feat.slice();for(const i of S.cut)feat[i]=0;drawTerrain();
+  S=ns;S.seed=curSeed;S.kind=curKind;bombs=[];lavaDrops=[];train=null;amb=null;placeCave();featOrig=feat.slice();for(const i of S.cut)feat[i]=0;drawTerrain();
   landRev=0;for(let i=0;i<W*H;i++){rev[i]=S.rev[i]==='1'?1:0;fogImg.data[i*4+3]=rev[i]?0:255;if(rev[i]&&ter[i]!==WATER)landRev++}fogX.putImageData(fogImg,0,0);
   rebuildOcc();roomCache.clear();petAt.clear();guestAt.clear();spawnScorps();
   if(S.day!==dayNow())newDay(true);else if(S.fg)loadForage();else genForage();
@@ -1356,11 +1360,12 @@ function canPlace(t,x,y){
   const b=BUILD[t];
   for(let j=0;j<b.h;j++)for(let i=0;i<b.w;i++){const X=x+i,Y=y+j,k=Y*W+X;
     if(!inMap(X,Y)||!rev[k])return'Explore there first';
-    if(objAt(k)||feat[k]||chestHere(k)||inShip(X,Y))return'Something is in the way';
+    if(objAt(k)&&!(t==='track'&&objAt(k).t==='bridge')||feat[k]||chestHere(k)||inShip(X,Y))return'Something is in the way'; // tracks can go on top of a bridge
     if(b.one&&S.objs.some(o=>o.t===t&&o!==ignoreObj))return`You can only have one ${b.n}`;
     if(b.on==='shore'&&curKind==='volcano')return'No fish in lava!';
     if(b.on==='shore'){if(ter[k]!==WATER||!N4.some(([a,c])=>inMap(X+a,Y+c)&&ter[(Y+c)*W+X+a]!==WATER))return'Docks go in the water, next to the beach'}
     else if(b.on==='water'){if(ter[k]!==WATER)return'Bridges go over water'}
+    else if(t==='track'){if(ter[k]===ICE)return'Too slippery for train tracks!'} // tracks go over water on their own little bridge
     else if(ter[k]===WATER)return'Can\'t build on water';
     else if(ter[k]===ICE)return'Too slippery to build on the ice!';
   }
@@ -1376,6 +1381,7 @@ function doPlace(t,x,y){
   const b=BUILD[t],why=placeWhy(t,x,y);
   if(why){toast(why);return false}
   S.coins-=b.cost;tally('build:'+t);
+  if(t==='track'){const br=objAt(y*W+x);if(br&&br.t==='bridge'){S.objs=S.objs.filter(q=>q!==br);rebuildOcc()}} // the track takes over the bridge
   const o={id:S.nextId++,t,x,y};if(PRODUCE[t])o.last=now();
   S.objs.push(o);rebuildOcc();
   for(let j=0;j<b.h;j++)for(let i=0;i<b.w;i++)takeForage((y+j)*W+x+i);
@@ -1660,7 +1666,8 @@ function update(dt){
   // Player
   if(curKind==='volcano'&&!inside)volcanoUpdate(dt);
   if(critters.length&&!inside)critterUpdate(dt);
-  if(player.act){if(tNow>=player.act.end){const f=player.act.fn;player.act=null;f()}}
+  if(train&&train.rider){player.x=train.x;player.y=train.y;player.path=[];player.target=null;player.steer=null;player.walk=0}
+  else if(player.act){if(tNow>=player.act.end){const f=player.act.fn;player.act=null;f()}}
   else if(player.stun>0){player.stun-=dt;player.walk=0}
   else if(player.slide)slideStep(dt);
   else if(mode==='play'){
@@ -1678,7 +1685,7 @@ function update(dt){
   const pt=tileOf(player),pk=pt.y*W+pt.x;
   if(inside){if(pt.x===DOOR_X&&pt.y===RH&&!player.path.length)exitHouse();else petsWander(dt)}
   else if(pk!==lastTile){lastTile=pk;reveal(pt.x,pt.y,4.6)}
-  ambUpdate(dt);
+  trainUpdate(dt);ambUpdate(dt);
   // Villagers wander near home
   for(const v of villagers){
     v.talkT=Math.max(0,v.talkT-dt);
@@ -1840,6 +1847,22 @@ function drawObjIn(c,o,t,icon){
   case'flowers':{const cols=['#ff6b8b','#ffd23f','#b980ff','#ff8c42','#fff'];
     for(let k=0;k<5;k++){const a=hash(o.x*3+k,o.y*5+k*2),fx=X+5+a*22,fy=Y+8+(a*61%1)*18;c.fillStyle='#4f9a3a';c.fillRect(fx-1,fy,2,6);
       const col=cols[(o.id+k)%5];for(let p=0;p<5;p++)ell(c,fx+Math.cos(p*1.26)*3,fy+Math.sin(p*1.26)*3,2.4,2.4,col);ell(c,fx,fy,1.8,1.8,'#ffcf3a')}break}
+  case'track':{const n=icon?[0,1,0,1]:[isTrack(o.x,o.y-1),isTrack(o.x+1,o.y),isTrack(o.x,o.y+1),isTrack(o.x-1,o.y)],D=[[0,-1],[1,0],[0,1],[-1,0]];
+    let arms=D.filter((d,i)=>n[i]);if(!arms.length)arms=[[1,0],[-1,0]];if(arms.length===1)arms.push([-arms[0][0],-arms[0][1]]);
+    const cx=X+16,cy=Y+16,wet=!icon&&ter[o.y*W+o.x]===WATER;
+    if(wet){const vert=(n[0]||n[2])&&!(n[1]||n[3]);rect(c,X,Y,T,T,'#b07b45');c.fillStyle='#8a5a2c';for(let k=1;k<5;k++)vert?c.fillRect(X,Y+k*6.4,T,1.5):c.fillRect(X+k*6.4,Y,1.5,T);
+      if(vert){rect(c,X,Y,3,T,'#7a4a24');rect(c,X+T-3,Y,3,T,'#7a4a24')}else{rect(c,X,Y,T,3,'#7a4a24');rect(c,X,Y+T-3,T,3,'#7a4a24')}} // a little wooden bridge under the rails
+    rect(c,cx-4,cy-4,8,8,'#a39782',2);
+    for(const[dx,dy]of arms){if(!wet)rect(c,Math.min(cx,cx+dx*16)-(dx?0:5),Math.min(cy,cy+dy*16)-(dy?0:5),dx?16:10,dy?16:10,'#b5aa95');
+      for(const k of[6,13]){const tx=cx+dx*k,ty=cy+dy*k;rect(c,tx-(dx?2:9),ty-(dy?2:9),dx?4:18,dy?4:18,'#7a5230',1)}}
+    rect(c,cx-9,cy-2,18,4,'#7a5230',1);c.strokeStyle='#8d949e';c.lineWidth=2;c.lineCap='round';
+    for(const[dx,dy]of arms)for(const sd of[-5,5]){c.beginPath();c.moveTo(cx+(dy?sd:0),cy+(dx?sd:0));c.lineTo(cx+dx*16+(dy?sd:0),cy+dy*16+(dx?sd:0));c.stroke()}
+    break}
+  case'station':{rect(c,X+1,Y+10,62,22,'#d8c8a8',3);rect(c,X+1,Y+28,62,3,'#f2c94c');rect(c,X+6,Y-16,3,28,'#6b4a2a');rect(c,X+55,Y-16,3,28,'#6b4a2a');
+    poly(c,'#c0392b',X-3,Y-14,X+67,Y-14,X+60,Y-26,X+4,Y-26);poly(c,'rgba(0,0,0,.15)',X-3,Y-14,X+67,Y-14,X+66,Y-11,X-2,Y-11);
+    rect(c,X+20,Y+13,24,4,'#8a5a2c',1);rect(c,X+22,Y+17,2,5,'#6b4226');rect(c,X+40,Y+17,2,5,'#6b4226');
+    rect(c,X+17,Y-40,30,13,'#fff',3);c.font='bold 8px system-ui,sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillStyle='#2a3b5a';c.fillText(icon?'🚉':'STATION',X+32,Y-33.5);
+    if(!icon&&!stopOf(o)){const g=(Math.sin(t*3)+1)/2;bubble(c,X+32,Y-44+g*3,'🛤️')}break}
   case'fence':{const has=(dx,dy)=>{if(icon)return dx!==0&&!dy;const n=inMap(o.x+dx,o.y+dy)&&objAt((o.y+dy)*W+o.x+dx);return n&&(n.t==='fence'||n.t==='gate')};
     c.fillStyle='#b98549';if(has(-1,0)){c.fillRect(X,Y+10,16,4);c.fillRect(X,Y+19,16,4)}if(has(1,0)){c.fillRect(X+16,Y+10,16,4);c.fillRect(X+16,Y+19,16,4)}
     if(has(0,-1))c.fillRect(X+14,Y-6,4,14);if(has(0,1))c.fillRect(X+14,Y+20,4,14);
@@ -2160,6 +2183,7 @@ function draw(t){
   if(NEST_AT)list.push([(NEST_AT.y+3)*T,()=>drawNest(ctx,t)]);
   if(X_AT)list.push([X_AT.y*T+2,()=>drawXSpot(ctx,t)]);
   if(amb)list.push([amb.y,()=>drawAmb(ctx,amb,t)]);
+  if(train)drawTrainList(list,t);
   if(VOLCANO){list.push([(VOLCANO.y+3)*T,()=>drawVolcano(ctx,t)]);
     for(const d of lavaDrops)list.push([d.y,()=>drawLavaRock(ctx,d,t)]);
     for(const sc of scorps)if(!sc.hide)list.push([sc.y,()=>{drawScorp(ctx,sc,t);if(sc.zz)zzz(ctx,sc.x,sc.y-22,t)}]);
@@ -2167,7 +2191,7 @@ function draw(t){
   for(const a of animals)list.push([a.y,()=>{drawAnimal(ctx,a,t);if(a.zz)zzz(ctx,a.x,a.y-(a.kind==='cow'?34:24),t)}]);
   for(const cr of critters)if(!cr.hide&&!cr.gone)list.push([cr.y+(cr.kind==='parrot'?40:0),()=>drawCritter(ctx,cr,t)]);
   for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried)list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-40,v.v.req.hurt?'🩹':'❗')}]);
-  list.push([player.y,()=>drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t)]);
+  if(!(train&&train.rider))list.push([player.y,()=>drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t)]);
   if(friend&&!friend.in)list.push([friend.y,()=>drawPerson(ctx,friend.x,friend.y,guestMode?PLAYER_LOOK:FRIEND_LOOK,friend.dir,friend.walk,friend.act,t)]);
   list.sort((a,b)=>a[0]-b[0]);for(const d of list)d[1]();
   // Where you're walking to
@@ -2311,6 +2335,69 @@ function patients(o){
     if(!q||q.o!==o.id){const b=beds[i];q=b?{x:b.x*T+16,y:(b.y+2)*T-2,bed:b,path:[],dir:'down',walk:0,wait:1e9,o:o.id}:{...spotIn(),wait:1e9,o:o.id};patientAt.set(v.name,q)}
     out.push([vw,q]);i++}
   return out;
+}
+// ── The train: tracks, stations, and a little steam train that villagers (and you) ride ──
+let train=null;
+const isTrack=(x,y)=>{if(!inMap(x,y))return false;const o=objAt(y*W+x);return!!o&&o.t==='track'};
+// where the train stops for a station: a track right next to it
+function stopOf(st){for(const[x,y]of[[st.x,st.y+1],[st.x+1,st.y+1],[st.x-1,st.y],[st.x+2,st.y],[st.x,st.y-1],[st.x+1,st.y-1]])if(isTrack(x,y))return{x,y};return null}
+function trackPath(a,b){if(a.x===b.x&&a.y===b.y)return[];const r=findPath(a.x,a.y,(x,y)=>x===b.x&&y===b.y,null,isTrack);return r?r.path:null}
+const STATION_NAMES=['Seaside','Palm Grove','Sunny Hill','Shell Beach','Maple Stop','Rainbow Junction','Coconut Corner','Starfish Halt'];
+function stationName(o){const sts=S.objs.filter(s=>s.t==='station').sort((a,b)=>a.id-b.id),i=sts.indexOf(o);return(STATION_NAMES[i]||'Station '+(i+1))+' Station'}
+function riders(){if(bedtime())return[];const vs=villagers.filter(v=>!v.asleep&&!v.inHosp&&!v.carried&&!isGuest(v.v.name)).sort(()=>Math.random()-.5);return vs.slice(0,Math.min(vs.length,1+(Math.random()*4|0))).map(v=>v.v)}
+function trainGo(t,id){const st=byId(id),s=st&&st.t==='station'&&stopOf(st),p=s&&trackPath(tileOf(t),s);if(!p)return false;t.path=p;t.dest=id;return true}
+function trainUpdate(dt){
+  const sts=S.objs.filter(o=>o.t==='station'&&stopOf(o));
+  if(!train){if(sts.length<2||inside)return;const s0=stopOf(sts[0]);train={x:s0.x*T+16,y:s0.y*T+22,path:[],dir:'right',walk:0,at:sts[0].id,dest:null,wait:2,trail:[],puffs:[],rider:0,call:null,pass:riders(),puff:0}}
+  if(sts.length<2&&!train.rider){train=null;return} // not enough stations any more: the train goes away
+  const t=train;for(const p of t.puffs)p.t+=dt;t.puffs=t.puffs.filter(p=>p.t<1.6);
+  if(t.path.length){const j=t.path[0];if(!isTrack(j%W,j/W|0)){t.path=[];t.dest=null;return} // the track's gone!
+    const ox=t.x,oy=t.y;followPath(t,T*3.4,dt);t.trail.unshift({x:t.x,y:t.y});if(t.trail.length>240)t.trail.length=240;t.ang=Math.atan2(t.y-oy,t.x-ox);
+    if((t.puff-=dt)<=0){t.puff=.25;t.puffs.push({x:t.x+Math.cos(t.ang)*8,y:t.y-22,t:0})}return}
+  if(t.dest){t.at=t.dest;t.dest=null;t.wait=3;t.pass=riders(); // arrived at a station
+    const st=byId(t.at);if(t.rider&&t.call&&t.call.to===t.at){t.rider=0;t.call=null;player.x=t.x;player.y=t.y+4;unstick(player);lastTile=-1;toast(`🚉 Here we are — ${stationName(st)}!`,2600)}
+    else if(st&&!inside&&Math.hypot(player.x-t.x,player.y-t.y)<T*12&&!t.rider)floatAt(t.x,t.y-40,'Choo choo! 🚂')}
+  if((t.wait-=dt)>0)return;
+  if(t.call){const c=t.call;
+    if(c.phase==='pickup'){if(t.at===c.from){const st=byId(c.from);
+        if(st&&!inside&&Math.hypot(player.x-t.x,player.y-t.y)<T*5){t.rider=1;c.phase='ride';player.act=null;toast(`🚂 All aboard! Next stop: ${stationName(byId(c.to))}`,2600);if(!trainGo(t,c.to)){t.rider=0;t.call=null}return}
+        t.call=null;toast('🚂 Toot toot! The train left without you');}
+      else if(trainGo(t,c.from))return;else t.call=null}
+    else if(!trainGo(t,c.to)){t.rider=0;t.call=null;player.x=t.x;player.y=t.y+4;unstick(player)}else return}
+  // next station along the line
+  const ord=sts.sort((a,b)=>a.id-b.id),k=ord.findIndex(o=>o.id===t.at);
+  for(let n=1;n<=ord.length;n++){const o=ord[(k+n+ord.length)%ord.length];if(o.id!==t.at&&trainGo(t,o.id))return}
+  if(!isTrack(tileOf(t).x,tileOf(t).y)&&!t.rider)train=null;else t.wait=2;
+}
+function stationModal(o){
+  if(!stopOf(o)){openModal(`<h2>🚉 ${stationName(o)}</h2><p>Lay some 🛤️ <b>Train Tracks</b> right next to the station, then build another station somewhere else on the tracks. A train will start running between them!</p><div class="btns"><button class="btn" data-a="close">OK</button></div>`);return}
+  const s0=stopOf(o),dests=S.objs.filter(d=>d.t==='station'&&d!==o&&stopOf(d)&&trackPath(s0,stopOf(d))!==null).sort((a,b)=>a.id-b.id);
+  let h=`<h2>🚉 ${stationName(o)}</h2>`;
+  if(!dests.length)h+='<p>No other station is joined to this one by tracks yet. Lay 🛤️ tracks to another 🚉 station!</p>';
+  else{h+='<p>🚂 Where would you like to go?</p>';for(const d of dests)h+=`<div class="irow"><span class="ie">🚉</span><span class="in">${stationName(d)}</span><button class="btn blue" data-a="go" data-v="${d.id}">Ride</button></div>`}
+  h+='<div class="btns"><button class="btn gray" data-a="close">Not now</button></div>';
+  openModal(h,{go:id=>{closeModal();if(!train){toast('🚂 The train isn\'t running — check the tracks!');return}
+    train.call={from:o.id,to:+id,phase:'pickup'};toast(train.at===o.id&&!train.path.length?'🚂 All aboard!':'🚂 The train is on its way — wait here at the station!',2600)}});
+}
+// the engine at the front, and two carriages full of villagers behind it, following the track it drove along
+function drawTrainList(list,t){
+  const tr=train,pts=[{x:tr.x,y:tr.y,a:tr.ang||0}];
+  for(const gap of[30,58]){let d=0,p=null,prev={x:tr.x,y:tr.y};
+    for(const q of tr.trail){d+=Math.hypot(q.x-prev.x,q.y-prev.y);if(d>=gap){p=q;break}prev=q}
+    if(!p)p={x:tr.x-Math.cos(tr.ang||0)*gap,y:tr.y-Math.sin(tr.ang||0)*gap};
+    const lp=pts[pts.length-1];pts.push({x:p.x,y:p.y,a:Math.atan2(lp.y-p.y,lp.x-p.x)})}
+  pts.forEach((p,i)=>list.push([p.y,()=>drawCar(ctx,p,i,t)]));
+  list.push([tr.y+1,()=>{for(const p of tr.puffs){const a=1-p.t/1.6;ell(ctx,p.x,p.y-p.t*26,4+p.t*7,4+p.t*7,`rgba(230,230,235,${.7*a})`)}}]);
+}
+function drawCar(c,p,i,t){
+  const tr=train;c.save();c.translate(p.x,p.y-10);c.rotate(p.a);
+  ell(c,0,12,17,5,'rgba(0,0,0,.18)');
+  for(const sx of[-9,9])for(const sy of[-11,9])rect(c,sx-3,sy,6,3,'#2a2a32',1);
+  if(i===0){rect(c,-15,-10,30,20,'#d63c3c',4);rect(c,-1,-8,15,16,'#3a3f4a',4);ell(c,10,0,4,4,'#222');ell(c,15,0,2.5,3,'#ffd23f');rect(c,-15,-10,12,20,'#a02828',3);
+    const look=tr.rider?(guestMode?FRIEND_LOOK:PLAYER_LOOK):{skin:'#f0c8a0',hair:'#3a2a1a'};ell(c,-9,0,5,5,look.skin);if(look.hat)ell(c,-9,0,6,6,'#e8c66a');else{c.fillStyle=look.hair;c.beginPath();c.arc(-9,0,5,Math.PI*.6,Math.PI*1.4);c.fill()}}
+  else{rect(c,-14,-10,28,20,i===1?'#2f80c9':'#27ae60',4);rect(c,-12,-8,24,16,'rgba(255,255,255,.25)',3);
+    const ps=tr.pass.slice((i-1)*2,(i-1)*2+2);ps.forEach((v,k)=>{const px=k?6:-6;ell(c,px,0,4.5,4.5,v.skin);c.fillStyle=v.hair;c.beginPath();c.arc(px,0,4.8,Math.PI*.6,Math.PI*1.4);c.fill()})}
+  c.restore();
 }
 // The ambulance: it drives out from the hospital, picks up a hurt villager and takes them back
 let amb=null;
