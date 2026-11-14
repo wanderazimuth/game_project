@@ -36,6 +36,8 @@ button{font:inherit;cursor:pointer;border:none}
 #toast{position:fixed;left:50%;bottom:116px;transform:translateX(-50%);background:rgba(14,40,70,.92);color:#fff;
   padding:9px 16px;border-radius:12px;font-weight:700;font-size:14px;z-index:7;pointer-events:none;opacity:0;transition:opacity .3s;
   text-align:center;max-width:90vw}
+#work{position:fixed;inset:0;z-index:7;display:none;touch-action:none;user-select:none;-webkit-user-select:none}
+#work canvas{width:100%;height:100%;display:block}
 #modal{position:fixed;inset:0;z-index:8;background:rgba(10,30,50,.5);display:none;align-items:center;justify-content:center;padding:16px}
 #modalIn{background:#fffaf0;border-radius:20px;padding:16px;width:min(420px,100%);max-height:86vh;overflow-y:auto;touch-action:pan-y;color:#4a3410}
 #modalIn h2{color:#0e5a8a;margin-bottom:8px;font-size:21px}
@@ -70,6 +72,7 @@ button{font:inherit;cursor:pointer;border:none}
 <div id="zoom"><button id="zIn" title="Zoom in">+</button><button id="zOut" title="Zoom out">−</button></div>
 <div id="bar"><div id="tray"></div></div>
 <div id="toast"></div>
+<div id="work"><canvas id="wcv"></canvas></div>
 <div id="modal"><div id="modalIn"></div></div>
 <script>
 'use strict';
@@ -408,7 +411,7 @@ const modal=document.getElementById('modal'),modalIn=document.getElementById('mo
 let modalActs={};
 function openModal(html,acts,lock){if(actor){netSend({t:'modal',h:html});return}modal.dataset.lock=lock?1:'';modalIn.innerHTML=html;modalActs=acts||{};modal.style.display='flex'}
 function closeModal(){modal.style.display='none';modalActs={}}
-const busy=()=>modal.style.display==='flex';
+const busy=()=>modal.style.display==='flex'||!!work;
 modal.addEventListener('click',e=>{
   if(e.target===modal){if(!modal.dataset.lock)closeModal();return}
   const b=e.target.closest('[data-a]');if(!b||b.disabled)return;
@@ -550,7 +553,7 @@ function useObj(o,act){
     case'cabin':enterCabin();break;
     case'house':{const v=villagers.find(v=>v.v.house===o.id);if(v&&isGuest(v.v.name))toast(`🏠 ${v.v.name} isn't home — they're visiting ${guestOf(v.v.name).to?'the lighthouse':'your house'}!`);else if(v)enterHouse(o.id);else toast('🏠 An empty house — nobody lives here yet');break}
     case'well':toast('💧 Crops within 3 steps of the well grow 2× faster');break;
-    case'market':toast('🧺 The market makes everything sell for 20% more');break;
+    case'market':toast('🧺 The market makes everything sell for 20% more — tap 💼 Work to work here!',2800);break;
     case'lighthouse':enterHouse(null,false,o.id);break;
     case'fountain':toast('⛲ Splish splash!');break;
     case'bench':toast('🪑 Ahh, a nice rest');break;
@@ -1298,6 +1301,7 @@ const ACT={
     S.templeOpen=1;S.coins+=1000;give('idol',1);dirty();refreshTray();
     if(TEMPLE_AT)for(let k=0;k<70;k++)confetti.push({x:(TEMPLE_AT.x+1.5)*T,y:TEMPLE_AT.y*T,vx:(Math.random()-.5)*280,vy:-120-Math.random()*240,c:['#ffd23f','#f39c12','#fff'][k%3],t:0});
     openModal('<h2>🗿 The Temple Treasure!</h2><p style="font-size:44px;text-align:center">🗿🪙</p><p>Inside, a golden glow… you found the <b>Golden Idol</b> and <b>1000 coins</b>!</p><div class="btns"><button class="btn" data-a="close">WOW!</button></div>')},
+  workPay({k,n}){if(!JOBS[k]||!count(k))return;const w=S.worked||(S.worked={});if(w[k]===S.day)return;w[k]=S.day;n=Math.max(0,Math.min(600,Math.floor(+n)||0));S.coins+=n;tally('work');dirty();refreshTray()},
   skipJob(){if(S.job){newJob();toast('🔄 Here\'s a different job!')}},
   homePlace({k,x,y,cab,lh}){const F=FURN[k],H=homeOf(cab,lh);if(!H)return;if(!F)return;const why=furnWhy(k,x,y,null,H.items)||(S.coins<F.cost?`Need 🪙${F.cost} for ${F.n}`:'');if(why){toast(why);return}
     S.coins-=F.cost;H.items.push({id:H.next++,k,x,y,c:0});if(F.cost)floatAt((x+F.w/2)*T,y*T,`-🪙${F.cost}`);
@@ -1366,6 +1370,8 @@ function refreshTray(){
   if(inside){inTray(chip);return}
   if(mode==='play'){
     chip(`<span class="e">🎒</span>Bag<span class="p">${invTotal()} things</span>`,false,false,bagModal);
+    {const ks=Object.keys(JOBS).filter(k=>count(k)),left=ks.filter(k=>(S.worked||{})[k]!==S.day).length;
+      if(ks.length)chip(`<span class="e">💼</span>Work<span class="p">${left?left+' job'+(left>1?'s':'')+' today':'Done today'}</span>`,false,!left,workModal)}
     const l=document.createElement('span');l.className='lbl';l.textContent='SEEDS';tray.appendChild(l);
     for(const k in CROPS){const cr=CROPS[k];if(cr.rare&&!S.found.includes(k))continue;
       chip(`<span class="e">${cr.e}</span>${cr.n}<span class="p">${cr.seed?'🪙'+cr.seed:'Free'}</span>`,mySeed()===k,S.coins<cr.seed,()=>{if(guestMode)guestSel=k;else{S.sel=k;dirty()}refreshTray();toast(`${cr.e} ${cr.n}: grows in ${cr.grow}s, sells for 🪙${priceOf(k)}`)})}
@@ -2905,6 +2911,66 @@ function netTick(dt){
   if(net.host&&(netDirty&&(net.snapT-=dt)<=0||(net.fullT-=dt)<=0)){netDirty=false;net.snapT=.25;net.fullT=5;netSend(snapMsg())}
 }
 
+// ── Work: a job at your Market, Bakery or Creamery (once a day each) ─────────────
+// A tapping game, like in Dream House: tap each order before it disappears.
+const JOBS={
+  market:{n:'Market Seller',icon:'🧺',say:'Serve the customers!',items:['🍎','🥕','🍅','🌽','🍉','🥚','🍓'],done:'💰',bg:['#eaf8d4','#a8dc7a']},
+  bakery:{n:'Baker',icon:'🧑‍🍳',say:'Take the bread out before it burns!',items:['🥖','🍞','🥐','🧁','🥧','🍪'],done:'✅',bg:['#ffeccc','#ffb877']},
+  creamery:{n:'Ice Cream Maker',icon:'🍦',say:'Scoop the ice cream orders!',items:['🍦','🍨','🧀','🥛','🧈'],done:'😋',bg:['#ffe3f1','#b9e0ff']}};
+const WORK_PAY=5,STAR_PAY=15;
+let work=null;
+const workEl=document.getElementById('work'),wcv=document.getElementById('wcv'),wx=wcv.getContext('2d');
+function workModal(){
+  const w=S.worked||{};let h='<h2>💼 Go to work</h2><p>Tap each order before it disappears to earn coins! ⭐ stars are worth extra. You can do each job once a day.</p>';
+  for(const k in JOBS){const J=JOBS[k],has=count(k),done=w[k]===S.day;
+    h+=`<div class="irow"><span class="ie">${J.icon}</span><span class="in">${J.n}<br><span class="ip">${!has?`Build a ${bname(k)} to work here`:done?'Done for today — come back tomorrow!':`At your ${bname(k)}`}</span></span><button class="btn" data-a="go" data-v="${k}" ${!has||done?'disabled':''}>Work</button></div>`}
+  h+='<div class="btns"><button class="btn gray" data-a="close">Not now</button></div>';
+  openModal(h,{go:k=>{closeModal();startWork(k)}});
+}
+function startWork(k){
+  if(work||!JOBS[k]||!count(k)||(S.worked||{})[k]===S.day)return;
+  player.path=[];player.target=null;player.act=null;player.steer=null;
+  work={k,job:JOBS[k],t:0,dur:30,next:.9,targets:[],earned:0,fx:[]};workEl.style.display='block';
+}
+function endWork(){
+  const w=work;work=null;workEl.style.display='none';
+  doAct('workPay',{k:w.k,n:w.earned});setTimeout(refreshTray,guestMode?300:0);
+  openModal(`<h2>🎉 Great work!</h2><p style="font-size:44px;text-align:center">${w.job.icon}</p><p>You were a great ${w.job.n.toLowerCase()} today and earned <b>🪙${w.earned}</b>!</p><div class="btns"><button class="btn" data-a="close">Yay!</button></div>`);
+}
+workEl.addEventListener('pointerdown',e=>{
+  e.preventDefault();if(!work||work.t<.3)return;
+  let best=null,bd=50;for(const g of work.targets){if(g.hit)continue;const d=Math.hypot(g.x-e.clientX,g.y-e.clientY);if(d<bd){bd=d;best=g}}
+  if(!best)return;best.hit=.001;const v=best.star?STAR_PAY:WORK_PAY;work.earned+=v;work.fx.push({x:best.x,y:best.y-36,txt:'+🪙'+v,life:1});
+});
+function workFrame(dt){
+  const W2=innerWidth,H2=innerHeight,d=Math.min(2,devicePixelRatio||1);
+  if(wcv.width!==Math.round(W2*d)||wcv.height!==Math.round(H2*d)){wcv.width=Math.round(W2*d);wcv.height=Math.round(H2*d)}
+  const w=work,lvl=Math.min(10,Math.floor((S.day||0)/3)); // a little faster as the days go by
+  w.t+=dt;w.next-=dt;
+  if(w.next<=0&&w.t<w.dur){w.next=Math.max(.32,.8-lvl*.045)*(.7+Math.random()*.6);const star=Math.random()<.1;
+    w.targets.push({x:50+Math.random()*(W2-100),y:170+Math.random()*Math.max(60,H2-300),e:star?'⭐':w.job.items[Math.random()*w.job.items.length|0],star,life:0,max:Math.max(1.15,2-lvl*.08),hit:0})}
+  for(const g of w.targets){g.life+=dt;if(g.hit)g.hit+=dt}
+  w.targets=w.targets.filter(g=>g.hit?g.hit<.6:g.life<g.max);
+  for(const f of w.fx){f.life-=dt;f.y-=40*dt}w.fx=w.fx.filter(f=>f.life>0);
+  // draw
+  const c=wx;c.setTransform(d,0,0,d,0,0);const J=w.job,gr=c.createLinearGradient(0,0,0,H2);gr.addColorStop(0,J.bg[0]);gr.addColorStop(1,J.bg[1]);c.fillStyle=gr;c.fillRect(0,0,W2,H2);
+  c.textAlign='center';c.textBaseline='middle';c.globalAlpha=.12;c.font='38px sans-serif';
+  for(let y=120,r=0;y<H2;y+=90,r++)for(let x=(r%2)*60+30;x<W2;x+=120)c.fillText(J.icon,x,y);
+  c.globalAlpha=1;
+  const t=(s,x,y,size,col='#fff')=>{c.font=`bold ${size}px system-ui,sans-serif`;c.lineWidth=5;c.strokeStyle='rgba(40,30,20,.55)';c.strokeText(s,x,y);c.fillStyle=col;c.fillText(s,x,y)};
+  t(`${J.icon} ${J.n}`,W2/2,48,22);
+  const left=Math.max(0,w.dur-w.t),bw=Math.min(300,W2-40);
+  c.fillStyle='rgba(0,0,0,.2)';c.beginPath();c.roundRect(W2/2-bw/2,74,bw,14,7);c.fill();
+  if(left>0){c.fillStyle=left<6?'#e74c3c':'#2ecc71';c.beginPath();c.roundRect(W2/2-bw/2,74,bw*left/w.dur,14,7);c.fill()}
+  t('🪙 '+w.earned,W2/2,116,24,'#ffe066');
+  for(const g of w.targets){const pop=Math.min(1,g.life*6),sc=g.hit?1+g.hit:pop;c.globalAlpha=g.hit?Math.max(0,1-g.hit/.6):1;
+    if(!g.hit){c.strokeStyle='rgba(255,255,255,.9)';c.lineWidth=4;c.beginPath();c.arc(g.x,g.y,40,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-g.life/g.max));c.stroke()}
+    c.font=`${54*sc|0}px sans-serif`;c.fillStyle='#000';c.fillText(g.hit?(g.star?'✨':J.done):g.e,g.x,g.y);c.globalAlpha=1}
+  for(const f of w.fx){c.globalAlpha=Math.max(0,f.life);t(f.txt,f.x,f.y,20,'#ffe066')}c.globalAlpha=1;
+  if(w.t<2.5)t(J.say,W2/2,H2/2,Math.min(28,W2/14));
+  if(w.t>=w.dur&&!w.targets.some(g=>g.hit))endWork();
+}
+
 // ── Start ────────────────────────────────────────────────────────────────────
 S.villagers.forEach(spawnVillager);spawnAnimals();spawnScorps();
 reveal(Math.floor(player.x/T),Math.floor(player.y/T),6);
@@ -2919,7 +2985,7 @@ let last=performance.now();
 function frame(ms){
   const dt=Math.max(0,Math.min(.05,(ms-last)/1000));last=ms;
   if(cv.clientWidth!==cssW||cv.clientHeight!==cssH)resize();
-  update(dt);draw(ms/1000);requestAnimationFrame(frame);
+  update(dt);draw(ms/1000);if(work)workFrame(dt);requestAnimationFrame(frame);
 }
 addEventListener('visibilitychange',()=>{if(document.hidden)saveNow();else checkForUpdate()});
 addEventListener('pagehide',saveNow);
