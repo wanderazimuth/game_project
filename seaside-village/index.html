@@ -386,9 +386,13 @@ const toWorld=(sx,sy)=>({x:(sx-cssW/2)/zoom()+cam.x,y:(sy-cssH/2)/zoom()+cam.y})
 
 const player={x:S.px,y:S.py,dir:'down',walk:0,path:[],target:null,act:null,steer:null};
 let villagers=[],animals=[];
+// Bedtime: villagers walk home at night and sleep until morning. The lighthouse keeper stays up keeping the light shining.
+const bedtime=()=>nightness()>.5;
+function sleepy(vw){const h=byId(vw.v.house);return bedtime()&&!(h&&h.t==='lighthouse')}
+const asleepIn=o=>villagers.find(v=>v.v.house===o.id&&v.asleep);
 function spawnVillager(v){
   const h=S.objs.find(o=>o.id===v.house);if(!h)return;
-  const vw={v,x:(h.x+1)*T,y:(h.y+2)*T+6,path:[],wait:1+Math.random()*3,dir:'down',walk:0,talkT:0};unstick(vw);villagers.push(vw);
+  const vw={v,x:(h.x+1)*T,y:(h.y+2)*T+6,path:[],wait:1+Math.random()*3,dir:'down',walk:0,talkT:0};unstick(vw);vw.door={x:vw.x,y:vw.y};if(sleepy(vw))vw.asleep=1;villagers.push(vw);
 }
 // Hens and cows can go where people can, except through gates
 function animalOk(x,y){const tx=Math.floor(x/T),ty=Math.floor(y/T);if(!walkable(tx,ty))return false;const o=objAt(ty*W+tx);return!(o&&o.t==='gate')}
@@ -449,7 +453,7 @@ unstick(player);
 function pickAt(wx,wy){
   for(const sc of scorps)if(!sc.hide&&Math.abs(wx-sc.x)<17&&Math.abs(wy-sc.y+6)<15)return{k:'scorp',sc};
   for(const cr of critters){if(cr.hide)continue;const big=cr.kind==='bear',up=cr.kind==='parrot'||cr.kind==='bat'?24:cr.kind==='ghost'?14:0;if(Math.abs(wx-cr.x)<(big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(big?32:24))return{k:'critter',cr}}
-  for(const v of villagers)if(!isGuest(v.v.name)&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
+  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
   const tx=Math.floor(wx/T),ty=Math.floor(wy/T);
   for(let d=0;d<4;d++){
     const x=tx,y=ty+d;if(!inMap(x,y))continue;const i=y*W+x;if(!rev[i])continue;
@@ -551,7 +555,7 @@ function useObj(o,act){
       act(1400,'fish',()=>doAct('fish',{id:o.id}));break}
     case'myhouse':enterHouse();break;
     case'cabin':enterCabin();break;
-    case'house':{const v=villagers.find(v=>v.v.house===o.id);if(v&&isGuest(v.v.name))toast(`🏠 ${v.v.name} isn't home — they're visiting ${guestOf(v.v.name).to?'the lighthouse':'your house'}!`);else if(v)enterHouse(o.id);else toast('🏠 An empty house — nobody lives here yet');break}
+    case'house':{const v=villagers.find(v=>v.v.house===o.id);if(v&&isGuest(v.v.name))toast(`🏠 ${v.v.name} isn't home — they're visiting ${guestOf(v.v.name).to?'the lighthouse':'your house'}!`);else if(v&&v.asleep)toast(`💤 Shh… ${v.v.name} is fast asleep. Come back in the morning!`,2800);else if(v)enterHouse(o.id);else toast('🏠 An empty house — nobody lives here yet');break}
     case'well':toast('💧 Crops within 3 steps of the well grow 2× faster');break;
     case'market':toast('🧺 The market makes everything sell for 20% more — tap 💼 Work to work here!',2800);break;
     case'lighthouse':enterHouse(null,false,o.id);break;
@@ -1327,7 +1331,7 @@ const ACT={
   petRename({id,name}){const p=pets().find(p=>p.id===id),n=String(name||'').replace(/[<>&"]/g,'').trim().slice(0,12);if(p&&n){p.name=n;dirty()}},
   petRemove({id}){const k=pets().findIndex(p=>p.id===id);if(k<0)return;const p=pets()[k],back=Math.floor(PETS[p.k].cost/2);
     pets().splice(k,1);S.coins+=back;toast(`👋 ${p.name} went to a lovely new home`);dirty()},
-  invite({name,lh}){const L=lh?byId(lh):null;if(lh?!L||L.t!=='lighthouse':!count('myhouse'))return;const v=S.villagers.find(v=>v.name===name);if(!v||isGuest(name)||lh&&v.house===lh)return;
+  invite({name,lh}){if(bedtime()){toast('💤 Everyone\'s asleep — invite them over tomorrow!',2800);return}const L=lh?byId(lh):null;if(lh?!L||L.t!=='lighthouse':!count('myhouse'))return;const v=S.villagers.find(v=>v.name===name);if(!v||isGuest(name)||lh&&v.house===lh)return;
     if(guestsIn(lh||0).length>=MAX_GUESTS){toast(`The ${lh?'lighthouse':'house'} is full of visitors! 🎉`);return}
     guests().push(lh?{name,until:now()+VISIT_MS,to:lh}:{name,until:now()+VISIT_MS});if(!lh)tally('visit');dirty();toast(`🔔 Knock knock! ${name} is here!`)},
   homeWall({i,cab,lh}){const H=homeOf(cab,lh);if(H&&WALLPAPERS[i]){H.wall=i;dirty()}},
@@ -1507,6 +1511,15 @@ function update(dt){
   // Villagers wander near home
   for(const v of villagers){
     v.talkT=Math.max(0,v.talkT-dt);
+    if(v.asleep){if(sleepy(v)){v.wake=0;continue}
+      if(!v.wake)v.wake=.1+Math.random()*6; // everyone gets up at their own time
+      if((v.wake-=dt)>0)continue;v.asleep=0;v.wake=0;v.x=v.door.x;v.y=v.door.y;v.path=[];v.wait=1;v.dir='down';v.say=['Good morning! ☀️','*yawn* 🥱','What a lovely sleep!'][Math.random()*3|0];v.talkT=3;continue}
+    if(sleepy(v)&&!isGuest(v.v.name)){ // off to bed
+      if(followPath(v,T*1.8,dt))continue;
+      const d=tileOf(v.door),t=tileOf(v);
+      if(!v.homing&&(t.x!==d.x||t.y!==d.y)){v.homing=1;const r=findPath(t.x,t.y,(x,y)=>x===d.x&&y===d.y,null);if(r&&r.path.length){v.path=r.path;if(Math.random()<.5){v.say='Time for bed! 😴';v.talkT=2.5}continue}}
+      v.homing=0;v.asleep=1;v.walk=0;v.path=[];continue}
+    v.homing=0;
     if(followPath(v,T*1.8,dt))continue;v.walk=0;
     if((v.wait-=dt)>0)continue;v.wait=2+Math.random()*5;
     const h=S.objs.find(o=>o.id===v.v.house);if(!h)continue;
@@ -1704,12 +1717,12 @@ function drawObjIn(c,o,t,icon){
   case'hive':rect(c,X+8,Y+24,3,7,'#6b4a2a');rect(c,X+21,Y+24,3,7,'#6b4a2a');rect(c,X+6,Y+17,20,8,'#e7a925',3);rect(c,X+7,Y+10,18,8,'#f2c43d',3);rect(c,X+8,Y+4,16,7,'#f6d35b',3);
     ell(c,X+16,Y+21,3,2,'#5a3b10');if(!icon)for(let k=0;k<3;k++){const a=t*2+k*2.1;ell(c,X+16+Math.cos(a)*13,Y+8+Math.sin(a*1.7)*7,2,1.6,'#222');ell(c,X+16+Math.cos(a)*13,Y+7+Math.sin(a*1.7)*7,1.6,1,'rgba(255,255,255,.8)')}break;
   case'bin':rect(c,X+3,Y+11,26,18,'#a0682f',3);rect(c,X+3,Y+18,26,3,'#7b4b20');rect(c,X+1,Y+6,30,7,'#7b4b20',3);ell(c,X+16,Y+24,4,3,'#ffd24a');break;
-  case'house':if(curKind==='ice'){igloo(c,o,t,icon,night);break}{const roof=ROOFS[o.id%ROOFS.length],wall=WALLS[o.id%WALLS.length];
+  case'house':if(curKind==='ice'){igloo(c,o,t,icon,night);if(!icon&&asleepIn(o))bubble(c,X+32,Y-2,'💤');break}{const roof=ROOFS[o.id%ROOFS.length],wall=WALLS[o.id%WALLS.length];
     rect(c,X+44,Y+4,8,16,'#8b5a3c');rect(c,X+6,Y+26,52,36,wall,3);rect(c,X+6,Y+56,52,6,'rgba(0,0,0,.08)');
     poly(c,roof,X+1,Y+30,X+32,Y+2,X+63,Y+30);poly(c,'rgba(0,0,0,.15)',X+1,Y+30,X+63,Y+30,X+60,Y+27,X+4,Y+27);
     const win=night>.2?'#ffe27a':'#9fd8ff';
     for(const wx of[X+12,X+42]){rect(c,wx,Y+36,11,11,win,2);c.fillStyle='#fff';c.fillRect(wx+5,Y+36,1.5,11);c.fillRect(wx,Y+41,11,1.5)}
-    rect(c,X+26,Y+42,12,20,'#8b5a3c',3);ell(c,X+35,Y+53,1.4,1.4,'#ffd24a');break}
+    rect(c,X+26,Y+42,12,20,'#8b5a3c',3);ell(c,X+35,Y+53,1.4,1.4,'#ffd24a');if(!icon&&asleepIn(o))bubble(c,X+32,Y+2,'💤');break}
   case'myhouse':if(curKind==='ice')igloo(c,o,t,icon,night);else{rect(c,X+68,Y-16,10,24,'#9a5b3c',2);rect(c,X+6,Y+18,84,44,'#fff6e6',4);rect(c,X+6,Y+56,84,6,'rgba(0,0,0,.08)');
     poly(c,'#3d7fc4',X,Y+24,X+48,Y-22,X+96,Y+24);poly(c,'#2f66a3',X,Y+24,X+96,Y+24,X+92,Y+20,X+4,Y+20);
     for(let k=0;k<7;k++)ell(c,X+6+k*14,Y+24,7,4,'#2f66a3');
@@ -1750,7 +1763,7 @@ function drawObjIn(c,o,t,icon){
   if(PRODUCE[o.t]&&produced(o)){const n=produced(o);bubble(c,X+BUILD[o.t].w*T/2,Y-(o.t==='hive'?0:o.t==='dock'?-4:4),o.t==='dock'?'🎣':PRODUCE[o.t].icon||ITEMS[PRODUCE[o.t].item].e);
     if(n>1){c.font='bold 11px sans-serif';c.fillStyle='#b5651d';c.fillText(n,X+BUILD[o.t].w*T/2+14,Y-24)}}
 }
-function gateOpen(o){const gx=o.x*T+16,gy=o.y*T+20;return[player,...villagers,...(friend&&!friend.in?[friend]:[])].some(e=>Math.hypot(e.x-gx,e.y-gy)<34)}
+function gateOpen(o){const gx=o.x*T+16,gy=o.y*T+20;return[player,...villagers.filter(v=>!v.asleep),...(friend&&!friend.in?[friend]:[])].some(e=>Math.hypot(e.x-gx,e.y-gy)<34)}
 // a little shop: the bakery and the creamery
 function shop(c,X,Y,wall,roof,stripe,sign,icon,t){
   rect(c,X+44,Y+4,8,16,'#a0522d');rect(c,X+6,Y+24,52,38,wall,3);poly(c,roof,X+2,Y+28,X+32,Y+6,X+62,Y+28);
@@ -1951,7 +1964,7 @@ function draw(t){
     for(const b of bombs){const p=Math.min(1,b.t/b.dur);ell(ctx,b.tx,b.ty,6+p*8,3+p*4,`rgba(0,0,0,${.12+p*.25})`)}}
   for(const a of animals)list.push([a.y,()=>drawAnimal(ctx,a,t)]);
   for(const cr of critters)if(!cr.hide)list.push([cr.y+(cr.kind==='parrot'?40:0),()=>drawCritter(ctx,cr,t)]);
-  for(const v of villagers)if(!isGuest(v.v.name))list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-40,'❗')}]);
+  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep)list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-40,'❗')}]);
   list.push([player.y,()=>drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t)]);
   if(friend&&!friend.in)list.push([friend.y,()=>drawPerson(ctx,friend.x,friend.y,guestMode?PLAYER_LOOK:FRIEND_LOOK,friend.dir,friend.walk,friend.act,t)]);
   list.sort((a,b)=>a[0]-b[0]);for(const d of list)d[1]();
@@ -1972,7 +1985,7 @@ function draw(t){
   // Fog over the parts of the island you haven't seen
   ctx.imageSmoothingEnabled=true;ctx.drawImage(fogC,0,0,W,H,0,0,W*T,H*T);
   // Villager chat
-  for(const v of villagers)if(v.talkT>0&&v.say&&!isGuest(v.v.name)){ctx.font='bold 12px system-ui,sans-serif';const w=ctx.measureText(v.say).width+16;
+  for(const v of villagers)if(v.talkT>0&&v.say&&!isGuest(v.v.name)&&!v.asleep){ctx.font='bold 12px system-ui,sans-serif';const w=ctx.measureText(v.say).width+16;
     rect(ctx,v.x-w/2,v.y-70,w,24,'rgba(255,255,255,.96)',10);poly(ctx,'rgba(255,255,255,.96)',v.x-5,v.y-46,v.x+5,v.y-46,v.x,v.y-40);
     ctx.fillStyle='#4a3410';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(v.say,v.x,v.y-58)}
   // Night
@@ -2116,13 +2129,14 @@ function spotIn(){const q={x:DOOR_X*T+16,y:(RH-1)*T+22,path:[],wait:2,dir:'down'
 // the island's owner: villagers drop by, and go home after a while (leaving a gift for a nice house)
 function visitorsComeAndGo(){
   const d=S.home.drop;
-  if(d&&now()>=d.at){S.home.drop=null;dirty();
+  if(d&&now()>=d.at&&!bedtime()){S.home.drop=null;dirty();
     const v=S.villagers.find(v=>v.name===d.name);
     // somewhere to visit: Your House, or a lighthouse they don't live in
     const spots=[...(count('myhouse')?[0]:[]),...S.objs.filter(o=>o.t==='lighthouse'&&(!v||v.house!==o.id)).map(o=>o.id)].filter(k=>guestsIn(k).length<MAX_GUESTS);
     if(v&&!isGuest(d.name)&&spots.length){const k=spots[Math.random()*spots.length|0];
       if(k){guests().push({name:d.name,until:now()+VISIT_MS,to:k});toast(`🔔 ${d.name} went to visit the lighthouse 🗼`,3000)}
       else{guests().push({name:d.name,until:now()+VISIT_MS});tally('visit');toast(`🔔 Ding dong! ${d.name} came to visit your house`,3000)}}}
+  if(bedtime()&&guests().length){for(const g of guests())if(g.until>now())g.until=now();}
   if(!guests().some(g=>g.until<=now()))return;
   const gifted=S.home.gifted||(S.home.gifted={});
   S.home.guests=guests().filter(g=>{if(g.until>now())return true;
