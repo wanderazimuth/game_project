@@ -135,7 +135,7 @@ const BUILD={
   market:{n:'Market Stall',cost:700,w:2,h:1,tall:14,d:'Everything sells for 20% more (up to 2)'},
   fountain:{n:'Fountain',cost:400,w:2,h:2,d:'Makes the village sparkle'},
   track:{n:'Train Track',cost:5,w:1,h:1,walk:1,flat:1,paint:1,d:'Drag to lay tracks — they can cross water and bridges too!'},
-  station:{n:'Train Station',cost:200,w:2,h:1,tall:30,d:'Put tracks next to it — build 2 stations and a train starts running!'},
+  station:{n:'Train Station',cost:200,w:2,h:1,tall:30,d:'Put tracks next to it (it can go on water too) — build 2 stations and a train starts running!'},
   hospital:{n:'Hospital',cost:300,w:2,h:2,d:'Sells 🩹 band-aids for hurt villagers'},
   lighthouse:{n:'Lighthouse',cost:2500,w:2,h:2,tall:80,d:'Shows the whole island — go inside and decorate it!'},
 };
@@ -1365,7 +1365,7 @@ function canPlace(t,x,y){
     if(b.on==='shore'&&curKind==='volcano')return'No fish in lava!';
     if(b.on==='shore'){if(ter[k]!==WATER||!N4.some(([a,c])=>inMap(X+a,Y+c)&&ter[(Y+c)*W+X+a]!==WATER))return'Docks go in the water, next to the beach'}
     else if(b.on==='water'){if(ter[k]!==WATER)return'Bridges go over water'}
-    else if(t==='track'){if(ter[k]===ICE)return'Too slippery for train tracks!'} // tracks go over water on their own little bridge
+    else if(t==='track'||t==='station'){if(ter[k]===ICE)return'Too slippery for the train!'} // tracks go over water on their own little bridge
     else if(ter[k]===WATER)return'Can\'t build on water';
     else if(ter[k]===ICE)return'Too slippery to build on the ice!';
   }
@@ -1858,7 +1858,8 @@ function drawObjIn(c,o,t,icon){
     rect(c,cx-9,cy-2,18,4,'#7a5230',1);c.strokeStyle='#8d949e';c.lineWidth=2;c.lineCap='round';
     for(const[dx,dy]of arms)for(const sd of[-5,5]){c.beginPath();c.moveTo(cx+(dy?sd:0),cy+(dx?sd:0));c.lineTo(cx+dx*16+(dy?sd:0),cy+dy*16+(dx?sd:0));c.stroke()}
     break}
-  case'station':{rect(c,X+1,Y+10,62,22,'#d8c8a8',3);rect(c,X+1,Y+28,62,3,'#f2c94c');rect(c,X+6,Y-16,3,28,'#6b4a2a');rect(c,X+55,Y-16,3,28,'#6b4a2a');
+  case'station':{if(!icon&&(ter[o.y*W+o.x]===WATER||ter[o.y*W+o.x+1]===WATER)){for(const px of[X+4,X+18,X+44,X+58])rect(c,px-2,Y+28,5,10,'#6b4226',1);ell(c,X+32,Y+38,34,4,'rgba(0,40,80,.18)')} // stilts in the water
+    rect(c,X+1,Y+10,62,22,'#d8c8a8',3);rect(c,X+1,Y+28,62,3,'#f2c94c');rect(c,X+6,Y-16,3,28,'#6b4a2a');rect(c,X+55,Y-16,3,28,'#6b4a2a');
     poly(c,'#c0392b',X-3,Y-14,X+67,Y-14,X+60,Y-26,X+4,Y-26);poly(c,'rgba(0,0,0,.15)',X-3,Y-14,X+67,Y-14,X+66,Y-11,X-2,Y-11);
     rect(c,X+20,Y+13,24,4,'#8a5a2c',1);rect(c,X+22,Y+17,2,5,'#6b4226');rect(c,X+40,Y+17,2,5,'#6b4226');
     rect(c,X+17,Y-40,30,13,'#fff',3);c.font='bold 8px system-ui,sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillStyle='#2a3b5a';c.fillText(icon?'🚉':'STATION',X+32,Y-33.5);
