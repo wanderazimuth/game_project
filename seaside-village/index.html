@@ -461,7 +461,7 @@ unstick(player);
 function pickAt(wx,wy){
   for(const sc of scorps)if(!sc.hide&&Math.abs(wx-sc.x)<17&&Math.abs(wy-sc.y+6)<15)return{k:'scorp',sc};
   for(const cr of critters){if(cr.hide)continue;const big=cr.kind==='bear'||cr.kind==='rex'||cr.kind==='trike'||cr.kind==='terror',tall=cr.kind==='longneck'?76:cr.kind==='rex'?50:cr.kind==='terror'?44:0,up=cr.zz&&cr.kind==='parrot'?6:cr.kind==='parrot'||cr.kind==='bat'?24:cr.kind==='ptero'?(cr.zz?8:34):cr.kind==='ghost'?14:0;if(Math.abs(wx-cr.x)<(cr.kind==='longneck'?30:big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(tall||(big?32:24)))return{k:'critter',cr}}
-  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
+  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
   const tx=Math.floor(wx/T),ty=Math.floor(wy/T);
   for(let d=0;d<4;d++){
     const x=tx,y=ty+d;if(!inMap(x,y))continue;const i=y*W+x;if(!rev[i])continue;
@@ -764,7 +764,7 @@ function drawScorp(c,sc,t){
 // ── Ice Island: snow, slippery frozen lakes, penguins and polar bears ────────
 let critters=[];
 function spawnCritters(){
-  const kinds=curKind==='dino'?['rex','rex','longneck','longneck','longneck','trike','trike','trike','trike','ptero','ptero','ptero','terror','terror','terror']:curKind==='haunted'?['ghost','ghost','ghost','ghost','ghost','ghost','bat','bat','bat','bat']:curKind==='pirate'?['crab','crab','crab','crab','crab','crab','crab','parrot','parrot']:curKind==='autumn'?['squirrel','squirrel','squirrel','squirrel','squirrel','squirrel']:curKind==='ice'?['peng','peng','peng','peng','peng','peng','peng','bear','bear','bear']:curKind==='jungle'?['monkey','monkey','monkey','monkey','monkey','parrot','parrot','parrot','parrot']:[];
+  const kinds=curKind==='dino'?['rex','rex','longneck','longneck','longneck','trike','trike','trike','trike','ptero','ptero','ptero','terror','terror','terror']:curKind==='haunted'?['ghost','ghost','ghost','ghost','ghost','ghost','bat','bat','bat','bat']:curKind==='pirate'?['crab','crab','crab','crab','crab','crab','crab','parrot','parrot']:curKind==='autumn'?['squirrel','squirrel','squirrel','squirrel','squirrel','squirrel']:curKind==='ice'?['peng','peng','peng','peng','peng','peng','peng','bear','bear','bear']:curKind==='jungle'?['monkey','monkey','monkey','monkey','monkey','parrot','parrot','parrot','parrot']:curKind==='volcano'?['terror','terror','terror']:[];
   critters=kinds.map(kind=>({kind,fly:0,loot:null,hide:0,...(kind==='crab'?sandSpot():scorpSpot()),wa:Math.random()*6,wt:0,dir:1,walk:0,happy:0,calm:0,still:false}));
 }
 const onIce=e=>{const t=tileOf(e);return inMap(t.x,t.y)&&ter[t.y*W+t.x]===ICE};
@@ -1653,6 +1653,7 @@ function update(dt){
   const pt=tileOf(player),pk=pt.y*W+pt.x;
   if(inside){if(pt.x===DOOR_X&&pt.y===RH&&!player.path.length)exitHouse();else petsWander(dt)}
   else if(pk!==lastTile){lastTile=pk;reveal(pt.x,pt.y,4.6)}
+  ambUpdate(dt);
   // Villagers wander near home
   for(const v of villagers){
     v.talkT=Math.max(0,v.talkT-dt);
@@ -1661,10 +1662,14 @@ function update(dt){
       if(v.inHosp&&!hv.hosp){const o=byId(v.inHosp)||byId(hv.house);v.inHosp=0;v.asleep=0;if(o){v.x=(o.x+1)*T;v.y=(o.y+2)*T+6;unstick(v)}v.path=[];v.wait=1;if(!hv.hurt){v.say='All better! 😊';v.talkT=3}}
       if(hv.hosp){v.inHosp=hv.hosp;v.walk=0;v.path=[];continue}
       const H=hv.hurt&&!guestMode&&!isGuest(hv.name)&&S.objs.find(o=>o.t==='hospital');
+      if(H&&!v.noAmb){v.walk=0;v.path=[];if(v.carried)continue; // wait for the ambulance
+        if(!amb&&!callAmb(v,H))v.noAmb=1; // it can't get here: walk instead
+        else if(!v.talkT&&Math.random()<dt*.2){v.say=amb&&amb.vw===v?'Here comes the ambulance! 🚑':'Ouch… 🤕';v.talkT=2.5}
+        continue}
       if(H){if(followPath(v,T*1.2,dt))continue;v.walk=0;
-        const t=tileOf(v),gx=H.x+1,gy=H.y+2,r=(Math.abs(t.x-gx)<=1&&Math.abs(t.y-gy)<=1)||v.hospTry>3?null:findPath(t.x,t.y,(x,y)=>x===gx&&y===gy,null);
+        const t=tileOf(v),D=hospDoor(H),gx=D.x,gy=D.y,r=(Math.abs(t.x-gx)<=1&&Math.abs(t.y-gy)<=1)||v.hospTry>3?null:findPath(t.x,t.y,(x,y)=>x===gx&&y===gy,null);
         if(r&&r.path.length){v.path=r.path;if(!v.hospTry){v.say='Ouch… off to the hospital 🤕';v.talkT=2.5}v.hospTry=(v.hospTry||0)+1;continue}
-        v.hospTry=0;hv.hosp=H.id;v.inHosp=H.id;patientAt.delete(hv.name);dirty();continue}}
+        v.hospTry=0;v.noAmb=0;hv.hosp=H.id;v.inHosp=H.id;patientAt.delete(hv.name);dirty();continue}}
     if(v.asleep){if(sleepy(v)){v.wake=0;continue}
       if(!v.wake)v.wake=.1+Math.random()*6; // everyone gets up at their own time
       if((v.wake-=dt)>0)continue;v.asleep=0;v.wake=0;v.x=v.door.x;v.y=v.door.y;v.path=[];v.wait=1;v.dir='down';v.say=['Good morning! ☀️','*yawn* 🥱','What a lovely sleep!'][Math.random()*3|0];v.talkT=3;continue}
@@ -1922,7 +1927,7 @@ function drawObjIn(c,o,t,icon){
   if(PRODUCE[o.t]&&produced(o)){const n=produced(o);bubble(c,X+BUILD[o.t].w*T/2,Y-(o.t==='hive'?0:o.t==='dock'?-4:4),o.t==='dock'?'🎣':PRODUCE[o.t].icon||ITEMS[PRODUCE[o.t].item].e);
     if(n>1){c.font='bold 11px sans-serif';c.fillStyle='#b5651d';c.fillText(n,X+BUILD[o.t].w*T/2+14,Y-24)}}
 }
-function gateOpen(o){const gx=o.x*T+16,gy=o.y*T+20;return[player,...villagers.filter(v=>!v.asleep&&!v.inHosp),...(friend&&!friend.in?[friend]:[])].some(e=>Math.hypot(e.x-gx,e.y-gy)<34)}
+function gateOpen(o){const gx=o.x*T+16,gy=o.y*T+20;return[player,...villagers.filter(v=>!v.asleep&&!v.inHosp&&!v.carried),...(friend&&!friend.in?[friend]:[])].some(e=>Math.hypot(e.x-gx,e.y-gy)<34)}
 // a little shop: the bakery and the creamery
 function shop(c,X,Y,wall,roof,stripe,sign,icon,t){
   rect(c,X+44,Y+4,8,16,'#a0522d');rect(c,X+6,Y+24,52,38,wall,3);poly(c,roof,X+2,Y+28,X+32,Y+6,X+62,Y+28);
@@ -2129,13 +2134,14 @@ function draw(t){
   if(MILL_AT)list.push([(MILL_AT.y+3)*T,()=>drawMill(ctx,t)]);
   if(NEST_AT)list.push([(NEST_AT.y+3)*T,()=>drawNest(ctx,t)]);
   if(X_AT)list.push([X_AT.y*T+2,()=>drawXSpot(ctx,t)]);
+  if(amb)list.push([amb.y,()=>drawAmb(ctx,amb,t)]);
   if(VOLCANO){list.push([(VOLCANO.y+3)*T,()=>drawVolcano(ctx,t)]);
     for(const d of lavaDrops)list.push([d.y,()=>drawLavaRock(ctx,d,t)]);
     for(const sc of scorps)if(!sc.hide)list.push([sc.y,()=>{drawScorp(ctx,sc,t);if(sc.zz)zzz(ctx,sc.x,sc.y-22,t)}]);
     for(const b of bombs){const p=Math.min(1,b.t/b.dur);ell(ctx,b.tx,b.ty,6+p*8,3+p*4,`rgba(0,0,0,${.12+p*.25})`)}}
   for(const a of animals)list.push([a.y,()=>{drawAnimal(ctx,a,t);if(a.zz)zzz(ctx,a.x,a.y-(a.kind==='cow'?34:24),t)}]);
   for(const cr of critters)if(!cr.hide)list.push([cr.y+(cr.kind==='parrot'?40:0),()=>drawCritter(ctx,cr,t)]);
-  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp)list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-40,v.v.req.hurt?'🩹':'❗')}]);
+  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried)list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-40,v.v.req.hurt?'🩹':'❗')}]);
   list.push([player.y,()=>drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t)]);
   if(friend&&!friend.in)list.push([friend.y,()=>drawPerson(ctx,friend.x,friend.y,guestMode?PLAYER_LOOK:FRIEND_LOOK,friend.dir,friend.walk,friend.act,t)]);
   list.sort((a,b)=>a[0]-b[0]);for(const d of list)d[1]();
@@ -2156,7 +2162,7 @@ function draw(t){
   // Fog over the parts of the island you haven't seen
   ctx.imageSmoothingEnabled=true;ctx.drawImage(fogC,0,0,W,H,0,0,W*T,H*T);
   // Villager chat
-  for(const v of villagers)if(v.talkT>0&&v.say&&!isGuest(v.v.name)&&!v.asleep&&!v.inHosp){ctx.font='bold 12px system-ui,sans-serif';const w=ctx.measureText(v.say).width+16;
+  for(const v of villagers)if(v.talkT>0&&v.say&&!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried){ctx.font='bold 12px system-ui,sans-serif';const w=ctx.measureText(v.say).width+16;
     rect(ctx,v.x-w/2,v.y-70,w,24,'rgba(255,255,255,.96)',10);poly(ctx,'rgba(255,255,255,.96)',v.x-5,v.y-46,v.x+5,v.y-46,v.x,v.y-40);
     ctx.fillStyle='#4a3410';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(v.say,v.x,v.y-58)}
   // Night
@@ -2280,6 +2286,33 @@ function patients(o){
     if(!q||q.o!==o.id){const b=beds[i];q=b?{x:b.x*T+16,y:(b.y+2)*T-2,bed:b,path:[],dir:'down',walk:0,wait:1e9,o:o.id}:{...spotIn(),wait:1e9,o:o.id};patientAt.set(v.name,q)}
     out.push([vw,q]);i++}
   return out;
+}
+// The ambulance: it drives out from the hospital, picks up a hurt villager and takes them back
+let amb=null;
+// the walkable tile right outside the hospital (in front of the door if it can)
+function hospDoor(H){for(const[x,y]of[[H.x+1,H.y+2],[H.x,H.y+2],[H.x+2,H.y+2],[H.x-1,H.y+2],[H.x+1,H.y+3],[H.x-1,H.y],[H.x+2,H.y],[H.x-1,H.y+1],[H.x+2,H.y+1],[H.x,H.y-1],[H.x+1,H.y-1]])if(inMap(x,y)&&walkable(x,y))return{x,y};return{x:H.x+1,y:H.y+2}}
+function callAmb(vw,H){
+  const D=hospDoor(H),sx=D.x,sy=D.y,t=tileOf(vw),r=findPath(sx,sy,(x,y)=>Math.abs(x-t.x)<=1&&Math.abs(y-t.y)<=1,null);if(!r)return false;
+  amb={x:sx*T,y:sy*T+12,path:r.path,dir:'down',walk:0,h:H.id,vw,back:0};
+  toast(`🚑 Wee-woo! The ambulance is on its way to help ${vw.v.name}`,2800);return true;
+}
+function ambUpdate(dt){
+  if(!amb)return;const a=amb,vw=a.vw,v=vw.v,H=byId(a.h);
+  if(!H||!v.hurt||v.hosp||!villagers.includes(vw)){if(vw.carried){vw.carried=0;vw.x=a.x;vw.y=a.y;unstick(vw)}amb=null;return} // not needed any more
+  if(followPath(a,T*5,dt)){if((a.woo=(a.woo||0)-dt)<=0){a.woo=2.2;floatAt(a.x,a.y-34,'wee-woo!')}return}
+  if(!a.back){ // picked up: back to the hospital
+    a.back=1;vw.carried=1;vw.talkT=0;floatAt(a.x,a.y-34,'🚑');const t=tileOf(a),D=hospDoor(H),r=findPath(t.x,t.y,(x,y)=>x===D.x&&y===D.y,null);a.path=r?r.path:[];return}
+  vw.carried=0;v.hosp=H.id;vw.inHosp=H.id;patientAt.delete(v.name);amb=null;dirty();toast(`🚑 The ambulance took ${v.name} to the hospital 🏥`,2800);
+}
+function drawAmb(c,a,t){
+  const s=a.dir==='left'?-1:1,x=a.x,y=a.y,bob=a.path.length?Math.sin(t*20)*.6:0,fl=Math.sin(t*14)>0;
+  ell(c,x,y+2,24,5,'rgba(0,0,0,.22)');c.save();c.translate(x,y-bob);c.scale(s,1);
+  rect(c,-22,-24,44,22,'#fbfbff',4);rect(c,8,-18,14,16,'#fbfbff',4);rect(c,10,-16,10,8,'#9fd8ff',2);
+  rect(c,-22,-10,44,4,'#e63946');rect(c,-10,-21,8,10,'#fff');c.fillStyle='#e63946';c.fillRect(-7.5,-20,3,8);c.fillRect(-10,-17.5,8,3);
+  rect(c,-8,-29,7,5,fl?'#ff3b3b':'#7a1f1f',2);rect(c,-1,-29,7,5,fl?'#2a3f9a':'#4fa3ff',2);
+  if(fl){c.fillStyle='rgba(255,80,80,.25)';c.beginPath();c.arc(-4.5,-27,10,0,Math.PI*2);c.fill()}else{c.fillStyle='rgba(80,160,255,.25)';c.beginPath();c.arc(2.5,-27,10,0,Math.PI*2);c.fill()}
+  for(const wx of[-13,13]){ell(c,wx,-1,5,5,'#2a2a32');ell(c,wx,-1,2,2,'#9aa2ab')}
+  c.restore();
 }
 // doctors and a nurse work at the hospital
 const STAFF=[{name:'Dr. Hart',role:'doc',look:{shirt:'#f4f6f8',skin:'#e8b48a',hair:'#4a3020',doc:1}},
