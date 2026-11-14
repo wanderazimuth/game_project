@@ -92,7 +92,7 @@ const CROPS={
 };
 const ITEMS={...CROPS,
   egg:{n:'Egg',e:'🥚',sell:25},bread:{n:'Bread',e:'🍞',sell:60},cheese:{n:'Cheese',e:'🧀',sell:160},truffle:{n:'Truffle',e:'🌰',sell:90},lavarock:{n:'Lava Rock',e:'🌋',sell:35},icecrystal:{n:'Ice Crystal',e:'🧊',sell:50},banana:{n:'Banana',e:'🍌',sell:15},idol:{n:'Golden Idol',e:'🗿',sell:500},templekey:{n:'Temple Key',e:'🗝️',sell:0,keep:1},milk:{n:'Milk',e:'🥛',sell:60},honey:{n:'Honey',e:'🍯',sell:80},
-  fish:{n:'Fish',e:'🐟',sell:30},wood:{n:'Wood',e:'🪵',sell:3},stone:{n:'Stone',e:'🪨',sell:4},
+  fish:{n:'Fish',e:'🐟',sell:30},wood:{n:'Wood',e:'🪵',sell:3},moss:{n:'Moss',e:'🌿',sell:3},stone:{n:'Stone',e:'🪨',sell:4},
   gem:{n:'Gem',e:'💎',sell:50},shell:{n:'Seashell',e:'🐚',sell:8},mushroom:{n:'Mushroom',e:'🍄',sell:12},
   flower:{n:'Wildflower',e:'🌼',sell:5}};
 
@@ -183,7 +183,7 @@ function genIsland(seed=HOME_SEED,kind=''){
   feat.fill(0);chestAt.fill(-1);chests=[];landTotal=0;curSeed=seed;curKind=kind;VOLCANO=null;FALLS=null;TEMPLE_AT=null;
   // each new island gets its own size, lakes and forests; the home island keeps the ones it always had
   const v=seed===HOME_SEED?null:rngFrom(seed^0x5bd1e995);
-  const P=kind==='jungle'?{rx:.43,ry:.42,lake:2,forest:.45,trees:.78,palms:.22,lone:.06,rocks:.03,sandRocks:.01}:kind==='ice'?{rx:.42,ry:.41,lake:.6,forest:.55,trees:.55,palms:0,lone:.02,rocks:.06,sandRocks:.02}:kind==='volcano'?{rx:.42,ry:.42,lake:2,forest:2,trees:0,palms:0,lone:0,rocks:.22,sandRocks:.12}:v?{rx:.36+v()*.12,ry:.34+v()*.12,lake:.66+v()*.14,forest:.52+v()*.16,trees:.5+v()*.35,palms:.06+v()*.08,rocks:.04+v()*.04}
+  const P=kind==='falls'?{rx:.44,ry:.44,lake:.8,forest:.5,trees:.55,palms:0,lone:.04,rocks:.06,sandRocks:.03}:kind==='jungle'?{rx:.43,ry:.42,lake:2,forest:.45,trees:.78,palms:.22,lone:.06,rocks:.03,sandRocks:.01}:kind==='ice'?{rx:.42,ry:.41,lake:.6,forest:.55,trees:.55,palms:0,lone:.02,rocks:.06,sandRocks:.02}:kind==='volcano'?{rx:.42,ry:.42,lake:2,forest:2,trees:0,palms:0,lone:0,rocks:.22,sandRocks:.12}:v?{rx:.36+v()*.12,ry:.34+v()*.12,lake:.66+v()*.14,forest:.52+v()*.16,trees:.5+v()*.35,palms:.06+v()*.08,rocks:.04+v()*.04}
     :{rx:.45,ry:.43,lake:.72,forest:.6,trees:.7,palms:.09,rocks:.055};
   const r=rngFrom(seed),n1=noise(r,9),n2=noise(r,4),n3=noise(r,7),nf=noise(r,5);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
@@ -333,9 +333,9 @@ const terC=document.createElement('canvas');terC.width=W*T;terC.height=H*T;
 function drawTerrain(){
   const c=terC.getContext('2d');
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;
-    c.fillStyle=curKind==='volcano'?(depth[i]===1?'#ff8a1f':depth[i]===2?'#ef5a16':'#c63a12'):curKind==='ice'?(depth[i]===1?'#6fa9cf':depth[i]===2?'#4f8bb8':'#2f6795'):curKind==='jungle'?(depth[i]===1?'#3fc1c9':depth[i]===2?'#2aa5b8':'#1f86a3'):depth[i]===1?'#56b9e3':depth[i]===2?'#42a2da':'#2f88c9';c.fillRect(x*T,y*T,T,T)}
+    c.fillStyle=curKind==='falls'?(depth[i]===1?'#5fe3d3':depth[i]===2?'#33bdbf':'#178095'):curKind==='volcano'?(depth[i]===1?'#ff8a1f':depth[i]===2?'#ef5a16':'#c63a12'):curKind==='ice'?(depth[i]===1?'#6fa9cf':depth[i]===2?'#4f8bb8':'#2f6795'):curKind==='jungle'?(depth[i]===1?'#3fc1c9':depth[i]===2?'#2aa5b8':'#1f86a3'):depth[i]===1?'#56b9e3':depth[i]===2?'#42a2da':'#2f88c9';c.fillRect(x*T,y*T,T,T)}
   const blob=(col,test,grow)=>{c.fillStyle=col;for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(test(y*W+x)){c.beginPath();c.roundRect(x*T-grow,y*T-grow,T+grow*2,T+grow*2,grow+6);c.fill()}};
-  const V=curKind==='volcano',PAL=curKind==='jungle'?{s1:'#e6c983',s2:'#eed49a',g:'#3f9a3a',g2:'#378a33',g3:'#2c7a2a',sd:'#d7b46c'}:V?{s1:'#3e393a',s2:'#4a4446',g:'#6e6159',g2:'#655850',g3:'#564a43',sd:'#2f2b2c'}:curKind==='ice'?{s1:'#b9cddd',s2:'#c9dae8',g:'#f2f7fb',g2:'#e7eff7',g3:'#cfdeec',sd:'#a9bfd2'}:{s1:'#efd79a',s2:'#f4e0a8',g:'#7cc35d',g2:'#73b955',g3:'#5fa647',sd:'#e1c47f'};
+  const V=curKind==='volcano',PAL=curKind==='falls'?{s1:'#93a9a8',s2:'#a8bcb9',g:'#3fae7d',g2:'#389f72',g3:'#2e8c63',sd:'#7f9594'}:curKind==='jungle'?{s1:'#e6c983',s2:'#eed49a',g:'#3f9a3a',g2:'#378a33',g3:'#2c7a2a',sd:'#d7b46c'}:V?{s1:'#3e393a',s2:'#4a4446',g:'#6e6159',g2:'#655850',g3:'#564a43',sd:'#2f2b2c'}:curKind==='ice'?{s1:'#b9cddd',s2:'#c9dae8',g:'#f2f7fb',g2:'#e7eff7',g3:'#cfdeec',sd:'#a9bfd2'}:{s1:'#efd79a',s2:'#f4e0a8',g:'#7cc35d',g2:'#73b955',g3:'#5fa647',sd:'#e1c47f'};
   blob(PAL.s1,i=>ter[i]!==WATER,5);
   blob(PAL.s2,i=>ter[i]!==WATER,2);
   blob(PAL.g,i=>ter[i]===GRASS,3);
@@ -457,7 +457,7 @@ function goToTarget(tg){
   player.steer=null;
   const pt=tileOf(player);
   if(tg.k==='volcano'){toast('🌋 Way too hot to climb!');return}
-  if(tg.k==='falls'){toast('💦 What a beautiful waterfall!');return}
+  if(tg.k==='falls'){fallsModal();return}
   if(tg.k==='fire'){toast('🔥 That\'s a fire flower — if you touch it, it burns something in your bag!',2800);return}
   if(tg.k==='critter'){
     if(Math.hypot(tg.cr.x-player.x,tg.cr.y-player.y)<T*(tg.cr.kind==='parrot'?3:1.8)){player.path=[];arrive(tg);return}
@@ -516,7 +516,7 @@ function useObj(o,act){
       act(1400,'fish',()=>doAct('fish',{id:o.id}));break}
     case'myhouse':enterHouse();break;
     case'cabin':enterCabin();break;
-    case'house':{const v=villagers.find(v=>v.v.house===o.id);if(v&&isGuest(v.v.name))toast(`🏠 ${v.v.name} isn't home — they're visiting your house!`);else if(v)enterHouse(o.id);else toast('🏠 An empty house — nobody lives here yet');break}
+    case'house':{const v=villagers.find(v=>v.v.house===o.id);if(v&&isGuest(v.v.name))toast(`🏠 ${v.v.name} isn't home — they're visiting ${guestOf(v.v.name).to?'the lighthouse':'your house'}!`);else if(v)enterHouse(o.id);else toast('🏠 An empty house — nobody lives here yet');break}
     case'well':toast('💧 Crops within 3 steps of the well grow 2× faster');break;
     case'market':toast('🧺 The market makes everything sell for 20% more');break;
     case'lighthouse':enterHouse(null,false,o.id);break;
@@ -589,6 +589,7 @@ function openChest(ci){
     refreshTray()}
 }
 function shipModal(){
+  if(curKind==='falls'){fallsModal();return}
   if(S.ship>=SHIP_STAGES.length){sailModal();return}
   const st=SHIP_STAGES[S.ship];
   let h=`<h2>🚢 The Shipwreck</h2><p>This is the ship that crashed on the island. Fix it up, one piece at a time! (${S.ship}/3 done)</p><p>⛵ Once it's fixed, you can sail it to new islands!</p>`;
@@ -850,7 +851,7 @@ function sailModal(){
   let h='<h2>⛵ Where to, captain?</h2><p>Sail to one of your islands, or discover a brand new one and give it a name! Your coins and your bag come with you.</p>';
   for(const i of isles.list){const here=i.id===isles.cur;
     h+=`<div class="irow"><span class="ie">${i.id?'🏝️':'🏠'}</span><span class="in">${cleanName(i.name)}${here?'<br><span class="ip">You are here</span>':''}</span>
-      <button class="btn gray" data-a="ren" data-v="${i.id}" style="padding:0 10px">✏️</button>${here?'':`<button class="btn blue" data-a="go" data-v="${i.id}">Sail</button>`}</div>`}
+      <button class="btn gray" data-a="ren" data-v="${i.id}" style="padding:0 10px">✏️</button>${here?'':i.kind==='falls'?'<span class="ip" style="width:70px;text-align:center">💦 through the jungle waterfall</span>':`<button class="btn blue" data-a="go" data-v="${i.id}">Sail</button>`}</div>`}
   if(!isles.list.some(i=>i.kind==='jungle'))h+=`<div class="irow"><span class="ie">🌴</span><span class="in">Jungle Island<br><span class="ip">Monkeys, parrots, a waterfall and a hidden temple!</span></span><button class="btn blue" data-a="jungle">Sail</button></div>`;
   if(!isles.list.some(i=>i.kind==='ice'))h+=`<div class="irow"><span class="ie">🧊</span><span class="in">Ice Island<br><span class="ip">Snow, slippery ice, penguins and polar bears!</span></span><button class="btn blue" data-a="ice">Sail</button></div>`;
   if(!isles.list.some(i=>i.kind==='volcano'))h+=`<div class="irow"><span class="ie">🌋</span><span class="in">Volcano Island<br><span class="ip">Hot lava and sneaky scorpions — be careful!</span></span><button class="btn blue" data-a="volc">Sail</button></div>`;
@@ -874,7 +875,39 @@ function nameModal(id,suggest){
       const nid=isles.next++;isles.list.push({id:nid,name:n,seed:1+(Math.random()*2147483000|0)});saveIsles();sailTo(nid)}});
   const inp=document.getElementById('codeIn');inp.focus();inp.select();inp.onkeydown=e=>{if(e.key==='Enter')modalActs.ok()};
 }
-function sailTo(id){
+// ── Under the Waterfall: a hidden island behind the waterfall on Jungle Island ──
+const FALLS_SEED=515158;
+function fallsModal(){
+  const under=curKind==='falls';
+  if(guestMode){toast(under?'💦 Only your friend can take you back through the waterfall':'💦 What a beautiful waterfall! (Only your friend can go through it)',2800);return}
+  const been=isles.list.some(i=>i.kind==='falls');
+  openModal(under?`<h2>💦 Back through the waterfall?</h2><p>Swim back out to Jungle Island. Your coins and your bag come with you.</p>
+      <div class="btns"><button class="btn blue" data-a="go">💦 Swim back</button><button class="btn gray" data-a="close">Stay here</button></div>`
+    :`<h2>💦 The Waterfall</h2><p>${been?'Behind the waterfall is your secret island, Under the Waterfall!':'Wait… there\'s a glow behind the water! A whole hidden island is under the waterfall — soft moss, glowing crystals, and lots of room to build!'}</p>
+      <div class="btns"><button class="btn blue" data-a="go">💦 Swim through!</button><button class="btn gray" data-a="close">Not now</button></div>`,
+    {go:()=>{closeModal();if(net){toast('Stop playing together (👥) before going through the waterfall');return}
+      if(under){const j=isles.list.find(i=>i.kind==='jungle');if(j)sailTo(j.id,'💦 Back on Jungle Island!');return}
+      let f=isles.list.find(i=>i.kind==='falls');
+      if(!f){f={id:isles.next++,name:'Under the Waterfall',seed:FALLS_SEED,kind:'falls'};isles.list.push(f);saveIsles()}
+      sailTo(f.id,'💦 You found the island under the waterfall!')}});
+}
+// where you came in: a curtain of falling water in the rock (it takes you back to Jungle Island)
+function drawCaveExit(c,t){
+  const X=SHIP.x*T,Y=SHIP.y*T;
+  ell(c,X+48,Y+62,52,9,'rgba(0,0,0,.18)');rect(c,X-4,Y-46,104,108,'#5f6f6c',14);rect(c,X+2,Y-40,92,96,'#6f807c',12);
+  for(let k=0;k<7;k++)ell(c,X+4+k*15,Y-44+hash(k,5)*8,10,7,'#3f9a6a');
+  rect(c,X+18,Y-30,60,90,'#7fe0f0',8);
+  c.strokeStyle='rgba(255,255,255,.8)';c.lineWidth=2;for(let k=0;k<8;k++){const xx=X+22+k*7.5,o=(t*100+k*29)%50;c.beginPath();c.moveTo(xx,Y-30+o);c.lineTo(xx,Y-30+o+20);c.stroke()}
+  for(let k=0;k<6;k++){const a=(t*1.4+k/6)%1;ell(c,X+48+(k-2.5)*11,Y+60-a*10,7+a*8,4+a*4,`rgba(255,255,255,${.6*(1-a)})`)}
+  const g=(Math.sin(t*3)+1)/2;bubble(c,X+48,Y-58+g*3,'💦');
+}
+// glowing motes drifting up through the air
+function drawMotes(t){
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  for(let k=0;k<45;k++){const sp=.4+(k%5)/8,x=((k*131.7+Math.sin(t*.7+k)*20)%cssW+cssW)%cssW,y=cssH-((k*67.3+t*22*sp)%(cssH+20)),a=.35+.35*Math.sin(t*2+k);
+    ctx.fillStyle=k%3?`rgba(170,255,230,${a})`:`rgba(230,190,255,${a})`;ctx.beginPath();ctx.arc(x,y,1.3+(k%3)*.8,0,Math.PI*2);ctx.fill()}
+}
+function sailTo(id,hello){
   const to=isles.list.find(i=>i.id===id);if(!to||id===isles.cur)return;
   if(net){toast('Stop playing together (👥) before sailing');return}
   saveNow();
@@ -885,7 +918,7 @@ function sailTo(id){
   else{ns=freshState();ns.seed=to.seed;ns.kind=to.kind||'';ns.ship=3;ns.intro=1} // never been there: your ship is moored on the beach
   Object.assign(ns,carry);isles.cur=id;saveIsles();
   enterIsland(ns);saveNow();
-  sleepFade=1.2;setTitle();toast(`⛵ Welcome to ${cleanName(to.name)}!`,3000);
+  sleepFade=1.2;setTitle();toast(hello||`⛵ Welcome to ${cleanName(to.name)}!`,3000);
 }
 // set everything up for the island in ns (its land is already made by genIsland)
 function enterIsland(ns){
@@ -923,6 +956,7 @@ function genForage(){
     if(!test(x,y,i)||feat[i]||objAt(i)||chestHere(i)||inShip(x,y)||forageAt.has(i))continue;forageAt.set(i,forage.length);forage.push({x,y,k});n--}};
   add('shell',(x,y,i)=>ter[i]===SAND,14);
   add('mushroom',(x,y,i)=>ter[i]===GRASS&&N4.some(([a,b])=>feat[(y+b)*W+x+a]===TREE),10);
+  if(curKind==='falls')add('mushroom',(x,y,i)=>ter[i]===GRASS,14);
   if(curKind==='jungle')add('banana',(x,y,i)=>ter[i]===GRASS&&N4.some(([a,b])=>feat[(y+b)*W+x+a]===TREE),16);
   if(curKind==='volcano')add('fireflower',(x,y,i)=>ter[i]===GRASS,18);else add('flower',(x,y,i)=>ter[i]===GRASS,10);
   S.fg=forage;loadForage();
@@ -1017,7 +1051,7 @@ function jobText(j){
     case'earn':return`Earn 🪙${j.n} at the 📦 shipping bin`;
     case'collect':return`Collect ${j.n} ${it.e} ${it.n}`;
     case'fish':return`Catch ${j.n} 🐟 fish at a dock`;
-    case'chop':return`Chop ${j.n} trees 🪓`;
+    case'chop':return curKind==='falls'?`Clear ${j.n} moss 🌿`:`Chop ${j.n} trees 🪓`;
     case'mine':return`Mine ${j.n} rocks ⛏️`;
     case'help':return`Help ${j.n} villager${s} who ha${j.n>1?'ve':'s'} a ❗`;
     case'visit':return`Have ${j.n} villager${s} visit Your House 📨`;
@@ -1104,6 +1138,7 @@ function doRemove(o){
     const back=Math.floor(b.cost/2);S.coins+=back;if(back)floatAt((o.x+b.w/2)*T,o.y*T,`+🪙${back}`);
     if(o.room){let r=0;for(const f of o.room.items){r+=Math.floor(FURN[f.k].cost/2);if(f.store)for(const it in f.store)give(it,f.store[it])}S.coins+=r}
     if(inLight===o.id)exitHouse();
+    if(o.t==='lighthouse')S.home.guests=guests().filter(g=>g.to!==o.id);
     {const k=S.villagers.findIndex(v=>v.house===o.id);if(k>=0){S.home.guests=guests().filter(g=>g.name!==S.villagers[k].name);toast(`👋 ${S.villagers[k].name} moved away`);S.villagers.splice(k,1)}villagers=villagers.filter(v=>v.v.house!==o.id)}
     if(ANIMAL_HOMES[o.t])spawnAnimals();
     dirty();refreshTray();
@@ -1127,7 +1162,8 @@ const byId=id=>S.objs.find(o=>o.id===id);
 const ACT={
   forage({i}){const fi=forageAt.get(i);if(fi===undefined)return;const it=forage[fi].k;if(!ITEMS[it])return;takeForage(i);give(it,1);tally('forage:'+it);floatAt((i%W)*T+16,(i/W|0)*T,`+1 ${ITEMS[it].e}`)},
   feat({i}){const kind=feat[i],X=(i%W)*T+16,Y=(i/W|0)*T;if(!kind||kind>=VOLC)return;feat[i]=0;S.cut.push(i);tally(kind===ROCK?'mine':'chop');dirty();
-    if(kind===ROCK){give('stone',1);if(Math.random()<.12){give('gem',1);floatAt(X,Y-14,'+1 💎');toast('Ooh, a gem! 💎')}else floatAt(X,Y,'+1 🪨')}
+    if(kind===ROCK){give('stone',1);if(Math.random()<(curKind==='falls'?.3:.12)){give('gem',1);floatAt(X,Y-14,'+1 💎');toast('Ooh, a gem! 💎')}else floatAt(X,Y,'+1 🪨')}
+    else if(curKind==='falls'){give('moss',2);floatAt(X,Y,'+2 🌿')}
     else{give('wood',2);floatAt(X,Y,'+2 🪵')}},
   chest({c}){if(chests[c])openChest(c)},
   field({id,sel}){const o=byId(id);if(o&&o.t==='farm')tapField(o,sel)},
@@ -1187,9 +1223,9 @@ const ACT={
   petRename({id,name}){const p=pets().find(p=>p.id===id),n=String(name||'').replace(/[<>&"]/g,'').trim().slice(0,12);if(p&&n){p.name=n;dirty()}},
   petRemove({id}){const k=pets().findIndex(p=>p.id===id);if(k<0)return;const p=pets()[k],back=Math.floor(PETS[p.k].cost/2);
     pets().splice(k,1);S.coins+=back;toast(`👋 ${p.name} went to a lovely new home`);dirty()},
-  invite({name}){if(!count('myhouse'))return;const v=S.villagers.find(v=>v.name===name);if(!v||isGuest(name))return;
-    if(guests().length>=MAX_GUESTS){toast('Your house is full of visitors! 🎉');return}
-    guests().push({name,until:now()+VISIT_MS});tally('visit');dirty();toast(`🔔 Knock knock! ${name} is here!`)},
+  invite({name,lh}){const L=lh?byId(lh):null;if(lh?!L||L.t!=='lighthouse':!count('myhouse'))return;const v=S.villagers.find(v=>v.name===name);if(!v||isGuest(name)||lh&&v.house===lh)return;
+    if(guestsIn(lh||0).length>=MAX_GUESTS){toast(`The ${lh?'lighthouse':'house'} is full of visitors! 🎉`);return}
+    guests().push(lh?{name,until:now()+VISIT_MS,to:lh}:{name,until:now()+VISIT_MS});if(!lh)tally('visit');dirty();toast(`🔔 Knock knock! ${name} is here!`)},
   homeWall({i,cab,lh}){const H=homeOf(cab,lh);if(H&&WALLPAPERS[i]){H.wall=i;dirty()}},
   homeFloor({i,cab,lh}){const H=homeOf(cab,lh);if(H&&FLOORS[i]){H.floor=i;dirty()}},
   // the lighthouse keeper: a new villager moves into the lighthouse (only once, ever)
@@ -1555,7 +1591,7 @@ function drawObjIn(c,o,t,icon){
     for(const wx of[X+14,X+66]){rect(c,wx,Y+30,16,14,night>.2?'#ffe27a':'#9fd8ff',2);c.fillStyle='#fff';c.fillRect(wx+7,Y+30,2,14);c.fillRect(wx,Y+36,16,2);
       rect(c,wx-2,Y+44,20,5,'#8a5a2c',2);for(let f=0;f<4;f++)ell(c,wx+1+f*5,Y+43,2.4,2.4,['#ff6b8b','#ffd23f','#b980ff','#ff8c42'][f])}
     rect(c,X+40,Y+36,16,26,'#c0392b',4);ell(c,X+52,Y+50,1.6,1.6,'#ffd24a');ell(c,X+48,Y+63,11,2.5,'#7bc96f')}
-    if(!icon&&pets().some(hungry))bubble(c,X+48,Y-24,'🐾');else if(!icon&&guests().length)bubble(c,X+48,Y-24,'👋');break;
+    if(!icon&&pets().some(hungry))bubble(c,X+48,Y-24,'🐾');else if(!icon&&guestsIn(0).length)bubble(c,X+48,Y-24,'👋');break;
   case'cabin':if(curKind==='ice'){igloo(c,o,t,icon,night);break}rect(c,X+43,Y+4,9,18,'#8f96a3',2);rect(c,X+6,Y+26,52,36,'#9c6233',3);
     for(let k=0;k<6;k++){c.fillStyle='#7d4b24';c.fillRect(X+6,Y+31+k*6,52,1.6);ell(c,X+7,Y+28+k*6,3,3,'#c08a52');ell(c,X+57,Y+28+k*6,3,3,'#c08a52')}
     poly(c,'#4e3b2a',X,Y+30,X+32,Y+4,X+64,Y+30);poly(c,'#3a2b1e',X,Y+30,X+64,Y+30,X+61,Y+26,X+3,Y+26);
@@ -1579,7 +1615,7 @@ function drawObjIn(c,o,t,icon){
     if(!icon){c.fillStyle='rgba(220,245,255,.9)';for(let k=0;k<10;k++){const a=(t*1.4+k/10)%1,s=k%2?1:-1;ell(c,X+32+s*a*18,Y+12-Math.sin(a*Math.PI)*16+a*26,1.6,1.6,'rgba(220,245,255,.9)')}}break;
   case'lighthouse':rect(c,X+6,Y+40,52,22,'#a7adb8',4);
     for(let k=0;k<6;k++){const y0=Y+44-k*16,y1=y0-16,w0=18-k*1.2,w1=18-(k+1)*1.2;poly(c,k%2?'#fff':'#d63c3c',X+32-w0,y0,X+32+w0,y0,X+32+w1,y1,X+32-w1,y1)}
-    rect(c,X+20,Y-66,24,14,night>.2||icon?'#fff2a8':'#ffe9a0',2);rect(c,X+18,Y-54,28,4,'#333');poly(c,'#d63c3c',X+18,Y-66,X+32,Y-80,X+46,Y-66);rect(c,X+28,Y+48,8,14,'#5a3b1e',3);break;
+    rect(c,X+20,Y-66,24,14,night>.2||icon?'#fff2a8':'#ffe9a0',2);rect(c,X+18,Y-54,28,4,'#333');poly(c,'#d63c3c',X+18,Y-66,X+32,Y-80,X+46,Y-66);rect(c,X+28,Y+48,8,14,'#5a3b1e',3);if(!icon&&o.id&&guestsIn(o.id).length)bubble(c,X+52,Y-40,'👋');break;
   case'dock':rect(c,X+2,Y-2,28,T+4,'#b07b45',2);c.fillStyle='#8a5a2c';for(let k=1;k<5;k++)c.fillRect(X+2,Y-2+k*7,28,1.5);
     rect(c,X,Y+T-4,5,8,'#6b4a2a',2);rect(c,X+27,Y+T-4,5,8,'#6b4a2a',2);break;
   }
@@ -1618,7 +1654,16 @@ function drawCropRaw(c,o,t){
 }
 function drawTree(c,x,y,kind,t){
   const X=x*T+16,Y=y*T+28,h=hash(x,y),sw=Math.sin(t*1.3+h*6)*1.2;
-  if(kind===TREE&&curKind==='jungle'){ell(c,X,Y,13,4.5,'rgba(0,0,0,.2)');rect(c,X-4,Y-16,8,17,'#6b4a2a',2);
+  if(kind===TREE&&curKind==='falls'){ // a soft mound of moss
+    ell(c,X,Y,15,4.5,'rgba(0,0,0,.18)');
+    for(const[a,b,rx,ry,col]of[[-7,-5,10,8,'#2f8a55'],[7,-5,10,8,'#2f8a55'],[0,-9,13,10,'#38a062'],[-5,-13,8,6,'#4fbf78'],[6,-12,7,5,'#4fbf78'],[0,-17,6,4,'#6fd694']])ell(c,X+a,Y+b,rx,ry,col);
+    c.fillStyle='rgba(255,255,255,.25)';for(let k=0;k<4;k++)c.fillRect(X-8+k*5+h*3,Y-14+(k%2)*4,1.5,1.5);
+    c.strokeStyle='#2a7a48';c.lineWidth=1.4;c.lineCap='round';for(const sx of[-9,2,10]){c.beginPath();c.moveTo(X+sx,Y-12);c.lineTo(X+sx+sw,Y-19-hash(x+sx,y)*4);c.stroke()}
+    if(h>.65){const g=.5+.4*Math.sin(t*2.5+h*9);ell(c,X-4,Y-15,1.8,1.8,`rgba(190,255,220,${g})`);ell(c,X+5,Y-10,1.5,1.5,`rgba(190,255,220,${g})`)}}
+  else if(kind===ROCK&&curKind==='falls'){const cc=['#b980ff','#5fb8ff','#3fd6c6'][h*3|0];ell(c,X,Y-2,11,4,'rgba(0,0,0,.18)');
+    poly(c,cc,X-10,Y,X-7,Y-14,X-3,Y);poly(c,cc,X-4,Y,X+1,Y-22,X+6,Y);poly(c,cc,X+3,Y,X+8,Y-12,X+11,Y);
+    poly(c,'rgba(255,255,255,.45)',X-1,Y-4,X+1,Y-20,X+2,Y-4);if(Math.sin(t*3+h*20)>.85){c.fillStyle='#fff';c.fillRect(X+1,Y-26,2,6);c.fillRect(X-1,Y-24,6,2)}}
+  else if(kind===TREE&&curKind==='jungle'){ell(c,X,Y,13,4.5,'rgba(0,0,0,.2)');rect(c,X-4,Y-16,8,17,'#6b4a2a',2);
     ell(c,X+sw,Y-26,18,14,'#1f6b2a');ell(c,X-8+sw,Y-30,11,9,'#2a8a35');ell(c,X+7+sw,Y-34,11,9,'#2f9a3a');ell(c,X+sw,Y-38,8,6,'#3fae45');
     c.strokeStyle='#2f7a2c';c.lineWidth=1.5;for(const vx of[-10,-2,9]){c.beginPath();c.moveTo(X+vx+sw,Y-22);c.quadraticCurveTo(X+vx+3+sw,Y-14,X+vx+sw*.5,Y-6+hash(x+vx,y)*4);c.stroke()}
     if(h>.6){for(let k=0;k<3;k++)ell(c,X+6+k*2.2+sw,Y-21+k*1.5,1.6,3.6,'#ffd23f')}}
@@ -1649,6 +1694,7 @@ function drawForage(c,f,t){
   else{c.fillStyle='#4f9a3a';c.fillRect(X-.7,Y-4,1.4,8);for(let p=0;p<5;p++)ell(c,X+Math.cos(p*1.26)*3,Y-5+Math.sin(p*1.26)*3,2.4,2.4,'#ffd23f');ell(c,X,Y-5,1.6,1.6,'#e8742a')}
 }
 function drawShip(c,t){
+  if(curKind==='falls'){drawCaveExit(c,t);return}
   const X=SHIP.x*T,Y=SHIP.y*T,st=S.ship;
   c.save();c.translate(X+48,Y+52);if(!st)c.rotate(-.16);
   ell(c,0,8,48,8,'rgba(0,0,0,.18)');
@@ -1724,7 +1770,7 @@ function drawLava(c,x0,y0,x1,y1,t){
 function draw(t){
   if(inside){drawInside(t);return}
   const z=zoom(),s=z*dpr;
-  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=curKind==='volcano'?'#c63a12':curKind==='ice'?'#2f6795':curKind==='jungle'?'#1f86a3':'#2f88c9';ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=curKind==='falls'?'#178095':curKind==='volcano'?'#c63a12':curKind==='ice'?'#2f6795':curKind==='jungle'?'#1f86a3':'#2f88c9';ctx.fillRect(0,0,cv.width,cv.height);
   const sh=shake>0?shake*5:0,shx=(Math.random()-.5)*sh,shy=(Math.random()-.5)*sh; // the ground shakes when the volcano blows
   ctx.setTransform(s,0,0,s,(cssW/2-cam.x*z+shx)*dpr,(cssH/2-cam.y*z+shy)*dpr);
   ctx.imageSmoothingEnabled=false;ctx.drawImage(terC,0,0);
@@ -1797,6 +1843,7 @@ function draw(t){
     ctx.strokeText(f.txt,f.x,f.y-f.t*30);ctx.fillStyle='#fff6c8';ctx.fillText(f.txt,f.x,f.y-f.t*30)}
   ctx.globalAlpha=1;for(const p of confetti)rect(ctx,p.x,p.y,5,3,p.c);
   if(curKind==='ice')drawSnowfall(t);
+  if(curKind==='falls')drawMotes(t);
   if(VOLCANO){const left=ERUPT_MS-now()%ERUPT_MS;if(left<3000){ctx.setTransform(dpr,0,0,dpr,0,0);ctx.font='bold 34px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.lineWidth=5;ctx.strokeStyle='rgba(60,10,0,.8)';const txt=`🌋 ${Math.ceil(left/1000)}`;ctx.strokeText(txt,cssW/2,128);ctx.fillStyle='#ffd23f';ctx.fillText(txt,cssW/2,128)}}
   drawSleep();
@@ -1879,11 +1926,16 @@ const FURN_LINES={bed:'What a cozy bed!',sofa:'Can I sit on your sofa?',table:'T
 const guestAt=new Map(); // where each visitor is, on this screen
 function guests(){return S.home.guests||(S.home.guests=[])}
 function isGuest(name){return guests().some(g=>g.name===name)}
+function guestOf(name){return guests().find(g=>g.name===name)}
+// who's visiting where: Your House (0) or a lighthouse (its id)
+function guestsIn(k){return guests().filter(g=>(g.to||0)===k)}
+const hereKey=()=>inLight||0;
 // the villagers in the room you're in, and where they are: [villager, spot]
 function speakers(){
   if(inCab)return[];
-  if(visit||inLight){const vw=hostVw();if(vw&&!hostPos)hostPos=spotIn();return vw&&hostPos?[[vw,hostPos]]:[]}
-  return guests().map(g=>[villagers.find(v=>v.v.name===g.name),guestAt.get(g.name)]).filter(([v,q])=>v&&q);
+  const vw=hostVw();if(vw&&!hostPos)hostPos=spotIn();const host=vw&&hostPos?[[vw,hostPos]]:[];
+  if(visit)return host;
+  return host.concat(guestsIn(hereKey()).map(g=>[villagers.find(v=>v.v.name===g.name),guestAt.get(g.name)]).filter(([v,q])=>v&&q));
 }
 function spotIn(){const q={x:DOOR_X*T+16,y:(RH-1)*T+22,path:[],wait:2,dir:'down',walk:0};
   for(let k=0;k<60;k++){const x=Math.random()*RW|0,y=Math.random()*(RH-2)|0;if(inWalkable(x,y)){q.x=x*T+16;q.y=y*T+22;break}}return q}
@@ -1891,46 +1943,52 @@ function spotIn(){const q={x:DOOR_X*T+16,y:(RH-1)*T+22,path:[],wait:2,dir:'down'
 function visitorsComeAndGo(){
   const d=S.home.drop;
   if(d&&now()>=d.at){S.home.drop=null;dirty();
-    if(count('myhouse')&&S.villagers.some(v=>v.name===d.name)&&!isGuest(d.name)&&guests().length<MAX_GUESTS){
-      guests().push({name:d.name,until:now()+VISIT_MS});tally('visit');toast(`🔔 Ding dong! ${d.name} came to visit your house`,3000)}}
+    const v=S.villagers.find(v=>v.name===d.name);
+    // somewhere to visit: Your House, or a lighthouse they don't live in
+    const spots=[...(count('myhouse')?[0]:[]),...S.objs.filter(o=>o.t==='lighthouse'&&(!v||v.house!==o.id)).map(o=>o.id)].filter(k=>guestsIn(k).length<MAX_GUESTS);
+    if(v&&!isGuest(d.name)&&spots.length){const k=spots[Math.random()*spots.length|0];
+      if(k){guests().push({name:d.name,until:now()+VISIT_MS,to:k});toast(`🔔 ${d.name} went to visit the lighthouse 🗼`,3000)}
+      else{guests().push({name:d.name,until:now()+VISIT_MS});tally('visit');toast(`🔔 Ding dong! ${d.name} came to visit your house`,3000)}}}
   if(!guests().some(g=>g.until<=now()))return;
   const gifted=S.home.gifted||(S.home.gifted={});
   S.home.guests=guests().filter(g=>{if(g.until>now())return true;
-    const n=S.home.items.length,gift=Math.min(80,n*5);
-    if(n>=4&&gifted[g.name]!==S.day){gifted[g.name]=S.day;S.coins+=gift;toast(`🎁 ${g.name} loved your house and left you 🪙${gift}!`,3200)}
+    const R=g.to?lightRoom(g.to):S.home;if(!R)return false;
+    const n=R.items.length,gift=Math.min(80,n*5),where=g.to?'the lighthouse':'your house';
+    if(n>=4&&gifted[g.name]!==S.day){gifted[g.name]=S.day;S.coins+=gift;toast(`🎁 ${g.name} loved ${where} and left you 🪙${gift}!`,3200)}
     else toast(`👋 ${g.name} went home`);
     return false});
   dirty();refreshTray();
 }
 function visitorsWander(dt){
-  for(const g of guests())if(!guestAt.has(g.name))guestAt.set(g.name,{x:DOOR_X*T+16,y:RH*T+22,path:[],wait:.4,dir:'up',walk:0,first:1}); // in through the door
+  const here=guestsIn(hereKey()),isHere=n=>here.some(g=>g.name===n),place=inLight?'lighthouse':'house';
+  for(const g of here)if(!guestAt.has(g.name))guestAt.set(g.name,{x:DOOR_X*T+16,y:RH*T+22,path:[],wait:.4,dir:'up',walk:0,first:1}); // in through the door
   for(const[name,q]of guestAt){
-    if(!isGuest(name)){ // time to go home: out the door
+    if(!isHere(name)){ // time to go home: out the door
       if(!q.leaving){q.leaving=1;const t=tileOf(q),r=findPath(t.x,t.y,(x,y)=>x===DOOR_X&&y===RH,null,inWalkable);q.path=r?r.path:[]}
       if(!followPath(q,T*1.6,dt))guestAt.delete(name);continue}
     if(followPath(q,T*1.4,dt))continue;q.walk=0;
     const vw=villagers.find(v=>v.v.name===name);if(!vw)continue;
-    if(q.first){q.first=0;vw.say=['Thanks for inviting me!','What a lovely house!','Hello! 👋'][Math.random()*3|0];vw.talkT=3}
+    if(q.first){q.first=0;vw.say=['Thanks for inviting me!',`What a lovely ${place}!`,'Hello! 👋'][Math.random()*3|0];vw.talkT=3}
     else if(q.line){vw.say=q.line;vw.talkT=3;q.line=null;q.wait=3+Math.random()*3}
     if((q.wait-=dt)>0)continue;q.wait=2+Math.random()*4;
     // go and look at something
-    const t=tileOf(q),things=[...S.home.items.filter(f=>!FURN[f.k].walk),...pets()],it=things[Math.random()*things.length|0];
+    const t=tileOf(q),things=[...room().items.filter(f=>!FURN[f.k].walk),...roomPets()],it=things[Math.random()*things.length|0];
     let goal=null,line;
     if(it&&Math.random()<.75){
       if(PETS[it.k]){const b=tileOf(petPos(it));goal=(x,y)=>Math.abs(x-b.x)<=1&&Math.abs(y-b.y)<=1;line=`Hi ${it.name}! 🐾`}
       else{const b=furnBox(it);goal=FURN[it.k].wall?(x,y)=>y===0&&x>=b.x-1&&x<=b.x+b.w:(x,y)=>x>=b.x-1&&x<=b.x+b.w&&y>=b.y-1&&y<=b.y+b.h;line=FURN_LINES[it.k]}
-    }else{const gx=Math.random()*RW|0,gy=Math.random()*RH|0;if(inWalkable(gx,gy))goal=(x,y)=>x===gx&&y===gy;line=Math.random()<.4?'I love your house!':null}
+    }else{const gx=Math.random()*RW|0,gy=Math.random()*RH|0;if(inWalkable(gx,gy))goal=(x,y)=>x===gx&&y===gy;line=Math.random()<.4?`I love your ${place}!`:null}
     if(goal){const r=findPath(t.x,t.y,goal,null,inWalkable);if(r){q.path=r.path;q.line=line}}
   }
 }
 function inviteModal(){
-  const vs=S.villagers,esc=s=>s.replace(/[<>&"]/g,'');
-  if(!vs.length){openModal('<h2>📨 Invite someone over</h2><p>Nobody lives on the island yet — build a 🏠 House so a villager moves in!</p><div class="btns"><button class="btn gray" data-a="close">OK</button></div>');return}
-  let h='<h2>📨 Invite someone over</h2><p>Villagers love a nicely decorated house — they might leave you a gift! 🎁</p>';
-  for(const v of vs){const here=isGuest(v.name);
-    h+=`<div class="irow"><span class="ie" style="width:26px;height:26px;border-radius:50%;background:${v.shirt};display:inline-block"></span><span class="in">${esc(v.name)}${here?'<br><span class="ip">Visiting right now!</span>':''}</span><button class="btn" data-a="inv" data-v="${esc(v.name)}" ${here||guests().length>=MAX_GUESTS?'disabled':''}>Invite</button></div>`}
+  const lh=inLight||0,vs=S.villagers.filter(v=>!lh||v.house!==lh),esc=s=>s.replace(/[<>&"]/g,'');
+  if(!vs.length){openModal(lh&&S.villagers.length?'<h2>📨 Invite someone over</h2><p>Nobody else lives on the island yet':'<h2>📨 Invite someone over</h2><p>Nobody lives on the island yet — build a 🏠 House so a villager moves in!</p><div class="btns"><button class="btn gray" data-a="close">OK</button></div>');return}
+  let h='<h2>📨 Invite someone over</h2><p>Villagers love a nicely decorated '+(lh?'lighthouse':'house')+' — they might leave you a gift! 🎁</p>';
+  for(const v of vs){const g=guestOf(v.name),here=!!g;
+    h+=`<div class="irow"><span class="ie" style="width:26px;height:26px;border-radius:50%;background:${v.shirt};display:inline-block"></span><span class="in">${esc(v.name)}${here?`<br><span class="ip">${(g.to||0)===lh?'Visiting right now!':g.to?'At the lighthouse':'At your house'}</span>`:''}</span><button class="btn" data-a="inv" data-v="${esc(v.name)}" ${here||guestsIn(lh).length>=MAX_GUESTS?'disabled':''}>Invite</button></div>`}
   h+='<div class="btns"><button class="btn gray" data-a="close">Close</button></div>';
-  openModal(h,{inv:name=>{closeModal();doAct('invite',{name});setTimeout(refreshTray,200)}});
+  openModal(h,{inv:name=>{closeModal();doAct('invite',lh?{name,lh}:{name});setTimeout(refreshTray,200)}});
 }
 
 // someone walking around a room on their own (pets, and the villager whose house it is)
@@ -1961,7 +2019,7 @@ function enterHouse(id,cab,lh){
   hostPos=null;const vw=hostVw();
   if(vw)hostPos=spotIn();
   setMode('play');
-  if(!visit&&!inCab&&!inLight){guestAt.clear();for(const g of guests()){const q=spotIn();q.first=1;guestAt.set(g.name,q)}}
+  if(!visit&&!inCab){guestAt.clear();for(const g of guestsIn(hereKey())){const q=spotIn();q.first=1;guestAt.set(g.name,q)}}
   if(inLight){if(vw){vw.say='Welcome to the lighthouse!';vw.talkT=3}toast(vw?`🗼 The lighthouse — ${vw.v.name} keeps it shining. Tap 🎨 Decorate!`:'🗼 Inside the lighthouse! Tap 🎨 Decorate to fix it up',3000)}
   else if(vw){vw.say='Welcome to my home!';vw.talkT=3;toast(`🏠 You're visiting ${vw.v.name}`,2400)}
   else if(inCab)toast(guestMode?'🛖 Your cabin! Tap 🎨 Decorate to make it your own':net&&net.joined?'🛖 Your friend\'s cabin':'🛖 The guest cabin — a friend who joins your island (👥) stays here and decorates it',3200);
@@ -2031,7 +2089,7 @@ function inTray(chip){
   if(mode==='play'){
     chip('<span class="e">🚪</span>Go outside',false,false,exitHouse);
     chip(`<span class="e">🎒</span>Bag<span class="p">${invTotal()} things</span>`,false,false,bagModal);
-    if(!visit&&!inCab&&!inLight)chip(`<span class="e">📨</span>Invite<span class="p">${guests().length?guests().length+' here':'a villager'}</span>`,false,false,inviteModal);
+    if(!visit&&!inCab)chip(`<span class="e">📨</span>Invite<span class="p">${guestsIn(hereKey()).length?guestsIn(hereKey()).length+' here':'a villager'}</span>`,false,false,inviteModal);
     return}
   if(inLight){const kv=S.villagers.find(v=>v.house===inLight),esc=s=>s.replace(/[<>&"]/g,'');
     if(kv)chip(`<span class="e">🗼</span>Keeper<span class="p">${esc(kv.name)} lives here</span>`,false,true,()=>{});
@@ -2163,7 +2221,7 @@ function petPos(p){
 }
 function petsWander(dt){
   if(hostPos)wanderIn(hostPos,T*1.3,dt);
-  if(!visit&&!inCab&&!inLight)visitorsWander(dt);
+  if(!visit&&!inCab)visitorsWander(dt);
   for(const p of roomPets()){const q=petPos(p);q.happy=Math.max(0,q.happy-dt);
     if(q.happy>0){q.walk=0;continue}
     wanderIn(q,T*PETS[p.k].speed,dt);
