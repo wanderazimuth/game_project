@@ -107,6 +107,7 @@ const BUILD={
   path:{n:'Path',cost:2,w:1,h:1,walk:1,flat:1,paint:1,d:'A nice path'},
   fence:{n:'Fence',cost:3,w:1,h:1,paint:1,tall:8,d:'Keeps animals in'},
   hedge:{n:'Hedge',cost:4,w:1,h:1,paint:1,tall:6,d:'A leafy wall — animals can\'t get past'},
+  wood:{n:'Wood',cost:3,w:1,h:1,flat:1,paint:1,d:'Only goes on water — then build anything on it, just like grass! (drag to lay lots)'},
   bridge:{n:'Bridge',cost:15,w:1,h:1,on:'water',walk:1,flat:1,paint:1,d:'Walk across the water — drag to build a long one'},
   tree:{n:'Tree',cost:0,w:1,h:1,tall:40,d:'Plant a tree'},
   campfire:{n:'Campfire',cost:40,w:1,h:1,d:'Warm and glowing at night'},
@@ -139,7 +140,7 @@ const BUILD={
   hospital:{n:'Hospital',cost:300,w:2,h:2,d:'Sells 🩹 band-aids for hurt villagers'},
   lighthouse:{n:'Lighthouse',cost:2500,w:2,h:2,tall:80,d:'Shows the whole island — go inside and decorate it!'},
 };
-const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','hospital','track','station','lighthouse'];
+const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','wood','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','hospital','track','station','lighthouse'];
 let guestMode=false,guestSel='carrot'; // guestMode: you're on a friend's island
 let visit=null,hostPos=null; // visit: the villager house you're in (null: Your House)
 let inCab=false,inLight=0,inCave=false,caveLv=1; // caveLv: 1 the cave, 2 the deep cave (down through its pool) // inCab: inside the cabin (where a friend who joins your island stays); inLight: the lighthouse you're in
@@ -307,6 +308,10 @@ function load(){
 S=load();S.seed=S.seed||curSeed;S.kind=S.kind||curKind;
 placeCave();featOrig=feat.slice();
 for(const i of S.cut)feat[i]=0;
+// Wood: floors you lay on the water, and then build on just like grass
+const wood=new Uint8Array(W*H);let woodSig='';
+function applyWood(){const w=S.wood||[],sig=w.join(',');if(sig===woodSig)return false;woodSig=sig;wood.fill(0);for(const i of w)if(ter[i]===WATER)wood[i]=1;return true}
+applyWood();
 const rev=new Uint8Array(W*H);
 for(let i=0;i<S.rev.length;i++)if(S.rev[i]==='1')rev[i]=1;
 let saveDirty=false,netDirty=false;
@@ -330,7 +335,7 @@ function chestHere(i){return chestAt[i]>=0&&!S.opened.includes(chestAt[i])}
 function walkable(x,y){
   if(!inMap(x,y))return false;const i=y*W+x,o=objAt(i);
   if(o)return!!BUILD[o.t].walk;
-  return ter[i]!==WATER&&!feat[i]&&!chestHere(i)&&!inShip(x,y);
+  return(ter[i]!==WATER||wood[i])&&!feat[i]&&!chestHere(i)&&!inShip(x,y);
 }
 const count=t=>S.objs.reduce((n,o)=>n+(o.t===t),0);
 const priceOf=k=>Math.round(ITEMS[k].sell*(1+.2*Math.min(2,count('market'))));
@@ -382,7 +387,11 @@ function drawTerrain(){
       c.fillStyle=PAL.g3;for(let k=0;k<3;k++){const a=hash(x+k*7,y+k*3);c.fillRect(X+4+a*22,Y+6+(a*71%1)*20,2,5);c.fillRect(X+7+a*22,Y+8+(a*71%1)*20,2,3)}
     }else if(ter[i]===SAND){c.fillStyle=PAL.sd;for(let k=0;k<4;k++){const a=hash(x+k*5,y-k*11);c.fillRect(X+3+a*26,Y+3+(a*53%1)*26,2,2)}}
   }
+  for(let i=0;i<W*H;i++)if(wood[i])woodTile(c,(i%W)*T,(i/W|0)*T,i);
 }
+function woodTile(c,X,Y,i){c.fillStyle='rgba(0,0,0,.18)';c.fillRect(X+1,Y+3,T,T);c.fillStyle='#c08a52';c.fillRect(X,Y,T,T);
+  c.fillStyle='#a8743f';for(let k=0;k<4;k++)c.fillRect(X,Y+k*8+7,T,1.5);c.fillStyle='rgba(255,255,255,.12)';for(let k=0;k<4;k++)c.fillRect(X,Y+k*8,T,1.5);
+  c.fillStyle='#6b4226';const h=hash(i,7);for(let k=0;k<4;k++){c.fillRect(X+3+((h*31+k*11)%24),Y+3+k*8,1.6,1.6)}}
 drawTerrain();
 
 // ── Camera, player, villagers ────────────────────────────────────────────────
@@ -1191,7 +1200,7 @@ function sailTo(id,hello){
 }
 // set everything up for the island in ns (its land is already made by genIsland)
 function enterIsland(ns){
-  S=ns;S.seed=curSeed;S.kind=curKind;bombs=[];lavaDrops=[];train=null;amb=null;placeCave();featOrig=feat.slice();for(const i of S.cut)feat[i]=0;drawTerrain();
+  S=ns;S.seed=curSeed;S.kind=curKind;bombs=[];lavaDrops=[];train=null;amb=null;placeCave();featOrig=feat.slice();for(const i of S.cut)feat[i]=0;woodSig='-';applyWood();drawTerrain();
   landRev=0;for(let i=0;i<W*H;i++){rev[i]=S.rev[i]==='1'?1:0;fogImg.data[i*4+3]=rev[i]?0:255;if(rev[i]&&ter[i]!==WATER)landRev++}fogX.putImageData(fogImg,0,0);
   rebuildOcc();roomCache.clear();petAt.clear();guestAt.clear();spawnScorps();
   if(S.day!==dayNow())newDay(true);else if(S.fg)loadForage();else genForage();
@@ -1358,15 +1367,17 @@ function checkGoals(){
 let mode='play',tool='hand',ghost=null,lifted=null;
 function canPlace(t,x,y){
   const b=BUILD[t];
+  if(t==='wood'){const k=y*W+x;if(!inMap(x,y)||!rev[k])return'Explore there first';if(ter[k]!==WATER)return'Wood only goes on water';if(wood[k])return'There\'s already wood here';
+    if(curKind==='volcano')return'Wood would burn up in the lava! 🔥';if(objAt(k)||inShip(x,y))return'Something is in the way';return''}
   for(let j=0;j<b.h;j++)for(let i=0;i<b.w;i++){const X=x+i,Y=y+j,k=Y*W+X;
     if(!inMap(X,Y)||!rev[k])return'Explore there first';
     if(objAt(k)&&!(t==='track'&&objAt(k).t==='bridge')||feat[k]||chestHere(k)||inShip(X,Y))return'Something is in the way'; // tracks can go on top of a bridge
     if(b.one&&S.objs.some(o=>o.t===t&&o!==ignoreObj))return`You can only have one ${b.n}`;
     if(b.on==='shore'&&curKind==='volcano')return'No fish in lava!';
-    if(b.on==='shore'){if(ter[k]!==WATER||!N4.some(([a,c])=>inMap(X+a,Y+c)&&ter[(Y+c)*W+X+a]!==WATER))return'Docks go in the water, next to the beach'}
-    else if(b.on==='water'){if(ter[k]!==WATER)return'Bridges go over water'}
+    if(b.on==='shore'){if(ter[k]!==WATER||wood[k]||!N4.some(([a,c])=>inMap(X+a,Y+c)&&ter[(Y+c)*W+X+a]!==WATER))return'Docks go in the water, next to the beach'}
+    else if(b.on==='water'){if(ter[k]!==WATER||wood[k])return'Bridges go over water'}
     else if(t==='track'||t==='station'){if(ter[k]===ICE)return'Too slippery for the train!'} // tracks go over water on their own little bridge
-    else if(ter[k]===WATER)return'Can\'t build on water';
+    else if(ter[k]===WATER&&!wood[k])return'Can\'t build on water — put 🪵 wood down first';
     else if(ter[k]===ICE)return'Too slippery to build on the ice!';
   }
   return'';
@@ -1381,6 +1392,7 @@ function doPlace(t,x,y){
   const b=BUILD[t],why=placeWhy(t,x,y);
   if(why){toast(why);return false}
   S.coins-=b.cost;tally('build:'+t);
+  if(t==='wood'){(S.wood||(S.wood=[])).push(y*W+x);applyWood();drawTerrain();takeForage(y*W+x);dirty();refreshTray();return true}
   if(t==='track'){const br=objAt(y*W+x);if(br&&br.t==='bridge'){S.objs=S.objs.filter(q=>q!==br);rebuildOcc()}} // the track takes over the bridge
   const o={id:S.nextId++,t,x,y};if(PRODUCE[t])o.last=now();
   S.objs.push(o);rebuildOcc();
@@ -1525,6 +1537,8 @@ const ACT={
   sleep(){const tod=((now()-S.t0)%DAY_MS)/DAY_MS;if(tod<.6){toast('😴 You\'re not sleepy yet — come back in the evening');return}
     S.t0=now()-(dayNow()+.01)*DAY_MS;dirty();if(!actor)sleepFade=1.2;else netSend({t:'sleep'});toast('💤 Good night… ☀️ Good morning!',2600)},
   remove({id}){const o=byId(id);if(o)doRemove(o)},
+  unwood({i}){if(!wood[i])return;if(objAt(i)){toast('Take the things off the wood first');return}S.wood=(S.wood||[]).filter(k=>k!==i);applyWood();drawTerrain();
+    for(const e of[player,...villagers])unstick(e);dirty()},
   move({id,x,y}){const o=byId(id);if(o)doMove(o,x,y)},
 };
 function shipConfetti(){for(let k=0;k<60;k++)confetti.push({x:(SHIP.x+1.5)*T,y:SHIP.y*T,vx:(Math.random()-.5)*260,vy:-120-Math.random()*220,c:SHIRTS[k%8],t:0})}
@@ -1618,7 +1632,7 @@ function endPtr(e){
       else if(quick)toast('Tap something you built to pick it up');
     }
     else if(quick){const tg=pickAt(w.x,w.y);
-      if(tool==='remove'){if(tg.k==='obj')removeObj(tg.o);else if(tg.k==='ground'&&objAt(tg.y*W+tg.x))removeObj(objAt(tg.y*W+tg.x))}
+      if(tool==='remove'){if(tg.k==='obj')removeObj(tg.o);else if(tg.k==='ground'&&objAt(tg.y*W+tg.x))removeObj(objAt(tg.y*W+tg.x));else if(tg.k==='ground'&&wood[tg.y*W+tg.x])doAct('unwood',{i:tg.y*W+tg.x})}
       else if(tg.k==='obj')toast(`${bname(tg.o.t)}: ${BUILD[tg.o.t].d}`)}
   }else if(quick)goToTarget(pickAt(w.x,w.y));
 }
@@ -1842,6 +1856,7 @@ function drawObj(c,o,t,icon){styled(c,themeFor(),()=>drawObjIn(c,o,t,icon))}
 function drawObjIn(c,o,t,icon){
   const X=o.x*T,Y=o.y*T,night=icon?0:nightness();
   switch(o.t){
+  case'wood':woodTile(c,X,Y,o.x*7+o.y);break; // only the build-mode preview and icon: real wood lives in the terrain
   case'farm':rect(c,X+1,Y+1,T-2,T-2,'#8a5a33',5);c.fillStyle='#6e4426';for(let k=0;k<4;k++)c.fillRect(X+5,Y+5+k*7,T-10,3);break;
   case'path':rect(c,X,Y,T,T,'#dcc9a0',3);for(let k=0;k<4;k++){const a=hash(o.x+k,o.y-k);ell(c,X+6+a*20,Y+6+(a*37%1)*20,4,3,'#c7b184')}break;
   case'flowers':{const cols=['#ff6b8b','#ffd23f','#b980ff','#ff8c42','#fff'];
@@ -3330,8 +3345,9 @@ let lastTraySig='';
 function applySnap(m){
   const first=!guestMode,old=S;
   clockOff=m.now-Date.now();S=m.s;
-  if((S.seed||HOME_SEED)!==curSeed){genIsland(S.seed||HOME_SEED,S.kind||'');placeCave();featOrig=feat.slice();drawTerrain();roomCache.clear()}
+  if((S.seed||HOME_SEED)!==curSeed){genIsland(S.seed||HOME_SEED,S.kind||'');placeCave();featOrig=feat.slice();woodSig='-';applyWood();drawTerrain();roomCache.clear()}
   feat.set(featOrig);for(const i of S.cut)feat[i]=0;
+  if(applyWood())drawTerrain();
   landRev=0;
   for(let i=0;i<W*H;i++){const r=S.rev[i]==='1'||!first&&rev[i]?1:0;rev[i]=r;fogImg.data[i*4+3]=r?0:255;if(r&&ter[i]!==WATER)landRev++}
   fogX.putImageData(fogImg,0,0);
