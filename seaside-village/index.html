@@ -840,8 +840,20 @@ function hospitalModal(){
   const hurt=S.villagers.filter(v=>v.hurt).map(v=>v.name.replace(/[<>&"]/g,'')),have=S.inv.bandaid||0;
   let h=`<h2>🏥 ${bname('hospital')}</h2><p>“Hello! Here are some 🩹 band-aids to patch people up. Only 🪙${BANDAID} each!”</p>`;
   h+=`<p>${hurt.length?`🤕 <b>${hurt.join(', ')}</b> ${hurt.length>1?'need':'needs'} band-aids.`:'Nobody is hurt right now. 😊'} You have <b>${have}</b> 🩹.</p>`;
-  h+=`<div class="btns"><button class="btn" data-a="buy" data-v="1" ${S.coins<BANDAID?'disabled':''}>Buy 1 🩹 — 🪙${BANDAID}</button><button class="btn" data-a="buy" data-v="3" ${S.coins<BANDAID*3?'disabled':''}>Buy 3 🩹 — 🪙${BANDAID*3}</button><button class="btn gray" data-a="close">Bye!</button></div>`;
-  openModal(h,{buy:n=>{doAct('buyBandaid',{n:+n});setTimeout(hospitalModal,guestMode?300:0)}});
+  h+=`<div class="btns"><button class="btn" data-a="buy" data-v="1" ${S.coins<BANDAID?'disabled':''}>Buy 1 🩹 — 🪙${BANDAID}</button><button class="btn" data-a="buy" data-v="3" ${S.coins<BANDAID*3?'disabled':''}>Buy 3 🩹 — 🪙${BANDAID*3}</button><button class="btn gray" data-a="list">📋 Patients</button><button class="btn gray" data-a="close">Bye!</button></div>`;
+  openModal(h,{list:patientsModal,buy:n=>{doAct('buyBandaid',{n:+n});setTimeout(hospitalModal,guestMode?300:0)}});
+}
+// the patient list: everyone who's hurt, where they are, and how many band-aids they need
+function patientsModal(){
+  const esc=s=>s.replace(/[<>&"]/g,''),hurt=S.villagers.filter(v=>v.hurt),have=S.inv.bandaid||0;
+  let h='<h2>📋 Patients</h2>';
+  if(!hurt.length)h+='<p>Nobody is hurt — everyone is happy and healthy! 😊</p>';
+  else h+=`<p>You have <b>${have}</b> 🩹. Walk up to a patient in bed and tap them to give band-aids.</p>`;
+  for(const v of hurt){const n=v.req&&v.req.hurt?v.req.n:1,by=HUNT[v.req&&v.req.by]||HUNT.terror,a=amb&&amb.vw.v===v;
+    const where=v.hosp?'🛏️ In a hospital bed':a?(amb.back?'🚑 In the ambulance':'🚑 The ambulance is on its way'):count('hospital')?'🤕 Waiting to go to the hospital':'🤕 Hurt — build a 🏥 Hospital';
+    h+=`<div class="irow"><span class="ie" style="width:26px;height:26px;border-radius:50%;background:${v.shirt};display:inline-block"></span><span class="in">${esc(v.name)}<br><span class="ip">${where} · ${by.verb} by a ${by.name}</span></span><span class="ip" style="white-space:nowrap">needs ${n} 🩹</span></div>`}
+  h+=`<div class="btns">${inHospital()?'<button class="btn" data-a="desk">🩹 Buy band-aids</button>':''}<button class="btn gray" data-a="close">Close</button></div>`;
+  openModal(h,{desk:hospitalModal});
 }
 // a villager pecked by a terror bird needs band-aids
 function hurtVillager(vw,cr){
@@ -2770,6 +2782,7 @@ function inTray(chip){
     else if(inCave&&caveLv===4)chip('<span class="e">🪜</span>Climb out',false,false,exitHouse);
     else chip('<span class="e">🚪</span>Go outside',false,false,exitHouse);
     chip(`<span class="e">🎒</span>Bag<span class="p">${invTotal()} things</span>`,false,false,bagModal);
+    if(inHospital()){const n=S.villagers.filter(v=>v.hurt).length;chip(`<span class="e">📋</span>Patients<span class="p">${n?n+' hurt':'nobody'}</span>`,false,false,patientsModal)}
     if(!visit&&!inCab&&!inCave)chip(`<span class="e">📨</span>Invite<span class="p">${guestsIn(hereKey()).length?guestsIn(hereKey()).length+' here':'a villager'}</span>`,false,false,inviteModal);
     return}
   if(inLight){const kv=S.villagers.find(v=>v.house===inLight),esc=s=>s.replace(/[<>&"]/g,'');
