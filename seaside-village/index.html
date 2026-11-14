@@ -460,7 +460,7 @@ unstick(player);
 // ── What did you tap? ────────────────────────────────────────────────────────
 function pickAt(wx,wy){
   for(const sc of scorps)if(!sc.hide&&Math.abs(wx-sc.x)<17&&Math.abs(wy-sc.y+6)<15)return{k:'scorp',sc};
-  for(const cr of critters){if(cr.hide)continue;const big=cr.kind==='bear'||cr.kind==='rex'||cr.kind==='trike'||cr.kind==='terror',tall=cr.kind==='longneck'?76:cr.kind==='rex'?50:cr.kind==='terror'?44:0,up=cr.zz&&cr.kind==='parrot'?6:cr.kind==='parrot'||cr.kind==='bat'?24:cr.kind==='ptero'?(cr.zz?8:34):cr.kind==='ghost'?14:0;if(Math.abs(wx-cr.x)<(cr.kind==='longneck'?30:big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(tall||(big?32:24)))return{k:'critter',cr}}
+  for(const cr of critters){if(cr.hide||cr.gone)continue;const big=cr.kind==='bear'||cr.kind==='rex'||cr.kind==='trike'||cr.kind==='terror',tall=cr.kind==='longneck'?76:cr.kind==='rex'?50:cr.kind==='terror'?44:0,up=cr.zz&&cr.kind==='parrot'?6:cr.kind==='parrot'||cr.kind==='bat'?24:cr.kind==='ptero'?(cr.zz?8:34):cr.kind==='ghost'?14:0;if(Math.abs(wx-cr.x)<(cr.kind==='longneck'?30:big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(tall||(big?32:24)))return{k:'critter',cr}}
   for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
   const tx=Math.floor(wx/T),ty=Math.floor(wy/T);
   for(let d=0;d<4;d++){
@@ -765,7 +765,8 @@ function drawScorp(c,sc,t){
 let critters=[];
 function spawnCritters(){
   const kinds=curKind==='dino'?['rex','rex','longneck','longneck','longneck','trike','trike','trike','trike','ptero','ptero','ptero','terror','terror','terror']:curKind==='haunted'?['ghost','ghost','ghost','ghost','ghost','ghost','bat','bat','bat','bat']:curKind==='pirate'?['crab','crab','crab','crab','crab','crab','crab','parrot','parrot']:curKind==='autumn'?['squirrel','squirrel','squirrel','squirrel','squirrel','squirrel']:curKind==='ice'?['peng','peng','peng','peng','peng','peng','peng','bear','bear','bear']:curKind==='jungle'?['monkey','monkey','monkey','monkey','monkey','parrot','parrot','parrot','parrot']:curKind==='volcano'?['terror','terror','terror']:[];
-  critters=kinds.map(kind=>({kind,fly:0,loot:null,hide:0,...(kind==='crab'?sandSpot():scorpSpot()),wa:Math.random()*6,wt:0,dir:1,walk:0,happy:0,calm:0,still:false}));
+  const nightOnly=curKind==='dino'||curKind==='volcano'?['terror','terror','terror','terror']:curKind==='ice'?['bear','bear','bear']:[];kinds.push(...nightOnly); // these only come out at night
+  critters=kinds.map((kind,i)=>({kind,night:i>=kinds.length-nightOnly.length?1:0,gone:0,fly:0,loot:null,hide:0,...(kind==='crab'?sandSpot():scorpSpot()),wa:Math.random()*6,wt:0,dir:1,walk:0,happy:0,calm:0,still:false}));
 }
 const onIce=e=>{const t=tileOf(e);return inMap(t.x,t.y)&&ter[t.y*W+t.x]===ICE};
 const noIce=(x,y)=>walkable(x,y)&&ter[y*W+x]!==ICE;
@@ -784,9 +785,14 @@ function slideStep(dt){
   else if(sl.tg)player.target=sl.tg;
 }
 // penguins and polar bears on Ice Island, monkeys and parrots on Jungle Island
+let nightWas=null;
 function critterUpdate(dt){
   stealCool=Math.max(0,stealCool-dt);
+  if(critters.some(c=>c.night)){const n=bedtime();if(n&&nightWas===false&&!inside)toast(curKind==='ice'?'🌙 Night is falling… more polar bears are prowling! 🐻‍❄️':'🌙 Night is falling… more terror birds are coming out! 🦤',3200);nightWas=n}
   for(const cr of critters){
+    if(cr.night){ // night-time terror birds: gone by day, out in the dark (somewhere away from you)
+      if(!bedtime()){cr.gone=1;cr.chase=0;cr.prey=null;cr.path=[];continue}
+      if(cr.gone){cr.gone=0;for(let k=0;k<20;k++){Object.assign(cr,scorpSpot());if(Math.hypot(cr.x-player.x,cr.y-player.y)>T*10)break}}}
     if(cr.hide>0){if((cr.hide-=dt)<=0)Object.assign(cr,scorpSpot(),{loot:null});continue}
     cr.happy=Math.max(0,cr.happy-dt);cr.calm=Math.max(0,cr.calm-dt);
     if(!NIGHT_OWLS.includes(cr.kind)){const fly=cr.kind==='ptero'||cr.kind==='parrot';cr.zz=bedtime()&&!cr.loot&&(!fly||cr.zz||animalOk(cr.x,cr.y));if(cr.zz){cr.walk=0;cr.chase=0;cr.path=[];continue}} // animals sleep at night (fliers wait until they're over land); ghosts, bats and terror birds stay up
@@ -794,20 +800,20 @@ function critterUpdate(dt){
     if(cr.kind==='ghost'){ghostFloat(cr,dt);continue}
     if(cr.happy>0){cr.walk=0;continue}
     const dx=player.x-cr.x,dy=player.y-cr.y,d=Math.hypot(dx,dy);let vx,vy,sp;
-    if(cr.kind==='bear'&&!cr.calm&&d<T*4&&!player.stun&&!player.slide){vx=dx;vy=dy;sp=T*1.7;if(d<18){bearHit(cr);continue}} // here comes the bear!
-    else if(cr.kind==='terror'&&!cr.calm&&!player.stun&&(cr.chase>0||d<T*6)){ // RUN! It's a terror bird!
-      if(!cr.chase){cr.chase=.01;floatAt(cr.x,cr.y-50,'SKRAAAW!');toast('🦤 A terror bird spotted you — RUN!',2200)}
+    if(HUNT[cr.kind]&&!cr.calm&&!player.stun&&!player.slide&&(cr.chase>0||d<T*HUNT[cr.kind].see)){ // RUN! It's a terror bird (or a polar bear)!
+      const Hk=HUNT[cr.kind];
+      if(!cr.chase){cr.chase=.01;floatAt(cr.x,cr.y-50,Hk.cry);toast(`${Hk.e} A ${Hk.name} spotted you — RUN!`,2200)}
       cr.chase+=dt;if(d>T*10||cr.chase>6){cr.chase=0;cr.calm=5;continue} // it gives up
-      if(d<16){terrorCatch(cr);continue}
-      if(d>T*1.3&&chaseStep(cr,player,T*3.6,dt))continue;
-      vx=dx;vy=dy;sp=T*3.6}
-    else if(cr.kind==='terror'&&!cr.calm&&!guestMode&&(cr.prey=preyOk(cr.prey)?cr.prey:preyNear(cr))){ // …or one of your villagers!
-      const pv=cr.prey,pdx=pv.x-cr.x,pdy=pv.y-cr.y,pd=Math.hypot(pdx,pdy);
-      if(!cr.hunt){cr.hunt=.01;pv.say='Help! A terror bird! 😱';pv.talkT=2.5;floatAt(cr.x,cr.y-50,'SKRAW!')}
+      if(d<(cr.kind==='bear'?18:16)){cr.chase=0;if(cr.kind==='bear'&&S.inv.fish)bearHit(cr);else terrorCatch(cr);continue} // a bear would rather have your fish
+      if(d>T*1.3&&chaseStep(cr,player,T*Hk.spd,dt))continue;
+      vx=dx;vy=dy;sp=T*Hk.spd}
+    else if(HUNT[cr.kind]&&!cr.calm&&!guestMode&&(cr.prey=preyOk(cr.prey)?cr.prey:preyNear(cr))){ // …or one of your villagers!
+      const Hk=HUNT[cr.kind],pv=cr.prey,pdx=pv.x-cr.x,pdy=pv.y-cr.y,pd=Math.hypot(pdx,pdy);
+      if(!cr.hunt){cr.hunt=.01;pv.say=`Help! A ${Hk.name}! 😱`;pv.talkT=2.5;floatAt(cr.x,cr.y-50,Hk.cry)}
       cr.hunt+=dt;if(pd>T*10||cr.hunt>8){cr.hunt=0;cr.prey=null;cr.calm=5;continue}
-      if(pd<16){hurtVillager(pv);cr.hunt=0;cr.prey=null;cr.calm=12;continue}
-      if(pd>T*1.3&&chaseStep(cr,pv,T*3.2,dt))continue;
-      vx=pdx;vy=pdy;sp=T*3.2}
+      if(pd<16){hurtVillager(pv,cr);cr.hunt=0;cr.prey=null;cr.calm=12;continue}
+      if(pd>T*1.3&&chaseStep(cr,pv,T*Hk.vspd,dt))continue;
+      vx=pdx;vy=pdy;sp=T*Hk.vspd}
     else if(cr.kind==='rex'&&!cr.calm&&d<T*4&&!player.stun){vx=dx;vy=dy;sp=T*1.6;if(d<20){rexRoar(cr);continue}} // STOMP STOMP STOMP
     else if(cr.kind==='crab'&&!cr.calm&&d<T*1.8&&!player.stun){vx=dx;vy=dy;sp=T*1.4;if(d<16){crabPinch(cr);continue}} // snip snap!
     else if(cr.kind==='squirrel'&&cr.loot&&d<T*8){vx=-dx;vy=-dy;sp=T*3.4}  // running off with your acorns
@@ -838,19 +844,22 @@ function hospitalModal(){
   openModal(h,{buy:n=>{doAct('buyBandaid',{n:+n});setTimeout(hospitalModal,guestMode?300:0)}});
 }
 // a villager pecked by a terror bird needs band-aids
-function hurtVillager(vw){
-  const v=vw.v;v.hurt=1;v.req={k:'bandaid',n:1+(Math.random()*2|0),reward:50,hurt:1};vw.path=[];vw.wait=3;vw.say='Ouch! 🤕';vw.talkT=3;
-  floatAt(vw.x,vw.y-50,'PECK!');toast(`🦤 A terror bird pecked ${v.name}! They need 🩹 band-aids${count('hospital')?' from the 🏥 Hospital':' — build a 🏥 Hospital to get some'}`,3200);dirty();
+function hurtVillager(vw,cr){
+  const Hk=HUNT[cr&&cr.kind]||HUNT.terror,v=vw.v;v.hurt=1;v.req={k:'bandaid',n:1+(Math.random()*2|0),reward:50,hurt:1,by:cr?cr.kind:'terror'};vw.path=[];vw.wait=3;vw.say='Ouch! 🤕';vw.talkT=3;
+  floatAt(vw.x,vw.y-50,Hk.hit);toast(`${Hk.e} A ${Hk.name} ${Hk.verb} ${v.name}! They need 🩹 band-aids${count('hospital')?' from the 🏥 Hospital':' — build a 🏥 Hospital to get some'}`,3200);dirty();
 }
+// the hunters: terror birds (Dino and Volcano Island) and polar bears (Ice Island) chase you and your villagers
+const HUNT={terror:{name:'terror bird',e:'🦤',cry:'SKRAAAW!',hit:'PECK!',verb:'pecked',got:'CHOMP!',spd:3.6,vspd:3.2,see:6},
+  bear:{name:'polar bear',e:'🐻‍❄️',cry:'GRRROAR!',hit:'SWIPE!',verb:'swiped',got:'GRRR!',spd:3.2,vspd:2.8,see:5}};
 // caught by a terror bird: you faint, and wake up back on the beach where you landed
 function terrorCatch(cr){
-  for(const c of critters)if(c.kind==='terror'){c.chase=0;c.calm=8}
+  const Hk=HUNT[cr.kind]||HUNT.terror;for(const c of critters)if(HUNT[c.kind]){c.chase=0;c.calm=8}
   player.path=[];player.target=null;player.act=null;player.steer=null;player.slide=null;
   const H=S.objs.find(o=>o.t==='hospital');
   if(H){enterHouse(H.id);player.x=4*T+16;player.y=2*T+22;player.dir='down';sleepFade=1.2; // wake up in the hospital, next to the beds
-    setTimeout(()=>toast('💀 CHOMP! The terror bird got you! …You woke up in the hospital 🏥',3200),500);return}
+    setTimeout(()=>toast(`💀 ${Hk.got} The ${Hk.name} got you! …You woke up in the hospital 🏥`,3200),500);return}
   player.x=SPAWN.x*T+16;player.y=SPAWN.y*T+22;player.dir='down';unstick(player);cam.x=player.x;cam.y=player.y;lastTile=-1;sleepFade=1.2;
-  setTimeout(()=>toast('💀 CHOMP! The terror bird got you! …You woke up back on the beach 🏖️',3200),500);
+  setTimeout(()=>toast(`💀 ${Hk.got} The ${Hk.name} got you! …You woke up back on the beach 🏖️`,3200),500);
 }
 function rexRoar(cr){
   const a=Math.atan2(player.y-cr.y,player.x-cr.x)||1.5;for(let k=0;k<8;k++)moveBy(player,Math.cos(a)*6,Math.sin(a)*6,walkable);
@@ -889,7 +898,7 @@ function flyParrot(cr,dt){
   const sp=cr.happy>0?0:T*1.6;cr.x+=Math.cos(cr.wa)*sp*dt;cr.y+=Math.sin(cr.wa)*sp*dt;cr.dir=Math.cos(cr.wa)<0?-1:1;cr.walk+=dt*12;
 }
 const DINO_SAYS=['Skreee! Warm the giant egg in the nest every day!','Skreee! The T-Rex loves 🐟 fish!','Skreee! Triceratops love 🌼 wildflowers!',
-  'Skreee! Look for 🦴 fossils on the ground!','Skreee! The long-necks are big softies!','Skreee! Amber 🟠 hides under the tree ferns!','Skreee! Stomp stomp stomp!','Skreee! Watch out for terror birds — they\'re fast!','Skreee! Terror birds give up if you run far enough!','Skreee! Dinosaurs sleep at night — but terror birds stay awake!'];
+  'Skreee! Look for 🦴 fossils on the ground!','Skreee! The long-necks are big softies!','Skreee! Amber 🟠 hides under the tree ferns!','Skreee! Stomp stomp stomp!','Skreee! Watch out for terror birds — they\'re fast!','Skreee! Terror birds give up if you run far enough!','Skreee! Dinosaurs sleep at night — but even more terror birds come out!'];
 const PIRATE_SAYS=['Squawk! Arrr, matey!','Squawk! Three map pieces find the gold!','Squawk! X marks the spot!','Squawk! The captain\'s chest is on the old ship!',
   'Squawk! Shiver me timbers!','Squawk! Crabs love fish!','Squawk! Pieces of eight! Pieces of eight!'];
 const PARROT_SAYS=['Squawk! Pretty bird!','Squawk! Three keys open the temple!','Squawk! Keys hide in treasure chests!','Squawk! Monkeys love bananas!',
@@ -977,7 +986,7 @@ function drawCritterRaw(c,cr,t){
 const zzz=(c,x,y,t)=>{c.font='13px sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText('💤',x+10,y+Math.sin(t*2+x)*2)};
 const drawCritter=(c,cr,t)=>{plain(drawCritterRaw)(c,cr,t);if(cr.zz)zzz(c,cr.x,cr.y-(ZZ_UP[cr.kind]||30),t)};
 // Dino Island's dinosaurs
-const DINOS=['rex','longneck','trike','ptero','terror'],NIGHT_OWLS=['terror','ghost','bat'],
+const DINOS=['rex','longneck','trike','ptero','terror'],NIGHT_OWLS=['terror','bear','ghost','bat'],
   CRIT_NAMES={rex:'T-Rex',longneck:'long-neck',trike:'triceratops',ptero:'pterodactyl',terror:'terror bird',peng:'penguin',bear:'polar bear',monkey:'monkey',parrot:'parrot',crab:'crab',squirrel:'squirrel'},
   ZZ_UP={longneck:78,rex:56,bear:40,ptero:20,parrot:18,crab:26,trike:30,peng:32,monkey:32,squirrel:30};
 function drawDino(c,cr,t){
@@ -1183,7 +1192,7 @@ function makeRequest(){
 function talk(vw){
   const v=vw.v;vw.wait=Math.max(vw.wait,2);vw.dir='down';
   if(v.req){const r=v.req,have=S.inv[r.k]||0;
-    openModal(`<h2>${v.name}</h2><p>“${r.hurt?'Ouch! A terror bird pecked me! 🤕 ':''}Could you bring me <b>${r.n} ${ITEMS[r.k].e} ${ITEMS[r.k].n}</b>? I'll give you <b>🪙${r.reward}</b>!”</p><p style="font-size:13px">You have ${have}.</p>
+    openModal(`<h2>${v.name}</h2><p>“${r.hurt?`Ouch! A ${(HUNT[r.by]||HUNT.terror).name} ${(HUNT[r.by]||HUNT.terror).verb} me! 🤕 `:''}Could you bring me <b>${r.n} ${ITEMS[r.k].e} ${ITEMS[r.k].n}</b>? I'll give you <b>🪙${r.reward}</b>!”</p><p style="font-size:13px">You have ${have}.</p>
       <div class="btns"><button class="btn" data-a="give" ${have<r.n?'disabled':''}>Give ${r.n} ${ITEMS[r.k].e}</button><button class="btn gray" data-a="close">Okay!</button></div>`,
       {give:()=>{closeModal();doAct('give',{name:v.name})}});
   }else{vw.say=LINES[Math.random()*LINES.length|0];vw.talkT=3.5}
@@ -2140,7 +2149,7 @@ function draw(t){
     for(const sc of scorps)if(!sc.hide)list.push([sc.y,()=>{drawScorp(ctx,sc,t);if(sc.zz)zzz(ctx,sc.x,sc.y-22,t)}]);
     for(const b of bombs){const p=Math.min(1,b.t/b.dur);ell(ctx,b.tx,b.ty,6+p*8,3+p*4,`rgba(0,0,0,${.12+p*.25})`)}}
   for(const a of animals)list.push([a.y,()=>{drawAnimal(ctx,a,t);if(a.zz)zzz(ctx,a.x,a.y-(a.kind==='cow'?34:24),t)}]);
-  for(const cr of critters)if(!cr.hide)list.push([cr.y+(cr.kind==='parrot'?40:0),()=>drawCritter(ctx,cr,t)]);
+  for(const cr of critters)if(!cr.hide&&!cr.gone)list.push([cr.y+(cr.kind==='parrot'?40:0),()=>drawCritter(ctx,cr,t)]);
   for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried)list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-40,v.v.req.hurt?'🩹':'❗')}]);
   list.push([player.y,()=>drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t)]);
   if(friend&&!friend.in)list.push([friend.y,()=>drawPerson(ctx,friend.x,friend.y,guestMode?PLAYER_LOOK:FRIEND_LOOK,friend.dir,friend.walk,friend.act,t)]);
