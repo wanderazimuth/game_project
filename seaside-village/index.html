@@ -461,7 +461,7 @@ unstick(player);
 function pickAt(wx,wy){
   for(const sc of scorps)if(!sc.hide&&Math.abs(wx-sc.x)<17&&Math.abs(wy-sc.y+6)<15)return{k:'scorp',sc};
   for(const cr of critters){if(cr.hide)continue;const big=cr.kind==='bear'||cr.kind==='rex'||cr.kind==='trike'||cr.kind==='terror',tall=cr.kind==='longneck'?76:cr.kind==='rex'?50:cr.kind==='terror'?44:0,up=cr.zz&&cr.kind==='parrot'?6:cr.kind==='parrot'||cr.kind==='bat'?24:cr.kind==='ptero'?(cr.zz?8:34):cr.kind==='ghost'?14:0;if(Math.abs(wx-cr.x)<(cr.kind==='longneck'?30:big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(tall||(big?32:24)))return{k:'critter',cr}}
-  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
+  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
   const tx=Math.floor(wx/T),ty=Math.floor(wy/T);
   for(let d=0;d<4;d++){
     const x=tx,y=ty+d;if(!inMap(x,y))continue;const i=y*W+x;if(!rev[i])continue;
@@ -566,8 +566,8 @@ function useObj(o,act){
       act(1400,'fish',()=>doAct('fish',{id:o.id}));break}
     case'myhouse':enterHouse();break;
     case'cabin':enterCabin();break;
-    case'house':{const v=villagers.find(v=>v.v.house===o.id);if(v&&isGuest(v.v.name))toast(`🏠 ${v.v.name} isn't home — they're visiting ${guestOf(v.v.name).to?'the lighthouse':'your house'}!`);else if(v&&v.asleep)toast(`💤 Shh… ${v.v.name} is fast asleep. Come back in the morning!`,2800);else if(v)enterHouse(o.id);else toast('🏠 An empty house — nobody lives here yet');break}
-    case'hospital':hospitalModal();break;
+    case'house':{const v=villagers.find(v=>v.v.house===o.id);if(v&&isGuest(v.v.name))toast(`🏠 ${v.v.name} isn't home — they're visiting ${guestOf(v.v.name).to?'the lighthouse':'your house'}!`);else if(v&&v.inHosp)toast(`🏥 ${v.v.name} isn't home — they're at the hospital! Bring them 🩹 band-aids`,2800);else if(v&&v.asleep)toast(`💤 Shh… ${v.v.name} is fast asleep. Come back in the morning!`,2800);else if(v)enterHouse(o.id);else toast('🏠 An empty house — nobody lives here yet');break}
+    case'hospital':enterHouse(o.id);break;
     case'well':toast('💧 Crops within 3 steps of the well grow 2× faster');break;
     case'market':toast('🧺 The market makes everything sell for 20% more — tap 💼 Work to work here!',2800);break;
     case'lighthouse':enterHouse(null,false,o.id);break;
@@ -1467,7 +1467,7 @@ const ACT={
   petRename({id,name}){const p=pets().find(p=>p.id===id),n=String(name||'').replace(/[<>&"]/g,'').trim().slice(0,12);if(p&&n){p.name=n;dirty()}},
   petRemove({id}){const k=pets().findIndex(p=>p.id===id);if(k<0)return;const p=pets()[k],back=Math.floor(PETS[p.k].cost/2);
     pets().splice(k,1);S.coins+=back;toast(`👋 ${p.name} went to a lovely new home`);dirty()},
-  invite({name,lh}){if(bedtime()){toast('💤 Everyone\'s asleep — invite them over tomorrow!',2800);return}const L=lh?byId(lh):null;if(lh?!L||L.t!=='lighthouse':!count('myhouse'))return;const v=S.villagers.find(v=>v.name===name);if(!v||isGuest(name)||lh&&v.house===lh)return;
+  invite({name,lh}){if(bedtime()){toast('💤 Everyone\'s asleep — invite them over tomorrow!',2800);return}const L=lh?byId(lh):null;if(lh?!L||L.t!=='lighthouse':!count('myhouse'))return;const v=S.villagers.find(v=>v.name===name);if(!v||isGuest(name)||lh&&v.house===lh)return;if(v.hurt){toast(`🤕 ${name} is hurt — bring them 🩹 band-aids first`);return}
     if(guestsIn(lh||0).length>=MAX_GUESTS){toast(`The ${lh?'lighthouse':'house'} is full of visitors! 🎉`);return}
     guests().push(lh?{name,until:now()+VISIT_MS,to:lh}:{name,until:now()+VISIT_MS});if(!lh)tally('visit');dirty();toast(`🔔 Knock knock! ${name} is here!`)},
   homeWall({i,cab,lh}){const H=homeOf(cab,lh);if(H&&WALLPAPERS[i]){H.wall=i;dirty()}},
@@ -1652,6 +1652,15 @@ function update(dt){
   // Villagers wander near home
   for(const v of villagers){
     v.talkT=Math.max(0,v.talkT-dt);
+    {const hv=v.v; // hurt? off to the hospital, and stay there until someone brings band-aids
+      if(hv.hosp&&!(hv.hurt&&byId(hv.hosp))&&!guestMode){hv.hosp=0;dirty()}
+      if(v.inHosp&&!hv.hosp){const o=byId(v.inHosp)||byId(hv.house);v.inHosp=0;v.asleep=0;if(o){v.x=(o.x+1)*T;v.y=(o.y+2)*T+6;unstick(v)}v.path=[];v.wait=1;if(!hv.hurt){v.say='All better! 😊';v.talkT=3}}
+      if(hv.hosp){v.inHosp=hv.hosp;v.walk=0;v.path=[];continue}
+      const H=hv.hurt&&!guestMode&&!isGuest(hv.name)&&S.objs.find(o=>o.t==='hospital');
+      if(H){if(followPath(v,T*1.2,dt))continue;v.walk=0;
+        const t=tileOf(v),gx=H.x+1,gy=H.y+2,r=(Math.abs(t.x-gx)<=1&&Math.abs(t.y-gy)<=1)||v.hospTry>3?null:findPath(t.x,t.y,(x,y)=>x===gx&&y===gy,null);
+        if(r&&r.path.length){v.path=r.path;if(!v.hospTry){v.say='Ouch… off to the hospital 🤕';v.talkT=2.5}v.hospTry=(v.hospTry||0)+1;continue}
+        v.hospTry=0;hv.hosp=H.id;v.inHosp=H.id;patientAt.delete(hv.name);dirty();continue}}
     if(v.asleep){if(sleepy(v)){v.wake=0;continue}
       if(!v.wake)v.wake=.1+Math.random()*6; // everyone gets up at their own time
       if((v.wake-=dt)>0)continue;v.asleep=0;v.wake=0;v.x=v.door.x;v.y=v.door.y;v.path=[];v.wait=1;v.dir='down';v.say=['Good morning! ☀️','*yawn* 🥱','What a lovely sleep!'][Math.random()*3|0];v.talkT=3;continue}
@@ -1909,7 +1918,7 @@ function drawObjIn(c,o,t,icon){
   if(PRODUCE[o.t]&&produced(o)){const n=produced(o);bubble(c,X+BUILD[o.t].w*T/2,Y-(o.t==='hive'?0:o.t==='dock'?-4:4),o.t==='dock'?'🎣':PRODUCE[o.t].icon||ITEMS[PRODUCE[o.t].item].e);
     if(n>1){c.font='bold 11px sans-serif';c.fillStyle='#b5651d';c.fillText(n,X+BUILD[o.t].w*T/2+14,Y-24)}}
 }
-function gateOpen(o){const gx=o.x*T+16,gy=o.y*T+20;return[player,...villagers.filter(v=>!v.asleep),...(friend&&!friend.in?[friend]:[])].some(e=>Math.hypot(e.x-gx,e.y-gy)<34)}
+function gateOpen(o){const gx=o.x*T+16,gy=o.y*T+20;return[player,...villagers.filter(v=>!v.asleep&&!v.inHosp),...(friend&&!friend.in?[friend]:[])].some(e=>Math.hypot(e.x-gx,e.y-gy)<34)}
 // a little shop: the bakery and the creamery
 function shop(c,X,Y,wall,roof,stripe,sign,icon,t){
   rect(c,X+44,Y+4,8,16,'#a0522d');rect(c,X+6,Y+24,52,38,wall,3);poly(c,roof,X+2,Y+28,X+32,Y+6,X+62,Y+28);
@@ -2120,7 +2129,7 @@ function draw(t){
     for(const b of bombs){const p=Math.min(1,b.t/b.dur);ell(ctx,b.tx,b.ty,6+p*8,3+p*4,`rgba(0,0,0,${.12+p*.25})`)}}
   for(const a of animals)list.push([a.y,()=>{drawAnimal(ctx,a,t);if(a.zz)zzz(ctx,a.x,a.y-(a.kind==='cow'?34:24),t)}]);
   for(const cr of critters)if(!cr.hide)list.push([cr.y+(cr.kind==='parrot'?40:0),()=>drawCritter(ctx,cr,t)]);
-  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep)list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-40,v.v.req.hurt?'🩹':'❗')}]);
+  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp)list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-40,v.v.req.hurt?'🩹':'❗')}]);
   list.push([player.y,()=>drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t)]);
   if(friend&&!friend.in)list.push([friend.y,()=>drawPerson(ctx,friend.x,friend.y,guestMode?PLAYER_LOOK:FRIEND_LOOK,friend.dir,friend.walk,friend.act,t)]);
   list.sort((a,b)=>a[0]-b[0]);for(const d of list)d[1]();
@@ -2141,7 +2150,7 @@ function draw(t){
   // Fog over the parts of the island you haven't seen
   ctx.imageSmoothingEnabled=true;ctx.drawImage(fogC,0,0,W,H,0,0,W*T,H*T);
   // Villager chat
-  for(const v of villagers)if(v.talkT>0&&v.say&&!isGuest(v.v.name)&&!v.asleep){ctx.font='bold 12px system-ui,sans-serif';const w=ctx.measureText(v.say).width+16;
+  for(const v of villagers)if(v.talkT>0&&v.say&&!isGuest(v.v.name)&&!v.asleep&&!v.inHosp){ctx.font='bold 12px system-ui,sans-serif';const w=ctx.measureText(v.say).width+16;
     rect(ctx,v.x-w/2,v.y-70,w,24,'rgba(255,255,255,.96)',10);poly(ctx,'rgba(255,255,255,.96)',v.x-5,v.y-46,v.x+5,v.y-46,v.x,v.y-40);
     ctx.fillStyle='#4a3410';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(v.say,v.x,v.y-58)}
   // Night
@@ -2219,6 +2228,12 @@ const FURN={
   capchest:{n:'Captain\'s Chest',cost:0,w:1,h:1,tall:6,hide:1,e:'🧰',say:'capchest'},
   lantern:{n:'Lantern',cost:0,w:1,h:2,wall:1,hide:1,e:'🏮',say:'🏮 An old ship lantern'},
   porthole:{n:'Porthole',cost:0,w:1,h:2,wall:1,hide:1,e:'🌊',say:'🌊 You can see the waves outside'},
+  // only in the hospital
+  hbed:{n:'Hospital Bed',cost:0,w:1,h:2,tall:10,hide:1,e:'🛏️',say:'🛏️ A clean hospital bed — ready for anyone who gets hurt'},
+  monitor:{n:'Heart Monitor',cost:0,w:1,h:1,tall:30,hide:1,e:'💓',say:'💓 Beep… beep… beep…'},
+  medcab:{n:'Medicine Cabinet',cost:0,w:1,h:1,tall:30,hide:1,e:'💊',say:'💊 Lots of medicine — only the doctor can open it'},
+  hdesk:{n:'Front Desk',cost:0,w:2,h:1,tall:20,hide:1,e:'🩹',say:'hospital'},
+  redcross:{n:'Hospital Sign',cost:0,w:1,h:2,wall:1,hide:1,e:'➕',say:'🏥 Get well soon!'},
   glowshroom:{n:'Glow Mushrooms',cost:0,w:1,h:1,tall:16,hide:1,e:'🍄',say:'🍄 Glowing mushrooms — they light up the deep cave'},
 };
 const WALLPAPERS=[['Cream','#fbf1dc',0],['Mint','#cdeedd',1],['Sky','#cfe6ff',0],['Pink','#ffd9e6',1],['Lavender','#e4d9ff',0],['Sunny','#fff1a8',1],['Wood','#c8935a',2],['Starry','#2c3a6b',3]];
@@ -2245,8 +2260,32 @@ function roomOpen(items){
     for(const[a,b]of N4){const nx=x+a,ny=y+b,k=nx+','+ny;if(nx<0||ny<0||nx>=RW||ny>=RH||seen.has(k)||blocked(nx,ny))continue;seen.add(k);q.push([nx,ny])}}
   return seen.size===free;
 }
+// The hospital: beds for hurt villagers, and a front desk that sells band-aids
+function hospRoom(id){let n=-1000*id-1;const it=(k,x,y)=>({id:n--,k,x,y,c:0});
+  return{wall:1,floor:5,pets:[],items:[it('hbed',0,0),it('monitor',1,0),it('hbed',3,0),it('monitor',4,0),it('hbed',6,0),it('monitor',7,0),it('medcab',9,0),
+    it('hdesk',7,4),it('chair',1,5),it('chair',2,5),it('plant',0,5),it('plant',9,6),it('window',1,-2),it('redcross',4,-2),it('clock',6,-2),it('window',8,-2)]}}
+const inHospital=()=>inside&&visit&&byId(visit)&&byId(visit).t==='hospital';
+const patientAt=new Map();
+// the patients in this hospital: in the beds (and anyone extra waits in a chair)
+function patients(o){
+  const beds=room().items.filter(f=>f.k==='hbed'),out=[];let i=0;
+  for(const v of S.villagers){if(!(v.hurt&&v.hosp===o.id))continue;const vw=villagers.find(w=>w.v===v);if(!vw)continue;
+    let q=patientAt.get(v.name);
+    if(!q||q.o!==o.id){const b=beds[i];q=b?{x:b.x*T+16,y:(b.y+2)*T-2,bed:b,path:[],dir:'down',walk:0,wait:1e9,o:o.id}:{...spotIn(),wait:1e9,o:o.id};patientAt.set(v.name,q)}
+    out.push([vw,q]);i++}
+  return out;
+}
+// a villager lying in a hospital bed
+function drawPatient(c,vw,q,t){
+  const b=q.bed,X=b.x*T,Y=b.y*T,v=vw.v,br=Math.sin(t*2+X)*.8;
+  ell(c,X+16,Y+12,7,6.5,v.skin);c.fillStyle=v.hair;c.beginPath();c.ellipse(X+16,Y+9,7.4,5,0,Math.PI,0);c.fill();
+  c.fillStyle='#222';c.fillRect(X+13,Y+12,1.6,1.2);c.fillRect(X+17.6,Y+12,1.6,1.2);
+  c.save();c.translate(X+21,Y+15);c.rotate(-.5);rect(c,-3.5,-1.5,7,3,'#f5c99a',1);c.restore();
+  ell(c,X+16,Y+34+br,10,12,'#8fc9f0');rect(c,X+4,Y+22,24,36,'#8fc9f0',4);c.fillStyle='rgba(255,255,255,.4)';c.fillRect(X+4,Y+22,24,3);
+}
 // A villager's home, furnished their own way (the same every time you visit)
 function genRoom(id){
+  {const o=byId(id);if(o&&o.t==='hospital')return hospRoom(id)}
   const r=rngFrom(id*977+5),pick=a=>a[r()*a.length|0],R={wall:r()*WALLPAPERS.length|0,floor:r()*FLOORS.length|0,items:[],pets:[]};
   let n=-1000*id; // ids that can't be mixed up with Your House's
   const put=(k,x,y)=>{if(furnWhy(k,x,y,null,R.items))return false;R.items.push({id:n--,k,x,y,c:r()*FCOLS.length|0});
@@ -2277,7 +2316,7 @@ const hereKey=()=>inLight||0;
 function speakers(){
   if(inCab||inCave)return[];
   const vw=hostVw();if(vw&&!hostPos)hostPos=spotIn();const host=vw&&hostPos?[[vw,hostPos]]:[];
-  if(visit)return host;
+  if(visit){const o=byId(visit);return o&&o.t==='hospital'?patients(o):host}
   return host.concat(guestsIn(hereKey()).map(g=>[villagers.find(v=>v.v.name===g.name),guestAt.get(g.name)]).filter(([v,q])=>v&&q));
 }
 function spotIn(){const q={x:DOOR_X*T+16,y:(RH-1)*T+22,path:[],wait:2,dir:'down',walk:0};
@@ -2289,7 +2328,7 @@ function visitorsComeAndGo(){
     const v=S.villagers.find(v=>v.name===d.name);
     // somewhere to visit: Your House, or a lighthouse they don't live in
     const spots=[...(count('myhouse')?[0]:[]),...S.objs.filter(o=>o.t==='lighthouse'&&(!v||v.house!==o.id)).map(o=>o.id)].filter(k=>guestsIn(k).length<MAX_GUESTS);
-    if(v&&!isGuest(d.name)&&spots.length){const k=spots[Math.random()*spots.length|0];
+    if(v&&!isGuest(d.name)&&!v.hurt&&spots.length){const k=spots[Math.random()*spots.length|0];
       if(k){guests().push({name:d.name,until:now()+VISIT_MS,to:k});toast(`🔔 ${d.name} went to visit the lighthouse 🗼`,3000)}
       else{guests().push({name:d.name,until:now()+VISIT_MS});tally('visit');toast(`🔔 Ding dong! ${d.name} came to visit your house`,3000)}}}
   if(bedtime()&&guests().length){for(const g of guests())if(g.until>now())g.until=now();}
@@ -2573,6 +2612,7 @@ function enterHouse(id,cab,lh,cave){
   if(!visit&&!inCab&&!inCave){guestAt.clear();for(const g of guestsIn(hereKey())){const q=spotIn();q.first=1;guestAt.set(g.name,q)}}
   if(inCave){}
   else if(inLight){if(vw){vw.say='Welcome to the lighthouse!';vw.talkT=3}toast(vw?`🗼 The lighthouse — ${vw.v.name} keeps it shining. Tap 🎨 Decorate!`:'🗼 Inside the lighthouse! Tap 🎨 Decorate to fix it up',3000)}
+  else if(inHospital()){const n=patients(byId(visit)).length;toast(n?`🏥 ${n} ${n>1?'patients need':'patient needs'} 🩹 band-aids — buy them at the front desk`:'🏥 The hospital — nobody is sick today! 😊',3000)}
   else if(vw){vw.say='Welcome to my home!';vw.talkT=3;toast(`🏠 You're visiting ${vw.v.name}`,2400)}
   else if(inCab)toast(guestMode?'🛖 Your cabin! Tap 🎨 Decorate to make it your own':net&&net.joined?'🛖 Your friend\'s cabin':'🛖 The guest cabin — a friend who joins your island (👥) stays here and decorates it',3200);
   else toast('🏠 Welcome home! Tap 🎨 Decorate to add furniture',2800);
@@ -2622,6 +2662,7 @@ function useFurn(f){
   if(F.say==='sleep'){if(visit){const vw=hostVw();toast(`That's ${vw?vw.v.name+'\'s':'their'} bed — no napping! 😄`)}else doAct('sleep',{})}
   else if(F.say==='music'){for(let k=0;k<4;k++)setTimeout(()=>floats.push({x:(b.x+1)*T+(Math.random()-.5)*30,y:b.y*T-30,txt:['🎵','🎶'][k%2],t:0}),k*250);toast('🎹 La la la!')}
   else if(F.say==='chest'){if(visit){const vw=hostVw();toast(`🧰 That's ${vw?vw.v.name+'\'s':'their'} chest — no peeking!`)}else chestModal(f.id,inCab,inLight)}
+  else if(F.say==='hospital')hospitalModal();
   else if(F.say==='clock'){const tod=((now()-S.t0)%DAY_MS)/DAY_MS,mins=Math.floor(tod*1440)+360,h=Math.floor(mins/60)%24;toast(`🕰️ It's ${h%12||12} o'clock${h<12?' in the morning':h<18?' in the afternoon':' at night'} on day ${S.day}`)}
   else toast(F.say.startsWith(F.e)?F.say:`${F.e} ${F.say}`);
 }
@@ -2745,6 +2786,18 @@ function drawFurnIn(c,f,t,icon){
   case'stalagmite':ell(c,X+16,Y+28,11,4,'rgba(0,0,0,.25)');poly(c,'#5a606c',X+5,Y+28,X+16,Y-26,X+27,Y+28);poly(c,'#6e7582',X+12,Y+28,X+16,Y-20,X+20,Y+28);break;
   case'cavechest':rect(c,X+4,Y+10,24,17,'#7a4a24',3);if(f.open){rect(c,X+3,Y-2,26,8,'#9a5b2a',3);rect(c,X+6,Y+10,20,4,'#2a1a10')}else{rect(c,X+3,Y+4,26,9,'#9a5b2a',4);rect(c,X+13,Y+11,6,6,'#e0b13c',1)}
     rect(c,X+8,Y+4,3,23,'#c9a24a');rect(c,X+21,Y+4,3,23,'#c9a24a');if(!f.open&&Math.sin(t*2.5)>.6){c.fillStyle='#fff7c2';c.fillRect(X+26,Y-6,2,7);c.fillRect(X+23.5,Y-3.5,7,2)}break;
+  case'hbed':rect(c,X+3,Y-10,26,12,'#c9d3dc',4);rect(c,X+2,Y,28,62,'#aab6c2',4);rect(c,X+4,Y+2,24,56,'#fff',4);rect(c,X+7,Y+4,18,10,'#eef4ff',4);
+    rect(c,X+4,Y+22,24,36,'#8fc9f0',4);c.fillStyle='rgba(255,255,255,.4)';c.fillRect(X+4,Y+22,24,3);rect(c,X+3,Y+60,3,4,'#7a8590');rect(c,X+26,Y+60,3,4,'#7a8590');break;
+  case'monitor':{rect(c,X+14,Y-4,4,30,'#9aa2ab');rect(c,X+8,Y+24,16,4,'#7a8590',2);rect(c,X+3,Y-26,26,22,'#3a4250',3);rect(c,X+5,Y-24,22,18,'#0d1f17',2);
+    c.strokeStyle='#4dff88';c.lineWidth=1.3;c.beginPath();const ph=icon?0:(t*.8)%1;
+    for(let i=0;i<=20;i++){const u=(i/20+ph)%1,yy=Y-15-(u>.4&&u<.46?7:u>.46&&u<.52?-5:0);i?c.lineTo(X+6+i,yy):c.moveTo(X+6+i,yy)}c.stroke();break}
+  case'medcab':rect(c,X+2,Y-30,28,58,'#f4f6f8',4);rect(c,X+5,Y-26,22,24,'#cfe8f5',2);
+    for(const[a,b,cc]of[[8,-20,'#e74c3c'],[14,-21,'#3498db'],[20,-19,'#f1c40f'],[9,-10,'#2ecc71'],[17,-11,'#e67e22']])rect(c,X+a,Y+b,4,7,cc,1);
+    c.fillStyle='#bfc6cd';c.fillRect(X+5,Y-13,22,1.5);rect(c,X+11,Y+4,10,10,'#fff',2);rect(c,X+14.5,Y+5,3,8,'#e63946');rect(c,X+12,Y+7.5,8,3,'#e63946');break;
+  case'hdesk':rect(c,X+2,Y-10,60,38,'#e8eef5',4);rect(c,X+2,Y-12,60,8,'#c9d6e3',4);rect(c,X+8,Y+4,48,18,'#d9534f',3);c.fillStyle='#fff';c.fillRect(X+29.5,Y+6,5,14);c.fillRect(X+25,Y+10.5,14,5);
+    rect(c,X+8,Y-20,18,10,'#f5d6a8',2);c.font='9px '+EMOJI_FONT;c.textAlign='center';c.textBaseline='middle';c.fillText('🩹',X+17,Y-15);
+    ell(c,X+50,Y-13,5,3.5,'#e8b830');ell(c,X+50,Y-17,1.6,1.6,'#e8b830');break;
+  case'redcross':rect(c,X+4,Y+10,24,26,'#fff',4);rect(c,X+13,Y+13,6,20,'#e63946',1);rect(c,X+6,Y+20,20,6,'#e63946',1);break;
   case'bed':rect(c,X+2,Y-8,60,16,'#a8743f',6);rect(c,X+2,Y+2,60,60,'#8a5a2c',6);rect(c,X+6,Y+4,52,54,'#fff',5);rect(c,X+12,Y+7,40,12,'#eef0ff',5);
     rect(c,X+6,Y+24,52,34,col,5);rect(c,X+6,Y+24,52,6,shade,3);break;
   case'sofa':rect(c,X+4,Y-14,56,22,col,7);rect(c,X+4,Y-14,56,22,shade,7);rect(c,X+2,Y+2,60,22,col,6);rect(c,X,Y-6,11,30,col,5);rect(c,X+53,Y-6,11,30,col,5);
@@ -2973,7 +3026,7 @@ function drawInside(t){
   const list=[];
   for(const f of H){const F=FURN[f.k];if(!F.wall&&!F.walk)list.push([(f.y+F.h)*T-2,()=>drawFurn(ctx,f,t)])}
   const here=speakers();
-  for(const[vw,q]of here)list.push([q.y,()=>{drawPerson(ctx,q.x,q.y,{shirt:vw.v.shirt,skin:vw.v.skin,hair:vw.v.hair},q.dir,q.walk,null,t);if(vw.v.req&&!vw.talkT)bubble(ctx,q.x,q.y-40,'❗')}]);
+  for(const[vw,q]of here)list.push([q.y,()=>{if(q.bed)drawPatient(ctx,vw,q,t);else drawPerson(ctx,q.x,q.y,{shirt:vw.v.shirt,skin:vw.v.skin,hair:vw.v.hair},q.dir,q.walk,null,t);if(vw.v.req&&!vw.talkT)bubble(ctx,q.x,q.y-(q.bed?70:40),vw.v.req.hurt?'🩹':'❗')}]);
   for(const p of roomPets()){const q=petPos(p);list.push([q.y,()=>{drawPet(ctx,p,q,t);if(hungry(p))bubble(ctx,q.x,q.y-24,ITEMS[PETS[p.k].food].e);else if(petAsleep(p))zzz(ctx,q.x,q.y-24,t)}])}
   list.push([player.y,()=>drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,null,t)]);
   if(friend&&friend.in===roomKey())list.push([friend.y,()=>drawPerson(ctx,friend.x,friend.y,guestMode?PLAYER_LOOK:FRIEND_LOOK,friend.dir,friend.walk,null,t)]);
