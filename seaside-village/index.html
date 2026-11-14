@@ -548,6 +548,7 @@ function arrive(tg){
     case'furn':useFurn(tg.f);break;
     case'pet':if(roomPets().includes(tg.p))usePet(tg.p);break;
     case'host':if(speakers().some(([v])=>v===tg.vw))talk(tg.vw);break;
+    case'staff':if(staff().includes(tg.st))talkStaff(tg.st);break;
   }
 }
 function useObj(o,act){
@@ -2054,6 +2055,8 @@ function drawPersonRaw(c,x,y,look,dir,walk,act,t){
   ell(c,x,hy,8,8,look.skin);
   if(look.hat){ell(c,x,hy-5,12,3.5,'#e8c66a');rect(c,x-6,hy-12,12,8,'#e8c66a',4);rect(c,x-6,hy-7,12,2,look.band)}
   else{c.fillStyle=look.hair;c.beginPath();c.arc(x,hy-1,8.5,Math.PI,0);c.fill();if(dir==='up')ell(c,x,hy,8,7,look.hair)}
+  if(look.doc&&dir!=='up'){c.strokeStyle='#4a4f5a';c.lineWidth=1.4;c.beginPath();c.moveTo(x-4,y-21);c.quadraticCurveTo(x-4,y-13,x+1,y-13);c.moveTo(x+4,y-21);c.lineTo(x+3,y-16);c.stroke();ell(c,x+1.5,y-12.5,2,2,'#9aa2ab')}
+  if(look.cap){rect(c,x-6,hy-13,12,6,'#fff',2);c.fillStyle='#e63946';c.fillRect(x-.8,hy-12.5,1.6,5);c.fillRect(x-2.5,hy-10.8,5,1.6)}
   if(dir!=='up'){c.fillStyle='#2a1a10';const ex=dir==='left'?-3:dir==='right'?3:0;
     if(dir==='down'){c.fillRect(x-3.5,hy,2,2.4);c.fillRect(x+1.5,hy,2,2.4)}else c.fillRect(x+ex,hy,2,2.4);
     ell(c,x-4+ex*.5,hy+3,1.6,1,'rgba(255,120,120,.5)');ell(c,x+4+ex*.5,hy+3,1.6,1,'rgba(255,120,120,.5)')}
@@ -2277,6 +2280,35 @@ function patients(o){
     if(!q||q.o!==o.id){const b=beds[i];q=b?{x:b.x*T+16,y:(b.y+2)*T-2,bed:b,path:[],dir:'down',walk:0,wait:1e9,o:o.id}:{...spotIn(),wait:1e9,o:o.id};patientAt.set(v.name,q)}
     out.push([vw,q]);i++}
   return out;
+}
+// doctors and a nurse work at the hospital
+const STAFF=[{name:'Dr. Hart',role:'doc',look:{shirt:'#f4f6f8',skin:'#e8b48a',hair:'#4a3020',doc:1}},
+  {name:'Dr. Lee',role:'doc',look:{shirt:'#f4f6f8',skin:'#f5d0a9',hair:'#222',doc:1}},
+  {name:'Nurse Penny',role:'nurse',look:{shirt:'#7fc8e8',skin:'#c68a5e',hair:'#2a1a10',cap:1}}];
+let staffIn=null; // where they are in the hospital you're in (this screen only)
+function staff(){
+  if(!inHospital())return[];
+  if(!staffIn||staffIn.o!==visit){staffIn={o:visit,list:STAFF.map((st,i)=>({...st,talkT:0,say:'',chat:3+i*2,
+    q:st.role==='nurse'?{x:8*T,y:4*T-2,path:[],wait:1e9,dir:'down',walk:0}:{x:(2+i*4)*T+16,y:3*T+22,path:[],wait:1+i,dir:'down',walk:0}}))}}
+  return staffIn.list;
+}
+const DOC_LINES=['Eat your veggies and stay healthy! 🥕','Watch out for terror birds out there! 🦤','An apple a day keeps the doctor away! 🍎',
+  'Remember to wash your hands! 🧼','Drink lots of water! 💧','A good night\'s sleep is the best medicine 😴'];
+function staffLine(st){
+  const pts=patients(byId(visit)).map(([vw])=>vw.v.name);
+  if(st.role==='nurse')return pts.length?'Band-aids are 🪙'+BANDAID+' each!':'Welcome to the hospital! 😊';
+  if(pts.length)return Math.random()<.5?`How are you feeling, ${pts[Math.random()*pts.length|0]}?`:`${pts.join(' and ')} just need${pts.length>1?'':'s'} some 🩹 band-aids!`;
+  return Math.random()<.4?'Nobody\'s sick today — hooray! 🎉':DOC_LINES[Math.random()*DOC_LINES.length|0];
+}
+function staffUpdate(dt){
+  for(const st of staff()){st.talkT=Math.max(0,st.talkT-dt);
+    if(st.role==='doc')wanderIn(st.q,T*1.3,dt);
+    if((st.chat-=dt)<=0){st.chat=7+Math.random()*7;st.say=staffLine(st);st.talkT=3}}
+}
+function talkStaff(st){
+  st.q.path=[];st.q.wait=4;st.q.dir='down';
+  if(st.role==='nurse'){st.say='Hello! Need some band-aids? 🩹';st.talkT=2.5;hospitalModal();return}
+  st.say=staffLine(st);st.talkT=3.5;st.chat=8;
 }
 // a villager lying in a hospital bed
 function drawPatient(c,vw,q,t){
@@ -2641,6 +2673,8 @@ function furnPick(wx,wy){
 function tapInside(wx,wy){
   const tx=Math.floor(wx/T),ty=Math.floor(wy/T),pt=tileOf(player),f=furnPick(wx,wy),p=petPick(wx,wy);
   player.steer=null;player.target=null;
+  for(const st of staff())if(Math.abs(wx-st.q.x)<13&&wy<st.q.y+5&&wy>st.q.y-42){const b=tileOf(st.q);st.q.wait=Math.max(st.q.wait,4);st.q.path=[];
+    const r=findPath(pt.x,pt.y,(x,y)=>Math.abs(x-b.x)<=1&&Math.abs(y-b.y)<=1,null,inWalkable);player.path=r?r.path:[];player.target={k:'staff',st};return}
   for(const[vw,q]of speakers())if(Math.abs(wx-q.x)<13&&wy<q.y+5&&wy>q.y-42){const b=tileOf(q);q.wait=Math.max(q.wait,4);q.path=[];q.line=null;
     const r=findPath(pt.x,pt.y,(x,y)=>Math.abs(x-b.x)<=1&&Math.abs(y-b.y)<=1,null,inWalkable);player.path=r?r.path:[];player.target={k:'host',vw};return}
   if(p){const b=tileOf(petPos(p));
@@ -2880,6 +2914,7 @@ function petPos(p){
 const petAsleep=p=>bedtime()&&p.k!=='owl';
 function petsWander(dt){
   if(hostPos)wanderIn(hostPos,T*1.3,dt);
+  staffUpdate(dt);
   if(!visit&&!inCab&&!inCave)visitorsWander(dt);
   for(const p of roomPets()){const q=petPos(p);q.happy=Math.max(0,q.happy-dt);
     if(q.happy>0||petAsleep(p)){q.walk=0;q.path=[];continue}
@@ -3031,9 +3066,13 @@ function drawInside(t){
   const here=speakers();
   for(const[vw,q]of here)list.push([q.y,()=>{if(q.bed)drawPatient(ctx,vw,q,t);else drawPerson(ctx,q.x,q.y,{shirt:vw.v.shirt,skin:vw.v.skin,hair:vw.v.hair},q.dir,q.walk,null,t);if(vw.v.req&&!vw.talkT)bubble(ctx,q.x,q.y-(q.bed?70:40),vw.v.req.hurt?'🩹':'❗')}]);
   for(const p of roomPets()){const q=petPos(p);list.push([q.y,()=>{drawPet(ctx,p,q,t);if(hungry(p))bubble(ctx,q.x,q.y-24,ITEMS[PETS[p.k].food].e);else if(petAsleep(p))zzz(ctx,q.x,q.y-24,t)}])}
+  for(const st of staff())list.push([st.q.y,()=>drawPerson(ctx,st.q.x,st.q.y,st.look,st.q.dir,st.q.walk,null,t)]);
   list.push([player.y,()=>drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,null,t)]);
   if(friend&&friend.in===roomKey())list.push([friend.y,()=>drawPerson(ctx,friend.x,friend.y,guestMode?PLAYER_LOOK:FRIEND_LOOK,friend.dir,friend.walk,null,t)]);
   list.sort((a,b)=>a[0]-b[0]);for(const d of list)d[1]();
+  for(const st of staff())if(st.talkT>0&&st.say){ctx.font='bold 12px system-ui,sans-serif';const w=ctx.measureText(st.say).width+16,q=st.q,x=Math.max(w/2-8,Math.min(RW*T-w/2+8,q.x)),y=q.y;
+    rect(ctx,x-w/2,y-70,w,24,'rgba(255,255,255,.96)',10);poly(ctx,'rgba(255,255,255,.96)',q.x-5,y-46,q.x+5,y-46,q.x,y-40);
+    ctx.fillStyle='#4a3410';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(st.say,x,y-58)}
   for(const[vw,q]of here)if(vw.talkT>0&&vw.say){ctx.font='bold 12px system-ui,sans-serif';const w=ctx.measureText(vw.say).width+16,x=Math.max(w/2-8,Math.min(RW*T-w/2+8,q.x)),y=q.y;
     rect(ctx,x-w/2,y-70,w,24,'rgba(255,255,255,.96)',10);poly(ctx,'rgba(255,255,255,.96)',q.x-5,y-46,q.x+5,y-46,q.x,y-40);
     ctx.fillStyle='#4a3410';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(vw.say,x,y-58)}
