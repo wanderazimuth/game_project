@@ -1374,7 +1374,7 @@ function canPlace(t,x,y){
     if(objAt(k)&&!(t==='track'&&objAt(k).t==='bridge')||feat[k]||chestHere(k)||inShip(X,Y))return'Something is in the way'; // tracks can go on top of a bridge
     if(b.one&&S.objs.some(o=>o.t===t&&o!==ignoreObj))return`You can only have one ${b.n}`;
     if(b.on==='shore'&&curKind==='volcano')return'No fish in lava!';
-    if(b.on==='shore'){if(ter[k]!==WATER||wood[k]||!N4.some(([a,c])=>inMap(X+a,Y+c)&&ter[(Y+c)*W+X+a]!==WATER))return'Docks go in the water, next to the beach'}
+    if(b.on==='shore'){if(ter[k]!==WATER||wood[k]||!N4.some(([a,c])=>inMap(X+a,Y+c)&&(ter[(Y+c)*W+X+a]!==WATER||wood[(Y+c)*W+X+a])))return'Docks go in the water, next to the beach (or some 🪵 wood)'}
     else if(b.on==='water'){if(ter[k]!==WATER||wood[k])return'Bridges go over water'}
     else if(t==='track'||t==='station'){if(ter[k]===ICE)return'Too slippery for the train!'} // tracks go over water on their own little bridge
     else if(ter[k]===WATER&&!wood[k])return'Can\'t build on water — put 🪵 wood down first';
