@@ -138,12 +138,15 @@ const BUILD={
   fountain:{n:'Fountain',cost:400,w:2,h:2,d:'Makes the village sparkle'},
   track:{n:'Train Track',cost:5,w:1,h:1,walk:1,flat:1,paint:1,d:'Drag to lay tracks — they can cross water and bridges too!'},
   station:{n:'Train Station',cost:200,w:2,h:1,tall:30,d:'Put tracks next to it (it can go on water too) — build 2 stations and a train starts running!'},
+  balloon:{n:'Balloon Port',cost:800,w:2,h:2,tall:70,one:1,d:'Fly a hot air balloon over your island — and drop presents on villagers\' houses!'},
   hospital:{n:'Hospital',cost:300,w:2,h:2,d:'Sells 🩹 band-aids for hurt villagers'},
   lighthouse:{n:'Lighthouse',cost:2500,w:2,h:2,tall:80,d:'Shows the whole island — go inside and decorate it!'},
 };
-const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','wood','hut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','hospital','track','station','lighthouse'];
+const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','wood','hut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','hospital','track','station','balloon','lighthouse'];
 let guestMode=false,guestSel='carrot'; // guestMode: you're on a friend's island
 let visit=null,hostPos=null; // visit: the villager house you're in (null: Your House)
+let fly=null; // flying the hot air balloon
+const presented=id=>!!(S.presents&&S.presents.day===S.day&&S.presents.ids.includes(id));
 let inCab=false,inLight=0,inCave=false,caveLv=1; // caveLv: 1 the cave, 2 the deep cave (down through its pool) // inCab: inside the cabin (where a friend who joins your island stays); inLight: the lighthouse you're in
 let inside=false,outPos=null,itool='color',inG=null,inLifted=null,sleepFade=0; // inside: in Your House
 let net=null,friend=null,actor=null; // actor: the friend, while the host does something for them
@@ -398,7 +401,7 @@ drawTerrain();
 // ── Camera, player, villagers ────────────────────────────────────────────────
 let cssW=0,cssH=0,dpr=1,baseZoom=1,userZoom=1;
 const cam={x:S.px,y:S.py};
-const zoom=()=>inside?Math.min(cssW/((RW+1)*T),(cssH-170)/((RH+3)*T)):baseZoom*userZoom;
+const zoom=()=>inside?Math.min(cssW/((RW+1)*T),(cssH-170)/((RH+3)*T)):baseZoom*userZoom*(fly?.6:1);
 function resize(){dpr=Math.min(2,devicePixelRatio||1);cssW=cv.clientWidth;cssH=cv.clientHeight;cv.width=cssW*dpr;cv.height=cssH*dpr;baseZoom=Math.max(1,Math.min(cssW,cssH-150)/(T*11));darkC.width=cv.width;darkC.height=cv.height}
 const darkC=document.createElement('canvas'),darkX=darkC.getContext('2d');
 addEventListener('resize',resize);resize();
@@ -513,6 +516,7 @@ function footprintOf(tg){
   return{x:tg.x??tg.i%W,y:tg.y??(tg.i/W|0),w:1,h:1};
 }
 function goToTarget(tg){
+  if(fly){flyTap(tg);return}
   if(train&&train.rider){toast('🚂 Choo choo! Sit back and enjoy the ride');return}
   player.steer=null;
   const pt=tileOf(player);
@@ -585,6 +589,7 @@ function useObj(o,act){
     case'cabin':enterCabin();break;
     case'house':{const v=villagers.find(v=>v.v.house===o.id);if(v&&isGuest(v.v.name))toast(`🏠 ${v.v.name} isn't home — they're visiting ${guestOf(v.v.name).to?placeOf(guestOf(v.v.name).to).toLowerCase():'your house'}!`);else if(v&&v.inHosp)toast(`🏥 ${v.v.name} isn't home — they're at the hospital! Bring them 🩹 band-aids`,2800);else if(v&&v.asleep)toast(`💤 Shh… ${v.v.name} is fast asleep. Come back in the morning!`,2800);else if(v)enterHouse(o.id);else toast('🏠 An empty house — nobody lives here yet');break}
     case'hospital':enterHouse(o.id);break;
+    case'balloon':balloonModal();break;
     case'station':stationModal(o);break;
     case'well':toast('💧 Crops within 3 steps of the well grow 2× faster');break;
     case'market':toast('🧺 The market makes everything sell for 20% more — tap 💼 Work to work here!',2800);break;
@@ -817,7 +822,7 @@ function critterUpdate(dt){
     if(cr.kind==='ghost'){ghostFloat(cr,dt);continue}
     if(cr.happy>0){cr.walk=0;continue}
     const dx=player.x-cr.x,dy=player.y-cr.y,d=Math.hypot(dx,dy);let vx,vy,sp;
-    if(HUNT[cr.kind]&&!cr.calm&&!player.stun&&!player.slide&&!(train&&train.rider)&&(cr.chase>0||d<T*HUNT[cr.kind].see)){ // RUN! It's a terror bird (or a polar bear)!
+    if(HUNT[cr.kind]&&!cr.calm&&!fly&&!player.stun&&!player.slide&&!(train&&train.rider)&&(cr.chase>0||d<T*HUNT[cr.kind].see)){ // RUN! It's a terror bird (or a polar bear)!
       const Hk=HUNT[cr.kind];
       if(!cr.chase){cr.chase=.01;floatAt(cr.x,cr.y-50,Hk.cry);toast(`${Hk.e} A ${Hk.name} spotted you — RUN!`,2200)}
       cr.chase+=dt;if(d>T*10||cr.chase>6){cr.chase=0;cr.calm=5;continue} // it gives up
@@ -859,6 +864,54 @@ function hospitalModal(){
   h+=`<p>${hurt.length?`🤕 <b>${hurt.join(', ')}</b> ${hurt.length>1?'need':'needs'} band-aids.`:'Nobody is hurt right now. 😊'} You have <b>${have}</b> 🩹.</p>`;
   h+=`<div class="btns"><button class="btn" data-a="buy" data-v="1" ${S.coins<BANDAID?'disabled':''}>Buy 1 🩹 — 🪙${BANDAID}</button><button class="btn" data-a="buy" data-v="3" ${S.coins<BANDAID*3?'disabled':''}>Buy 3 🩹 — 🪙${BANDAID*3}</button><button class="btn gray" data-a="list">📋 Patients</button><button class="btn gray" data-a="close">Bye!</button></div>`;
   openModal(h,{list:patientsModal,buy:n=>{doAct('buyBandaid',{n:+n});setTimeout(hospitalModal,guestMode?300:0)}});
+}
+// ── The hot air balloon: fly over the island and drop presents on villagers' houses ──
+function balloonModal(){
+  if(inside)return;
+  const left=S.villagers.filter(v=>!presented(v.house)&&byId(v.house)).length;
+  openModal(`<h2>🎈 Balloon Port</h2><p>Up, up and away! Fly over your island and see it all from the sky.</p><p>Tap where to go. Tap a villager's 🏠 house to drop a 🎁 present — they'll thank you with coins! ${S.villagers.length?`(<b>${left}</b> presents left today)`:''}</p>
+    <div class="btns"><button class="btn" data-a="go">🎈 Take off!</button><button class="btn gray" data-a="close">Not now</button></div>`,{go:()=>{closeModal();takeOff()}});
+}
+function takeOff(){const B=S.objs.find(o=>o.t==='balloon');if(!B)return;
+  player.path=[];player.target=null;player.steer=null;player.act=null;
+  fly={x:(B.x+1)*T,y:(B.y+1)*T+16,alt:0,tx:null,ty:null,drop:null,gifts:[],port:B.id,landing:0};refreshTray();toast('🎈 Up, up and away! Tap anywhere to fly there',2800)}
+function flyTap(tg){
+  if(fly.landing)return;
+  if(tg.k==='obj'&&tg.o.t==='house'){fly.tx=(tg.o.x+1)*T;fly.ty=(tg.o.y+1)*T+16;fly.drop=tg.o.id;return}
+  const f=footprintOf(tg);fly.tx=(f.x+f.w/2)*T;fly.ty=(f.y+f.h/2)*T+16;fly.drop=null;
+}
+function flyUpdate(dt){
+  const F=fly,B=byId(F.port);if(!B){fly=null;refreshTray();return}
+  F.alt=Math.min(F.landing?F.alt:80,F.alt+dt*45);
+  for(const g of F.gifts){g.t+=dt}F.gifts=F.gifts.filter(g=>g.t<1.4);
+  let vx=0,vy=0;
+  if(keys.has('arrowleft')||keys.has('a'))vx--;if(keys.has('arrowright')||keys.has('d'))vx++;if(keys.has('arrowup')||keys.has('w'))vy--;if(keys.has('arrowdown')||keys.has('s'))vy++;
+  if(player.steer&&!vx&&!vy){const dx=player.steer.x-F.x,dy=player.steer.y+60-F.y;if(Math.hypot(dx,dy)>8){vx=dx;vy=dy}}
+  if(vx||vy){F.tx=null;F.drop=null;F.landing=0}
+  if(F.landing){F.tx=(B.x+1)*T;F.ty=(B.y+1)*T+16}
+  if(!vx&&!vy&&F.tx!=null){vx=F.tx-F.x;vy=F.ty-F.y;if(Math.hypot(vx,vy)<4){vx=vy=0;F.tx=null;
+    if(F.drop){const id=F.drop;F.drop=null;if(presented(id))toast('🎁 You already dropped a present there today');else{F.gifts.push({x:F.x,y:F.y-F.alt+10,to:F.y-10,t:0});setTimeout(()=>doAct('present',{id}),900)}}}}
+  if(F.landing&&F.tx==null){F.alt=Math.max(0,F.alt-dt*60);if(F.alt<=0){fly=null;player.x=(B.x+1)*T;player.y=(B.y+2)*T+22;unstick(player);cam.x=player.x;cam.y=player.y;lastTile=-1;refreshTray();toast('🎈 What a lovely flight!')}return}
+  if(vx||vy){const l=Math.hypot(vx,vy),sp=T*4;F.x=Math.max(T,Math.min((W-1)*T,F.x+vx/l*sp*dt));F.y=Math.max(T*2,Math.min((H-1)*T,F.y+vy/l*sp*dt))}
+  const tx=Math.floor(F.x/T),ty=Math.floor(F.y/T);if(tx*1000+ty!==F.tile){F.tile=tx*1000+ty;reveal(tx,ty,7)}
+}
+// a striped balloon with a basket (and you in it)
+function drawBalloonAt(c,x,y,look,t,s=1){
+  c.save();c.translate(x,y);c.scale(s,s);
+  const cols=['#e74c3c','#ffd23f','#3498db','#2ecc71','#9b59b6','#ff8fb8'];
+  c.save();c.beginPath();c.ellipse(0,-60,30,34,0,0,Math.PI*2);c.moveTo(-24,-42);c.lineTo(-9,-20);c.lineTo(9,-20);c.lineTo(24,-42);c.closePath();c.clip();
+  for(let k=0;k<7;k++){c.fillStyle=cols[k%6];c.fillRect(-35+k*10,-100,10,82)}c.restore();
+  rect(c,-9,-22,18,4,'#8a5a2c',2);
+  c.fillStyle='rgba(255,255,255,.18)';c.beginPath();c.ellipse(-12,-66,6,16,-.3,0,Math.PI*2);c.fill();
+  c.strokeStyle='#6b4a2a';c.lineWidth=1.2;for(const sx of[-7,7]){c.beginPath();c.moveTo(sx*1.4,-18);c.lineTo(sx,0);c.stroke()}
+  if(look){ell(c,0,-6,5.5,5.5,look.skin);ell(c,0,-11,8,2.5,'#e8c66a');rect(c,-4.5,-16,9,6,'#e8c66a',3)}
+  rect(c,-9,-2,18,12,'#a8743f',3);c.fillStyle='rgba(0,0,0,.2)';for(let k=0;k<3;k++)c.fillRect(-9,1+k*3.5,18,1);
+  c.restore();
+}
+function drawBalloon(c,t){
+  const F=fly,sh=Math.max(.3,1-F.alt/160);ell(c,F.x,F.y,16*sh+6,6*sh+2,`rgba(0,0,0,${.12+.1*sh})`);
+  for(const g of F.gifts){const p=Math.min(1,g.t/.9),gy=g.y+(g.to-g.y)*p*p;if(g.t<.9){c.font='16px '+EMOJI_FONT;c.textAlign='center';c.fillText('🎁',g.x,gy)}else{c.font='bold 14px system-ui';c.fillStyle='#fff';c.fillText('🎉',g.x,g.to-(g.t-.9)*30)}}
+  drawBalloonAt(c,F.x,F.y-F.alt+Math.sin(t*1.5)*3,guestMode?FRIEND_LOOK:PLAYER_LOOK,t);
 }
 // the fish smoker (fishing huts only): smoked fish sell for 30% more
 function smokerModal(){
@@ -1493,6 +1546,8 @@ const ACT={
     S.inv[r.k]-=r.n;if(!S.inv[r.k])delete S.inv[r.k];S.coins+=r.reward;S.stats.helped++;tally('help');v.req=null;if(r.hurt)v.hurt=0;dirty();refreshTray();
     const vw=villagers.find(w=>w.v===v);if(vw)floatAt(vw.x,vw.y-44,`+🪙${r.reward}`);toast(r.hurt?`🩹 ${v.name}: “All better! Thank you so much!”`:`💛 ${v.name}: “Thank you so much!”`)},
   smoke(){const n=S.inv.fish||0;if(!n)return;delete S.inv.fish;give('smokedfish',n);tally('smoke');dirty();refreshTray()},
+  present({id}){const o=byId(id);if(!o||o.t!=='house'||presented(id))return;const p=S.presents&&S.presents.day===S.day?S.presents:(S.presents={day:S.day,ids:[]});p.ids.push(id);
+    const v=S.villagers.find(v=>v.house===id);S.coins+=15;tally('present');dirty();refreshTray();toast(`🎁 ${v?v.name:'Someone'} loved the present! They tossed up 🪙15 to say thank you`,2800)},
   buyBandaid({n}){n=Math.max(1,Math.min(10,n|0));if(!count('hospital')||S.coins<BANDAID*n)return;S.coins-=BANDAID*n;give('bandaid',n);dirty();refreshTray()},
   place({t,x,y}){if(BUILD[t])doPlace(t,x,y)},
   steal({k,n,coins}){if(coins){S.coins-=Math.min(coins,S.coins)}else if(S.inv[k]){S.inv[k]-=Math.min(n,S.inv[k]);if(!S.inv[k])delete S.inv[k];refreshTray()}dirty()},
@@ -1579,6 +1634,8 @@ function refreshTray(){
   tray.innerHTML='';
   const chip=(html,on,poor,fn)=>{const d=document.createElement('button');d.className='cat'+(on?' on':'')+(poor?' poor':'');d.innerHTML=html;d.onclick=fn;tray.appendChild(d);return d};
   if(inside){inTray(chip);return}
+  if(mode==='play'&&fly){chip('<span class="e">🛬</span>Land',false,false,()=>{fly.landing=1;toast('🎈 Heading back to the balloon port…')});
+    const left=S.villagers.filter(v=>!presented(v.house)&&byId(v.house)).length;chip(`<span class="e">🎁</span>Presents<span class="p">${left?left+' to drop':'all done!'}</span>`,false,true,()=>{});return}
   if(mode==='play'){
     chip(`<span class="e">🎒</span>Bag<span class="p">${invTotal()} things</span>`,false,false,bagModal);
     {const n=S.villagers.filter(v=>v.hurt).length;if(n||count('hospital'))chip(`<span class="e">📋</span>Patients<span class="p">${n?n+' hurt':'nobody'}</span>`,false,false,patientsModal)}
@@ -1598,6 +1655,7 @@ function refreshTray(){
 }
 let lastCoins=-1;
 function setMode(m){
+  if(fly&&m==='build'){toast('🎈 Land the balloon first!');return}
   mode=m;ghost=null;lifted=null;inG=null;inLifted=null;modeBtn.textContent=m==='play'?(inside?'🎨 Decorate':'🔨 Build'):'▶ Play';
   if(m==='build'){tool=BUILD[tool]?'hand':tool;player.path=[];player.target=null;player.steer=null}
   document.getElementById('zoom').style.display=inside?'none':'';modeBtn.style.display=inside&&(visit||inCave||inCab&&!canDecorate())?'none':'';
@@ -1698,7 +1756,8 @@ function update(dt){
   // Player
   if(curKind==='volcano'&&!inside)volcanoUpdate(dt);
   if(critters.length&&!inside)critterUpdate(dt);
-  if(train&&train.rider){player.x=train.x;player.y=train.y;player.path=[];player.target=null;player.steer=null;player.walk=0}
+  if(fly){flyUpdate(dt);player.path=[];player.walk=0}
+  else if(train&&train.rider){player.x=train.x;player.y=train.y;player.path=[];player.target=null;player.steer=null;player.walk=0}
   else if(player.act){if(tNow>=player.act.end){const f=player.act.fn;player.act=null;f()}}
   else if(player.stun>0){player.stun-=dt;player.walk=0}
   else if(player.slide)slideStep(dt);
@@ -1770,6 +1829,7 @@ function update(dt){
   for(const p of confetti){p.t+=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=300*dt}confetti=confetti.filter(p=>p.t<2.5);
   // Camera
   if(inside){cam.x=RW*T/2;cam.y=(RH-2)*T/2+31/zoom()}
+  else if(fly){cam.x+=(fly.x-cam.x)*Math.min(1,dt*4);cam.y+=(fly.y-60-cam.y)*Math.min(1,dt*4)}
   else if(mode==='play'){cam.x+=(player.x-cam.x)*Math.min(1,dt*6);cam.y+=(player.y-12-cam.y)*Math.min(1,dt*6)}
   else{const ps=T*12*dt;
     if(keys.has('arrowleft')||keys.has('a'))cam.x-=ps;if(keys.has('arrowright')||keys.has('d'))cam.x+=ps;
@@ -1949,6 +2009,9 @@ function drawObjIn(c,o,t,icon){
   case'pigpen':ell(c,X+32,Y+50,27,11,'#8b6b4a');ell(c,X+30,Y+49,15,5,'#7a5a3a');rect(c,X+8,Y+14,30,26,'#d98c6a',3);
     poly(c,'#a0522d',X+4,Y+18,X+23,Y+2,X+42,Y+18);rect(c,X+18,Y+26,10,14,'#5a2e15',5);rect(c,X+44,Y+28,16,8,'#8a5a2c',2);rect(c,X+46,Y+28,12,3,'#e9c46a',1);
     for(const px of[X+2,X+60])rect(c,px,Y+38,3,16,'#b98549',1);break;
+  case'balloon':{ell(c,X+32,Y+50,28,10,'rgba(0,0,0,.15)');ell(c,X+32,Y+46,27,11,'#c9a66b');ell(c,X+32,Y+44,22,8,'#e0c48a');
+    c.strokeStyle='#a8844a';c.lineWidth=1;for(let k=0;k<5;k++){c.beginPath();c.ellipse(X+32,Y+44,22-k*4,8-k*1.5,0,0,Math.PI*2);c.stroke()}
+    if(icon||!fly){const bob=icon?0:Math.sin(t*1.5)*2;drawBalloonAt(c,X+32,Y+30+bob,null,t,.8)}break}
   case'hospital':{const win=night>.2?'#ffe27a':'#9fd8ff';rect(c,X+4,Y+20,56,42,'#fbfbff',3);rect(c,X+4,Y+56,56,6,'rgba(0,0,0,.08)');rect(c,X+1,Y+14,62,8,'#d9534f',2);
     for(const wx of[X+9,X+45]){rect(c,wx,Y+28,10,10,win,2);c.fillStyle='#fff';c.fillRect(wx+4.5,Y+28,1,10)}
     rect(c,X+24,Y+40,16,22,'#bfe6ff',2);c.fillStyle='#fff';c.fillRect(X+31.5,Y+40,1,22);
@@ -2240,7 +2303,7 @@ function draw(t){
   for(const a of animals)list.push([a.y,()=>{drawAnimal(ctx,a,t);if(a.zz)zzz(ctx,a.x,a.y-(a.kind==='cow'?34:24),t)}]);
   for(const cr of critters)if(!cr.hide&&!cr.gone)list.push([cr.y+(cr.kind==='parrot'?40:0),()=>drawCritter(ctx,cr,t)]);
   for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried)list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-40,v.v.req.hurt?'🩹':'❗')}]);
-  if(!(train&&train.rider))list.push([player.y,()=>drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t)]);
+  if(!(train&&train.rider)&&!fly)list.push([player.y,()=>drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t)]);
   if(friend&&!friend.in)list.push([friend.y,()=>drawPerson(ctx,friend.x,friend.y,guestMode?PLAYER_LOOK:FRIEND_LOOK,friend.dir,friend.walk,friend.act,t)]);
   list.sort((a,b)=>a[0]-b[0]);for(const d of list)d[1]();
   // Where you're walking to
@@ -2271,13 +2334,14 @@ function draw(t){
     const light=(wx,wy,r)=>{const sx=(cssW/2+(wx-cam.x)*z)*dpr,sy=(cssH/2+(wy-cam.y)*z)*dpr,R=r*z*dpr;
       if(sx<-R||sy<-R||sx>darkC.width+R||sy>darkC.height+R)return;
       const g=darkX.createRadialGradient(sx,sy,0,sx,sy,R);g.addColorStop(0,'rgba(0,0,0,1)');g.addColorStop(1,'rgba(0,0,0,0)');darkX.fillStyle=g;darkX.fillRect(sx-R,sy-R,R*2,R*2)};
-    light(player.x,player.y-14,70);if(VOLCANO)light((VOLCANO.x+.5)*T,(VOLCANO.y-2.5)*T,150);if(friend&&!friend.in)light(friend.x,friend.y-14,70);
+    light(player.x,player.y-14,70);if(fly)light(fly.x,fly.y-70,120);if(VOLCANO)light((VOLCANO.x+.5)*T,(VOLCANO.y-2.5)*T,150);if(friend&&!friend.in)light(friend.x,friend.y-14,70);
     for(const o of S.objs){if(o.t==='lamp')light(o.x*T+16,o.y*T-12,110);else if(o.t==='house'||o.t==='cabin'||o.t==='hut')light(o.x*T+32,o.y*T+42,55);else if(o.t==='myhouse')light(o.x*T+48,o.y*T+40,70);else if(o.t==='campfire')light(o.x*T+16,o.y*T+16,95);else if(o.t==='lighthouse')light(o.x*T+32,o.y*T-58,130)}
     darkX.globalCompositeOperation='source-over';
     ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(darkC,0,0);
     ctx.setTransform(s,0,0,s,(cssW/2-cam.x*z)*dpr,(cssH/2-cam.y*z)*dpr);
     for(const o of S.objs)if(o.t==='lighthouse'){const lx=o.x*T+32,ly=o.y*T-59,a=t*.9;ctx.fillStyle=`rgba(255,240,160,${.22*n})`;ctx.beginPath();ctx.moveTo(lx,ly);ctx.arc(lx,ly,520,a-.12,a+.12);ctx.closePath();ctx.fill()}
   }
+  if(fly)drawBalloon(ctx,t);
   // Floating "+1" text and confetti
   ctx.textAlign='center';ctx.textBaseline='middle';
   for(const f of floats){ctx.globalAlpha=Math.min(1,(1.6-f.t)*2);ctx.font='bold 15px system-ui,sans-serif';ctx.lineWidth=3;ctx.strokeStyle='rgba(60,30,0,.7)';
