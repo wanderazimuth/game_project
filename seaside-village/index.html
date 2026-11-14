@@ -2787,11 +2787,13 @@ function petPos(p){
     q={x:x*T+16,y:y*T+22,path:[],wait:Math.random()*2,dir:'down',walk:0,happy:0};petAt.set(p.id,q)}
   return q;
 }
+// pets sleep at night too (owls are night birds, so they stay up)
+const petAsleep=p=>bedtime()&&p.k!=='owl';
 function petsWander(dt){
   if(hostPos)wanderIn(hostPos,T*1.3,dt);
   if(!visit&&!inCab&&!inCave)visitorsWander(dt);
   for(const p of roomPets()){const q=petPos(p);q.happy=Math.max(0,q.happy-dt);
-    if(q.happy>0){q.walk=0;continue}
+    if(q.happy>0||petAsleep(p)){q.walk=0;q.path=[];continue}
     wanderIn(q,T*PETS[p.k].speed,dt);
   }
 }
@@ -2812,6 +2814,7 @@ function autoFeed(){
 }
 function petPick(wx,wy){for(const p of roomPets()){const q=petPos(p);if(Math.abs(wx-q.x)<14&&wy>q.y-26&&wy<q.y+6)return p}return null}
 function usePet(p){
+  if(petAsleep(p)&&!(hungry(p)&&!p.visit)){toast(`💤 Shh… ${p.name} is fast asleep`);return}
   const q=petPos(p);facePoint(q.x,q.y);q.path=[];q.happy=1.2;q.dir=player.x<q.x?'left':'right';
   if(!p.visit&&hungry(p)){doAct('petFeed',{id:p.id});return}
   for(let k=0;k<3;k++)setTimeout(()=>floats.push({x:q.x+(k-1)*10,y:q.y-26,txt:'❤️',t:0}),k*150);
@@ -2938,7 +2941,7 @@ function drawInside(t){
   for(const f of H){const F=FURN[f.k];if(!F.wall&&!F.walk)list.push([(f.y+F.h)*T-2,()=>drawFurn(ctx,f,t)])}
   const here=speakers();
   for(const[vw,q]of here)list.push([q.y,()=>{drawPerson(ctx,q.x,q.y,{shirt:vw.v.shirt,skin:vw.v.skin,hair:vw.v.hair},q.dir,q.walk,null,t);if(vw.v.req&&!vw.talkT)bubble(ctx,q.x,q.y-40,'❗')}]);
-  for(const p of roomPets()){const q=petPos(p);list.push([q.y,()=>{drawPet(ctx,p,q,t);if(hungry(p))bubble(ctx,q.x,q.y-24,ITEMS[PETS[p.k].food].e)}])}
+  for(const p of roomPets()){const q=petPos(p);list.push([q.y,()=>{drawPet(ctx,p,q,t);if(hungry(p))bubble(ctx,q.x,q.y-24,ITEMS[PETS[p.k].food].e);else if(petAsleep(p))zzz(ctx,q.x,q.y-24,t)}])}
   list.push([player.y,()=>drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,null,t)]);
   if(friend&&friend.in===roomKey())list.push([friend.y,()=>drawPerson(ctx,friend.x,friend.y,guestMode?PLAYER_LOOK:FRIEND_LOOK,friend.dir,friend.walk,null,t)]);
   list.sort((a,b)=>a[0]-b[0]);for(const d of list)d[1]();
