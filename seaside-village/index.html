@@ -98,7 +98,9 @@ const ITEMS={...CROPS,
   fish:{n:'Fish',e:'🐟',sell:30},smokedfish:{n:'Smoked Fish',e:'🍢',sell:39},wood:{n:'Wood',e:'🪵',sell:3},moss:{n:'Moss',e:'🌿',sell:3},stone:{n:'Stone',e:'🪨',sell:4},
   gem:{n:'Gem',e:'💎',sell:50},shell:{n:'Seashell',e:'🐚',sell:8},mushroom:{n:'Mushroom',e:'🍄',sell:12},
   flower:{n:'Wildflower',e:'🌼',sell:5},coconut:{n:'Coconut',e:'🥥',sell:15},pearl:{n:'Pearl',e:'🦪',sell:60},mappiece:{n:'Map Piece',e:'🗺️',sell:0,keep:1},
-  apple:{n:'Apple',e:'🍎',sell:10},acorn:{n:'Acorn',e:'🌰',sell:5},candy:{n:'Spooky Candy',e:'🍬',sell:20},ribbon:{n:'Festival Ribbon',e:'🎀',sell:100},cottoncandy:{n:'Cotton Candy',e:'🍭',sell:10},bandaid:{n:'Band-aid',e:'🩹',sell:5},feather:{n:'Moa Feather',e:'🪶',sell:30},
+  apple:{n:'Apple',e:'🍎',sell:10},acorn:{n:'Acorn',e:'🌰',sell:5},candy:{n:'Spooky Candy',e:'🍬',sell:20},
+  soup:{n:'Veggie Soup',e:'🥣',sell:50,dish:1},salad:{n:'Garden Salad',e:'🥗',sell:150,dish:1},pie:{n:'Pumpkin Pie',e:'🥧',sell:340,dish:1},breakfast:{n:'Big Breakfast',e:'🍳',sell:200,dish:1},
+  pizza:{n:'Pizza',e:'🍕',sell:430,dish:1},friedfish:{n:'Fried Fish',e:'🍤',sell:110,dish:1},honeycake:{n:'Honey Cake',e:'🍰',sell:0,dish:1},stew:{n:'Mushroom Stew',e:'🍲',sell:145,dish:1},smoothie:{n:'Tropical Smoothie',e:'🍹',sell:130,dish:1},ribbon:{n:'Festival Ribbon',e:'🎀',sell:100},cottoncandy:{n:'Cotton Candy',e:'🍭',sell:10},bandaid:{n:'Band-aid',e:'🩹',sell:5},feather:{n:'Moa Feather',e:'🪶',sell:30},
   fossil:{n:'Fossil',e:'🦴',sell:40},amber:{n:'Amber',e:'🟠',sell:80}};
 
 // ── Things you can build. on: where it goes; walk: you can walk over it; tall: px drawn above it ──
@@ -139,10 +141,11 @@ const BUILD={
   track:{n:'Train Track',cost:5,w:1,h:1,walk:1,flat:1,paint:1,d:'Drag to lay tracks — they can cross water and bridges too!'},
   station:{n:'Train Station',cost:200,w:2,h:1,tall:30,d:'Put tracks next to it (it can go on water too) — build 2 stations and a train starts running!'},
   balloon:{n:'Balloon Port',cost:800,w:2,h:2,tall:70,one:1,d:'Fly a hot air balloon over your island — and drop presents on villagers\' houses!'},
+  kitchen:{n:'Kitchen',cost:500,w:2,h:2,d:'Cook yummy dishes from your crops — villagers pay extra for them!'},
   hospital:{n:'Hospital',cost:300,w:2,h:2,d:'Sells 🩹 band-aids for hurt villagers'},
   lighthouse:{n:'Lighthouse',cost:2500,w:2,h:2,tall:80,d:'Shows the whole island — go inside and decorate it!'},
 };
-const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','wood','hut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','hospital','track','station','balloon','lighthouse'];
+const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','wood','hut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','kitchen','hospital','track','station','balloon','lighthouse'];
 let guestMode=false,guestSel='carrot'; // guestMode: you're on a friend's island
 let visit=null,hostPos=null; // visit: the villager house you're in (null: Your House)
 let fly=null; // flying the hot air balloon
@@ -577,6 +580,7 @@ function useObj(o,act){
     case'bin':binModal(o);break;
     case'coop':case'barn':case'hive':case'pond':case'pigpen':case'greenhouse':doAct('collect',{id:o.id});break;
     case'bakery':case'creamery':doAct('make',{id:o.id});break;
+    case'kitchen':kitchenModal();break;
     case'campfire':toast('🔥 Toasty warm!');break;
     case'picnic':toast('🧺 What a nice spot for lunch');break;
     case'statue':toast('🗿 The great captain of Seaside Village!');break;
@@ -914,6 +918,21 @@ function drawBalloon(c,t){
   const F=fly,sh=Math.max(.3,1-F.alt/160);ell(c,F.x,F.y,16*sh+6,6*sh+2,`rgba(0,0,0,${.12+.1*sh})`);
   for(const g of F.gifts){const p=Math.min(1,g.t/.9),gy=g.y+(g.to-g.y)*p*p;if(g.t<.9){c.font='16px '+EMOJI_FONT;c.textAlign='center';c.fillText('🎁',g.x,gy)}else{c.font='bold 14px system-ui';c.fillStyle='#fff';c.fillText('🎉',g.x,g.to-(g.t-.9)*30)}}
   drawBalloonAt(c,F.x,F.y-F.alt+Math.sin(t*1.5)*3,guestMode?FRIEND_LOOK:PLAYER_LOOK,t);
+}
+// ── The kitchen: cook dishes from your crops (they sell for more than what goes in them) ──
+const RECIPES2={soup:{need:{carrot:3,tomato:1}},salad:{need:{tomato:1,carrot:2,corn:1}},pie:{need:{pumpkin:1,wheat:2,egg:1}},breakfast:{need:{egg:2,bread:1,milk:1}},
+  pizza:{need:{bread:1,tomato:2,cheese:1}},friedfish:{need:{fish:2,wheat:1}},honeycake:{need:{honey:1,wheat:2,egg:1}},stew:{need:{mushroom:3,milk:1}},smoothie:{need:{strawberry:1,banana:2,coconut:1}}};
+for(const k in RECIPES2){const R=RECIPES2[k];let v=0;for(const it in R.need)v+=ITEMS[it].sell*R.need[it];ITEMS[k].sell=Math.round(v*1.5/5)*5} // a dish is worth 1.5× what goes in it
+const canCook=k=>Object.entries(RECIPES2[k].need).every(([it,n])=>(S.inv[it]||0)>=n);
+function kitchenModal(){
+  let h='<h2>🍳 Kitchen</h2><p>Cook something yummy! Dishes sell for more than their ingredients — and villagers love them.</p>';
+  for(const k in RECIPES2){const R=RECIPES2[k],I=ITEMS[k],ok=canCook(k);
+    const ing=Object.entries(R.need).map(([it,n])=>`<span style="opacity:${(S.inv[it]||0)>=n?1:.45}">${n}${ITEMS[it].e}</span>`).join(' ');
+    h+=`<div class="irow"><span class="ie">${I.e}</span><span class="in">${I.n} <span class="ip">🪙${priceOf(k)}</span><br><span class="ip">${ing}</span></span><button class="btn" data-a="cook" data-v="${k}" ${ok?'':'disabled'}>Cook</button></div>`}
+  h+='<div class="btns"><button class="btn gray" data-a="close">Done</button></div>';
+  openModal(h,{cook:k=>{if(!canCook(k))return;closeModal();const o=S.objs.find(o=>o.t==='kitchen');
+    for(let i=0;i<5;i++)setTimeout(()=>floats.push({x:o?(o.x+1)*T:player.x,y:o?o.y*T:player.y-40,txt:['💨','🔥','✨'][i%3],t:0}),i*160);
+    player.act={end:now()+1300,kind:'pick',fn:()=>{doAct('cook',{k});toast(`🍳 You cooked ${ITEMS[k].e} ${ITEMS[k].n}! Yum!`,2400);setTimeout(kitchenModal,guestMode?400:150)}}}});
 }
 // the fish smoker (fishing huts only): smoked fish sell for 30% more
 function smokerModal(){
@@ -1282,6 +1301,7 @@ function enterIsland(ns){
 function makeRequest(){
   const pool=Object.keys(CROPS).filter(k=>!CROPS[k].rare||S.found.includes(k));
   if(count('coop'))pool.push('egg');if(count('barn'))pool.push('milk');if(count('hive'))pool.push('honey');if(count('dock')||count('pond'))pool.push('fish');if(count('pigpen'))pool.push('truffle');if(count('bakery'))pool.push('bread');
+  if(count('kitchen')&&Math.random()<.4){const ds=Object.keys(RECIPES2),k=ds[Math.random()*ds.length|0];return{k,n:1,reward:Math.round(ITEMS[k].sell*2+20)}} // a dish: worth twice its price
   const k=pool[Math.random()*pool.length|0],n=Math.max(1,Math.min(8,Math.round(70/ITEMS[k].sell)));
   return{k,n,reward:Math.round(ITEMS[k].sell*n*1.6+15)};
 }
@@ -1547,6 +1567,7 @@ const ACT={
     if((S.inv[r.k]||0)<r.n){toast(`You need ${r.n} ${ITEMS[r.k].e}`);return}
     S.inv[r.k]-=r.n;if(!S.inv[r.k])delete S.inv[r.k];S.coins+=r.reward;S.stats.helped++;tally('help');v.req=null;if(r.hurt)v.hurt=0;dirty();refreshTray();
     const vw=villagers.find(w=>w.v===v);if(vw)floatAt(vw.x,vw.y-44,`+🪙${r.reward}`);toast(r.hurt?`🩹 ${v.name}: “All better! Thank you so much!”`:`💛 ${v.name}: “Thank you so much!”`)},
+  cook({k}){const R=RECIPES2[k];if(!R||!count('kitchen')||!canCook(k))return;for(const it in R.need){S.inv[it]-=R.need[it];if(!S.inv[it])delete S.inv[it]}give(k,1);tally('cook');dirty();refreshTray()},
   smoke(){const n=S.inv.fish||0;if(!n)return;delete S.inv.fish;give('smokedfish',n);tally('smoke');dirty();refreshTray()},
   present({id}){const o=byId(id);if(!o||o.t!=='house'||presented(id))return;const p=S.presents&&S.presents.day===S.day?S.presents:(S.presents={day:S.day,ids:[]});p.ids.push(id);
     const v=S.villagers.find(v=>v.house===id);S.coins+=15;tally('present');dirty();refreshTray();toast(`🎁 ${v?v.name:'Someone'} loved the present! They tossed up 🪙15 to say thank you`,2800)},
@@ -1625,7 +1646,7 @@ function pickTool(t){tool=t;lifted=null;ghost=null;refreshTray()}
 const tray=document.getElementById('tray'),modeBtn=document.getElementById('modeBtn');
 function iconFor(t){
   const b=BUILD[t],c=document.createElement('canvas');c.width=112;c.height=88;const x=c.getContext('2d');
-  const tall=t==='lighthouse'?80:['house','cabin','coop','barn','fountain','pond','pigpen','bakery','creamery','playground','hospital'].includes(t)?0:b.tall||0,dock=t==='dock';
+  const tall=t==='lighthouse'?80:['house','cabin','coop','barn','fountain','pond','pigpen','bakery','creamery','playground','hospital','kitchen'].includes(t)?0:b.tall||0,dock=t==='dock';
   const s=Math.min(112/(b.w*T),88/(b.h*T+tall))*.9;
   x.translate(56-b.w*T*s/2,44-(b.h*T+tall)*s/2+tall*s);x.scale(s,s);
   if(dock){x.fillStyle='#4fb3e0';x.fillRect(-4,-4,T+8,T+8)}
@@ -2018,6 +2039,7 @@ function drawObjIn(c,o,t,icon){
     for(const wx of[X+9,X+45]){rect(c,wx,Y+28,10,10,win,2);c.fillStyle='#fff';c.fillRect(wx+4.5,Y+28,1,10)}
     rect(c,X+24,Y+40,16,22,'#bfe6ff',2);c.fillStyle='#fff';c.fillRect(X+31.5,Y+40,1,22);
     rect(c,X+21,Y-4,22,20,'#fff',4);rect(c,X+29,Y-1,6,14,'#e63946',1);rect(c,X+25,Y+3,14,6,'#e63946',1);break}
+  case'kitchen':shop(c,X,Y,'#fff6ea','#2e8b57','#e8a33a','🍳',icon,t);ell(c,X+20,Y+50,7,3,'#3a3f4a');rect(c,X+13,Y+44,14,6,'#5a5f6a',2);break;
   case'bakery':shop(c,X,Y,'#fbe7c6','#b5651d','#e74c3c','🥖',icon,t);
     for(let k=0;k<3;k++)ell(c,X+14+k*5,Y+49,3,2,'#d99a4e');break;
   case'creamery':shop(c,X,Y,'#eaf4ff','#3d7fc4','#3d7fc4','🧀',icon,t);
