@@ -1,0 +1,28 @@
+[Unit]
+Description=Game Arcade Web Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=arcade
+Group=arcade
+Environment=ARCADE_PORT=8082
+Environment=ARCADE_DATA=/var/lib/arcade
+ExecStart=/usr/bin/python3 /opt/arcade/game-server/server.py
+Restart=on-failure
+RestartSec=3
+
+# The code is read-only; scores and houses go in /var/lib/arcade.
+StateDirectory=arcade
+StateDirectoryMode=0750
+CapabilityBoundingSet=
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+MemoryMax=300M
+
+[Install]
+WantedBy=multi-user.target

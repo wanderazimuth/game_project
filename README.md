@@ -90,6 +90,24 @@ After editing `server.py`, apply the change with
 `systemctl --user restart game-arcade`. Edits to a game's `index.html` show
 up on the next page load — no restart needed.
 
+High scores and Dream House houses are saved next to `server.py` as
+`scores.json` and `houses.json`. To keep them somewhere else, set
+`ARCADE_DATA` to a folder.
+
+### The home server
+
+The arcade at home (http://arcade.lan, port 8082) runs from `/opt/arcade` as
+the `arcade` user, with its scores and houses in `/var/lib/arcade`. Deploy it
+from Git Bash after committing and pulling:
+
+```bash
+bash deploy/push.sh pi@192.168.0.10
+```
+
+That copies the committed HEAD, installs `deploy/game-arcade.service` and
+restarts the server. Don't edit games on the server itself: the next deploy
+replaces `/opt/arcade` with what's committed.
+
 ## Pages
 
 | URL | What it is |

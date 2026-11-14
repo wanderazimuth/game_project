@@ -15,6 +15,9 @@ import time
 
 PORT = int(os.environ.get("ARCADE_PORT", 8080))
 GAMES_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Where scores.json and houses.json live: next to this file unless ARCADE_DATA says otherwise
+# (the home server keeps them in /var/lib/arcade, so a deploy never touches them).
+DATA_DIR = os.environ.get("ARCADE_DATA") or os.path.dirname(os.path.abspath(__file__))
 
 # Game registry: url_path -> (directory, display_name, description)
 GAMES = {
@@ -86,7 +89,7 @@ TWO_PLAYER_GAMES = {"brick-runner", "magma-runner", "fish-off", "td"}
 UNSCORED_GAMES = {"dream-house", "seaside-village"}
 
 # ── Score management ──────────────────────────────────────────────────────────
-SCORES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scores.json")
+SCORES_FILE = os.path.join(DATA_DIR, "scores.json")
 SCORES_LOCK = threading.Lock()
 _scores_cache = None
 
@@ -124,7 +127,7 @@ def add_score(game, name, score, label=None):
         return list(data[game])
 
 # ── Dream House: each device shares its house so the family can visit ─────────
-HOUSES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "houses.json")
+HOUSES_FILE = os.path.join(DATA_DIR, "houses.json")
 HOUSES_LOCK = threading.Lock()
 HOUSE_MAX_BYTES = 200_000
 HOUSE_ID = re.compile(r"[a-z0-9]{8,32}")   # a random id each device makes for itself
