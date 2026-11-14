@@ -845,6 +845,9 @@ function hurtVillager(vw){
 function terrorCatch(cr){
   for(const c of critters)if(c.kind==='terror'){c.chase=0;c.calm=8}
   player.path=[];player.target=null;player.act=null;player.steer=null;player.slide=null;
+  const H=S.objs.find(o=>o.t==='hospital');
+  if(H){enterHouse(H.id);player.x=4*T+16;player.y=2*T+22;player.dir='down';sleepFade=1.2; // wake up in the hospital, next to the beds
+    setTimeout(()=>toast('💀 CHOMP! The terror bird got you! …You woke up in the hospital 🏥',3200),500);return}
   player.x=SPAWN.x*T+16;player.y=SPAWN.y*T+22;player.dir='down';unstick(player);cam.x=player.x;cam.y=player.y;lastTile=-1;sleepFade=1.2;
   setTimeout(()=>toast('💀 CHOMP! The terror bird got you! …You woke up back on the beach 🏖️',3200),500);
 }
