@@ -1308,7 +1308,8 @@ const ACT={
   digGold(){if(S.pirateGold||(S.inv.mappiece||0)<3||!X_AT)return;S.pirateGold=1;delete S.inv.mappiece;S.coins+=1500;give('gem',5);give('pearl',3);dirty();refreshTray();
     for(let k=0;k<70;k++)confetti.push({x:(X_AT.x+.5)*T,y:X_AT.y*T,vx:(Math.random()-.5)*280,vy:-120-Math.random()*240,c:['#ffd23f','#f39c12','#fff'][k%3],t:0});netSend({t:'confetti'})},
   ghostGift(){if(S.ghostDay===S.day)return;S.ghostDay=S.day;S.coins+=50;give(['apple','pumpkin','acorn'][S.day%3],2);dirty();refreshTray()},
-  caveMine({id}){const cv=caveState(),f=CAVE_ITEMS.concat(CAVE_DEEP).find(f=>f.id===id);if(!f||f.k!=='crystal'&&f.k!=='bigcrystal'||cv.mined.includes(id))return;
+  caveMine({id}){const cv=caveState(),f=CAVE_ITEMS.concat(CAVE_DEEP,HIDE_ITEMS).find(f=>f.id===id);if(!f||f.k!=='crystal'&&f.k!=='bigcrystal'&&f.k!=='goldpile'||cv.mined.includes(id))return;
+    if(f.k==='goldpile'){cv.mined.push(id);S.coins+=40;floatAt((f.x+.5)*T,f.y*T-10,'+🪙40');dirty();return}
     const n=f.k==='bigcrystal'?2:1;cv.mined.push(id);give('gem',n);floatAt((f.x+.5)*T,f.y*T-10,`+${n} 💎`);tally('mine');dirty()},
   caveChest(){const cv=caveState();if(cv.chest)return;cv.chest=1;S.coins+=500;give('gem',3);dirty();refreshTray()},
   lightKeeper({lh}){const o=byId(lh);if(!o||o.t!=='lighthouse'||S.keeper||S.villagers.some(v=>v.house===o.id))return;
@@ -1978,13 +1979,18 @@ const FURN={
   stalagmite:{n:'Stalagmite',cost:0,w:1,h:1,tall:28,hide:1,e:'🪨',say:'🪨 A big pointy rock — it grew drip by drip!'},
   cavechest:{n:'Old Chest',cost:0,w:1,h:1,tall:4,hide:1,e:'🧰',say:'cavechest'},
   bigcrystal:{n:'Rainbow Crystal',cost:0,w:1,h:1,tall:34,hide:1,e:'💎',say:'crystal'},
+  goldpile:{n:'Gold Coins',cost:0,w:1,h:1,tall:8,hide:1,e:'🪙',say:'gold'},
+  chestpile:{n:'Pirate Chests',cost:0,w:2,h:1,tall:26,hide:1,e:'🔒',say:'🔒 Locked tight — the pirates lost the keys!'},
+  skeleton:{n:'Old Pirate',cost:0,w:1,h:1,tall:20,hide:1,e:'💀',say:'💀 An old pirate skeleton… it\'s wearing a tiny hat! 🏴‍☠️'},
+  maptable:{n:'Map Table',cost:0,w:2,h:1,tall:6,hide:1,e:'🗺️',say:'🗺️ An old map of all the islands — there\'s a drawing of a waterfall on it…'},
+  torch:{n:'Torch',cost:0,w:1,h:2,wall:1,hide:1,e:'🔥',say:'🔥 A flickering torch'},
   cannon:{n:'Cannon',cost:0,w:2,h:1,tall:10,hide:1,e:'💣',say:'💣 BOOM! …just kidding, it\'s empty'},
   barrel:{n:'Barrel',cost:0,w:1,h:1,tall:14,hide:1,e:'🛢️',say:'🛢️ It smells like old pickles'},
   shipwheel:{n:'Ship\'s Wheel',cost:0,w:1,h:1,tall:30,hide:1,e:'☸️',say:'☸️ Ahoy! You steer the ship… but it\'s stuck in the sand'},
   hammock:{n:'Hammock',cost:0,w:2,h:1,tall:10,hide:1,e:'😴',say:'😴 A comfy pirate hammock — it sways a little'},
   capchest:{n:'Captain\'s Chest',cost:0,w:1,h:1,tall:6,hide:1,e:'🧰',say:'capchest'},
   lantern:{n:'Lantern',cost:0,w:1,h:2,wall:1,hide:1,e:'🏮',say:'🏮 An old ship lantern'},
-  porthole:{n:'Porthole',cost:0,w:1,h:2,wall:1,hide:1,e:'⭕',say:'🌊 You can see the waves outside'},
+  porthole:{n:'Porthole',cost:0,w:1,h:2,wall:1,hide:1,e:'🌊',say:'🌊 You can see the waves outside'},
   glowshroom:{n:'Glow Mushrooms',cost:0,w:1,h:1,tall:16,hide:1,e:'🍄',say:'🍄 Glowing mushrooms — they light up the deep cave'},
 };
 const WALLPAPERS=[['Cream','#fbf1dc',0],['Mint','#cdeedd',1],['Sky','#cfe6ff',0],['Pink','#ffd9e6',1],['Lavender','#e4d9ff',0],['Sunny','#fff1a8',1],['Wood','#c8935a',2],['Starry','#2c3a6b',3]];
@@ -2152,7 +2158,8 @@ const CAVE_ARRIVE={1:{x:5,y:4},2:{x:5,y:3}};
 const GAL_ITEMS=[{id:41,k:'cannon',x:0,y:1},{id:42,k:'cannon',x:0,y:4},{id:43,k:'barrel',x:9,y:0},{id:44,k:'barrel',x:8,y:0},{id:45,k:'barrel',x:9,y:1},
   {id:46,k:'shipwheel',x:5,y:0},{id:47,k:'hammock',x:7,y:4},{id:48,k:'capchest',x:2,y:0},{id:49,k:'lantern',x:3,y:-2},{id:50,k:'lantern',x:7,y:-2},{id:51,k:'porthole',x:1,y:-2},{id:52,k:'porthole',x:9,y:-2}]; // where you come up / down, next to the pool
 function caveState(){const cv=S.cave||(S.cave={day:S.day,mined:[],chest:0});if(cv.day!==S.day){cv.day=S.day;cv.mined=[]}return cv}
-function caveRoom(){const cv=caveState();if(caveLv===3)return{wall:0,floor:0,items:GAL_ITEMS.filter(f=>!(f.k==='capchest'&&S.capChest))};
+function caveRoom(){const cv=caveState();if(caveLv===4)return{wall:0,floor:0,items:HIDE_ITEMS.filter(f=>!cv.mined.includes(f.id))};
+  if(caveLv===3)return{wall:0,floor:0,items:GAL_ITEMS.filter(f=>!(f.k==='capchest'&&S.capChest))};
   return{wall:0,floor:0,items:(caveLv===2?CAVE_DEEP:CAVE_ITEMS).filter(f=>!cv.mined.includes(f.id)&&!(f.k==='cavechest'&&cv.chest))}}
 // swim down into the deep cave, or back up
 function caveSwim(lv){
@@ -2175,8 +2182,16 @@ function mapPieceModal(x,y,captain){
       <div class="btns"><button class="btn" data-a="close">Arrr!</button></div>`)};
   if(captain)setTimeout(show,guestMode?300:0);else show(); // from a chest: right away, so it reaches whoever opened it
 }
+// down the hole where the gold was: the pirates' secret hideout (the cave's room, as level 4)
+const HIDE_ITEMS=[{id:61,k:'goldpile',x:1,y:1},{id:62,k:'goldpile',x:8,y:2},{id:63,k:'goldpile',x:3,y:5},{id:64,k:'chestpile',x:6,y:0},{id:65,k:'skeleton',x:0,y:4},
+  {id:66,k:'maptable',x:3,y:2},{id:67,k:'barrel',x:9,y:0},{id:68,k:'barrel',x:9,y:5},{id:69,k:'torch',x:1,y:-2},{id:70,k:'torch',x:5,y:-2},{id:71,k:'torch',x:8,y:-2}];
+function enterHideout(){
+  if(!X_AT)return;enterHouse(null,false,0,true);caveLv=4;refreshTray();
+  const cv=caveState(),left=HIDE_ITEMS.filter(f=>f.k==='goldpile'&&!cv.mined.includes(f.id)).length;
+  toast(left?'🏴‍☠️ A secret pirate hideout! Tap the gold piles for coins 🪙':'🏴‍☠️ The pirate hideout — the gold piles come back tomorrow',3000);
+}
 function digModal(){
-  if(S.pirateGold){toast('🕳️ Just an empty hole — you already dug up the pirate gold!');return}
+  if(S.pirateGold){enterHideout();return}
   const n=S.inv.mappiece||0;
   if(n<3){toast(`🏝️ Just a bump in the sand… a treasure map might show what's here (${n}/3 🗺️)`,2800);return}
   openModal('<h2>❌ X marks the spot!</h2><p>The map says the pirate gold is buried right here!</p><div class="btns"><button class="btn" data-a="dig">⛏️ Dig!</button><button class="btn gray" data-a="close">Later</button></div>',
@@ -2220,7 +2235,7 @@ function drawMill(c,t){
 }
 function drawXSpot(c,t){
   const X=X_AT.x*T+16,Y=X_AT.y*T+20;
-  if(S.pirateGold){ell(c,X,Y,11,6,'#6b4a2a');ell(c,X,Y+1,8,4,'#3a2412');return}
+  if(S.pirateGold){ell(c,X,Y,11,6,'#6b4a2a');ell(c,X,Y+1,8,4,'#3a2412');rect(c,X-5,Y-12,2.5,14,'#8a5a2c');rect(c,X+3,Y-12,2.5,14,'#8a5a2c');c.fillStyle='#8a5a2c';c.fillRect(X-5,Y-9,10,2);c.fillRect(X-5,Y-4,10,2);return}
   ell(c,X,Y,12,6,'rgba(160,120,60,.5)');ell(c,X,Y-2,9,4,'rgba(220,180,110,.6)');
   if((S.inv.mappiece||0)>=3){const p=1+Math.sin(t*4)*.12;c.strokeStyle='#d42a2a';c.lineWidth=4*p;c.lineCap='round';
     c.beginPath();c.moveTo(X-8,Y-6);c.lineTo(X+8,Y+6);c.moveTo(X+8,Y-6);c.lineTo(X-8,Y+6);c.stroke()}
@@ -2238,7 +2253,7 @@ function enterCave(){
 }
 function useCave(f){
   if(f.k==='capchest'){doAct('capChest',{});mapPieceModal(null,null,true);return true}
-  if(f.k==='crystal'||f.k==='bigcrystal'){doAct('caveMine',{id:f.id});return true}
+  if(f.k==='crystal'||f.k==='bigcrystal'||f.k==='goldpile'){doAct('caveMine',{id:f.id});return true}
   if(f.k==='cavepool'){caveSwim(caveLv===1?2:1);return true}
   if(f.k==='cavechest'){
     if(caveState().chest){toast('🧰 The old chest is empty now');return true}
@@ -2265,7 +2280,19 @@ function drawGalleonRoom(c){
   c.fillRect(-12,RHp,DOOR_X*T+12,12);c.fillRect((DOOR_X+1)*T,RHp,RWp-(DOOR_X+1)*T+12,12);
   rect(c,DOOR_X*T+2,RHp,T-4,T-6,'#8a5a2c');rect(c,DOOR_X*T+4,RHp+4,T-8,T-14,'#f2cf73',4);
 }
+function drawHideoutRoom(c){
+  const RWp=RW*T,RHp=RH*T;
+  rect(c,0,0,RWp,RHp,'#d9b878');for(let k=0;k<60;k++){const h=hash(k,13),h2=hash(k,17);ell(c,h*RWp,h2*RHp,2+h*3,1.5+h2*2,k%2?'rgba(0,0,0,.08)':'rgba(255,255,255,.12)')}
+  rect(c,0,-2*T,RWp,2*T,'#7a5a3a');c.fillStyle='rgba(0,0,0,.12)';for(let k=0;k<20;k++)c.fillRect(hash(k,7)*RWp,-2*T+hash(k,9)*56,14,3);
+  for(const bx of[0,3,7,RW-.4])rect(c,bx*T,-2*T,10,2*T,'#5a3418'); // wooden beams
+  rect(c,0,-2*T,RWp,8,'#5a3418');rect(c,0,-7,RWp,7,'rgba(0,0,0,.25)');
+  c.fillStyle='#4a3420';c.fillRect(-12,-2*T-12,12,RHp+2*T+24);c.fillRect(RWp,-2*T-12,12,RHp+2*T+24);c.fillRect(-12,-2*T-12,RWp+24,12);
+  c.fillRect(-12,RHp,DOOR_X*T+12,12);c.fillRect((DOOR_X+1)*T,RHp,RWp-(DOOR_X+1)*T+12,12);
+  rect(c,DOOR_X*T+2,RHp,T-4,T-6,'#d9b878');rect(c,DOOR_X*T+8,RHp-6,3,T,'#8a5a2c');rect(c,DOOR_X*T+21,RHp-6,3,T,'#8a5a2c');
+  c.fillStyle='#8a5a2c';for(let k=0;k<3;k++)c.fillRect(DOOR_X*T+8,RHp-2+k*8,16,2.5);
+}
 function drawCaveRoom(c){
+  if(caveLv===4){drawHideoutRoom(c);return}
   if(caveLv===3){drawGalleonRoom(c);return}
   const RWp=RW*T,RHp=RH*T,deep=caveLv===2;
   rect(c,0,0,RWp,RHp,deep?'#262c48':'#3a3f4a');
@@ -2297,7 +2324,8 @@ function hostVw(){const h=visit||inLight;return h?villagers.find(v=>v.v.house===
 function exitHouse(){
   const h=visit?byId(visit):inLight?byId(inLight):S.objs.find(o=>o.t===(inCab?'cabin':'myhouse'));
   const wasCave=inCave,wasLv=caveLv;inside=false;inCab=false;inLight=0;inCave=false;visit=null;hostPos=null;
-  if(wasCave&&wasLv===3&&GAL_AT){player.x=(GAL_AT.x+1)*T+16;player.y=(GAL_AT.y+2)*T+22}
+  if(wasCave&&wasLv===4&&X_AT){player.x=X_AT.x*T+16;player.y=(X_AT.y+1)*T+22}
+  else if(wasCave&&wasLv===3&&GAL_AT){player.x=(GAL_AT.x+1)*T+16;player.y=(GAL_AT.y+2)*T+22}
   else if(wasCave&&CAVE_AT){player.x=(CAVE_AT.x+1)*T+16;player.y=(CAVE_AT.y+2)*T+22}
   else if(h){player.x=(h.x+1)*T+(h.t==='myhouse'?16:0);player.y=(h.y+2)*T+22}else if(outPos){player.x=outPos.x;player.y=outPos.y}
   player.dir='down';player.path=[];player.target=null;unstick(player);cam.x=player.x;cam.y=player.y;lastTile=-1;setMode('play');
@@ -2338,7 +2366,7 @@ function useFurn(f){
   else if(F.say==='music'){for(let k=0;k<4;k++)setTimeout(()=>floats.push({x:(b.x+1)*T+(Math.random()-.5)*30,y:b.y*T-30,txt:['🎵','🎶'][k%2],t:0}),k*250);toast('🎹 La la la!')}
   else if(F.say==='chest'){if(visit){const vw=hostVw();toast(`🧰 That's ${vw?vw.v.name+'\'s':'their'} chest — no peeking!`)}else chestModal(f.id,inCab,inLight)}
   else if(F.say==='clock'){const tod=((now()-S.t0)%DAY_MS)/DAY_MS,mins=Math.floor(tod*1440)+360,h=Math.floor(mins/60)%24;toast(`🕰️ It's ${h%12||12} o'clock${h<12?' in the morning':h<18?' in the afternoon':' at night'} on day ${S.day}`)}
-  else toast(`${F.e} ${F.say}`);
+  else toast(F.say.startsWith(F.e)?F.say:`${F.e} ${F.say}`);
 }
 function chestModal(id,cab,lh){
   const f=(homeOf(cab,lh)||{items:[]}).items.find(f=>f.id===id);if(!f){closeModal();return}
@@ -2359,6 +2387,7 @@ function chestModal(id,cab,lh){
 function inTray(chip){
   if(mode==='play'){
     if(inCave&&caveLv===2)chip('<span class="e">🌊</span>Swim up',false,false,()=>caveSwim(1));
+    else if(inCave&&caveLv===4)chip('<span class="e">🪜</span>Climb out',false,false,exitHouse);
     else chip('<span class="e">🚪</span>Go outside',false,false,exitHouse);
     chip(`<span class="e">🎒</span>Bag<span class="p">${invTotal()} things</span>`,false,false,bagModal);
     if(!visit&&!inCab&&!inCave)chip(`<span class="e">📨</span>Invite<span class="p">${guestsIn(hereKey()).length?guestsIn(hereKey()).length+' here':'a villager'}</span>`,false,false,inviteModal);
@@ -2421,6 +2450,19 @@ function drawFurnIn(c,f,t,icon){
     const col=['#b980ff','#5fb8ff','#3fd6c6','#ff7fc8'][f.id%4];ell(c,X+16,Y+28,12,4,'rgba(0,0,0,.25)');
     poly(c,col,X+4,Y+28,X+8,Y+8,X+13,Y+28);poly(c,col,X+11,Y+28,X+16,Y-14,X+22,Y+28);poly(c,col,X+20,Y+28,X+25,Y+4,X+29,Y+28);
     poly(c,'rgba(255,255,255,.5)',X+15,Y+24,X+16,Y-8,X+18,Y+24);if(Math.sin(t*3+f.id*2)>.8){c.fillStyle='#fff';c.fillRect(X+16,Y-20,2,7);c.fillRect(X+13.5,Y-17.5,7,2)}break}
+  case'goldpile':{ell(c,X+16,Y+26,13,4,'rgba(0,0,0,.25)');for(const[dx,dy,r]of[[-6,22,6],[6,22,6],[0,20,7],[-3,15,5],[4,15,5],[0,10,4]])ell(c,X+16+dx,Y+dy,r,r*.55+1,'#e8b830'),ell(c,X+16+dx,Y+dy-1,r*.6,r*.3,'#ffe066');
+    if(Math.sin(t*3+f.id*2)>.7){c.fillStyle='#fff';c.fillRect(X+20,Y+2,2,7);c.fillRect(X+17.5,Y+4.5,7,2)}break}
+  case'chestpile':rect(c,X+4,Y+6,28,22,'#7a4a24',3);rect(c,X+32,Y+8,28,20,'#8a5a2c',3);rect(c,X+14,Y-16,30,22,'#6b3a18',3);
+    for(const[x0,y0,w]of[[X+4,Y+6,28],[X+32,Y+8,28],[X+14,Y-16,30]]){c.fillStyle='#c9a24a';c.fillRect(x0,y0+6,w,2.5);c.fillRect(x0+w/2-3,y0+9,6,6)}break;
+  case'skeleton':{const b='#eeeae0';ell(c,X+16,Y+28,10,3,'rgba(0,0,0,.2)');rect(c,X+9,Y+10,14,14,'#6b4a2a',3);
+    ell(c,X+16,Y+2,7,7,b);c.fillStyle='#222';c.fillRect(X+12,Y,3,3);c.fillRect(X+17,Y,3,3);c.fillRect(X+14,Y+5,4,1.2);
+    rect(c,X+13,Y+9,6,10,b,2);c.fillStyle='#bbb';for(let k=0;k<3;k++)c.fillRect(X+12,Y+11+k*3,8,1.2);
+    poly(c,'#1d1d24',X+6,Y-3,X+26,Y-3,X+16,Y-12);ell(c,X+16,Y-6,2,1.6,'#fff');rect(c,X+5,Y+22,8,3,b,1);rect(c,X+19,Y+22,8,3,b,1);break}
+  case'maptable':rect(c,X+6,Y+14,5,14,'#5a3418');rect(c,X+53,Y+14,5,14,'#5a3418');rect(c,X+2,Y+2,60,16,'#8a5a2c',3);
+    rect(c,X+10,Y+3,44,13,'#f0e0b0',2);c.strokeStyle='#b07b45';c.lineWidth=1;c.beginPath();c.moveTo(X+14,Y+12);c.quadraticCurveTo(X+26,Y+4,X+36,Y+10);c.quadraticCurveTo(X+44,Y+14,X+50,Y+6);c.stroke();
+    c.strokeStyle='#d42a2a';c.lineWidth=1.6;c.beginPath();c.moveTo(X+46,Y+4);c.lineTo(X+52,Y+9);c.moveTo(X+52,Y+4);c.lineTo(X+46,Y+9);c.stroke();break;
+  case'torch':{const fl=icon?0:Math.sin(t*9+f.id)*1.5;c.fillStyle='rgba(255,180,80,.22)';c.beginPath();c.arc(X+16,Y+16,20,0,Math.PI*2);c.fill();
+    rect(c,X+14,Y+18,4,20,'#5a3418',1);ell(c,X+16,Y+16,5,4,'#e8742a');ell(c,X+16,Y+12+fl,4,7,'#ff9a3c');ell(c,X+16,Y+13-fl*.5,2,4,'#ffe066');break}
   case'cannon':ell(c,X+32,Y+28,26,4,'rgba(0,0,0,.25)');rect(c,X+6,Y+12,36,14,'#5a3418',3);ell(c,X+14,Y+26,6,6,'#3a2412');ell(c,X+36,Y+26,6,6,'#3a2412');
     rect(c,X+20,Y+2,40,14,'#2c2c34',7);ell(c,X+58,Y+9,5,7,'#1d1d24');ell(c,X+58,Y+9,3,4,'#000');break;
   case'barrel':ell(c,X+16,Y+28,11,4,'rgba(0,0,0,.25)');rect(c,X+5,Y-10,22,38,'#8a5a2c',8);c.fillStyle='#3a3a40';c.fillRect(X+5,Y-4,22,3);c.fillRect(X+5,Y+18,22,3);ell(c,X+16,Y-9,10,3.5,'#a8743f');break;
