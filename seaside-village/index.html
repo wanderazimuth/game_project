@@ -98,7 +98,7 @@ const ITEMS={...CROPS,
   fish:{n:'Fish',e:'🐟',sell:30},wood:{n:'Wood',e:'🪵',sell:3},moss:{n:'Moss',e:'🌿',sell:3},stone:{n:'Stone',e:'🪨',sell:4},
   gem:{n:'Gem',e:'💎',sell:50},shell:{n:'Seashell',e:'🐚',sell:8},mushroom:{n:'Mushroom',e:'🍄',sell:12},
   flower:{n:'Wildflower',e:'🌼',sell:5},coconut:{n:'Coconut',e:'🥥',sell:15},pearl:{n:'Pearl',e:'🦪',sell:60},mappiece:{n:'Map Piece',e:'🗺️',sell:0,keep:1},
-  apple:{n:'Apple',e:'🍎',sell:10},acorn:{n:'Acorn',e:'🌰',sell:5},candy:{n:'Spooky Candy',e:'🍬',sell:20},bandaid:{n:'Band-aid',e:'🩹',sell:5},
+  apple:{n:'Apple',e:'🍎',sell:10},acorn:{n:'Acorn',e:'🌰',sell:5},candy:{n:'Spooky Candy',e:'🍬',sell:20},bandaid:{n:'Band-aid',e:'🩹',sell:5},feather:{n:'Moa Feather',e:'🪶',sell:30},
   fossil:{n:'Fossil',e:'🦴',sell:40},amber:{n:'Amber',e:'🟠',sell:80}};
 
 // ── Things you can build. on: where it goes; walk: you can walk over it; tall: px drawn above it ──
@@ -460,7 +460,7 @@ unstick(player);
 // ── What did you tap? ────────────────────────────────────────────────────────
 function pickAt(wx,wy){
   for(const sc of scorps)if(!sc.hide&&Math.abs(wx-sc.x)<17&&Math.abs(wy-sc.y+6)<15)return{k:'scorp',sc};
-  for(const cr of critters){if(cr.hide||cr.gone)continue;const big=cr.kind==='bear'||cr.kind==='rex'||cr.kind==='trike'||cr.kind==='terror',tall=cr.kind==='longneck'?76:cr.kind==='rex'?50:cr.kind==='terror'?44:0,up=cr.zz&&cr.kind==='parrot'?6:cr.kind==='parrot'||cr.kind==='bat'?24:cr.kind==='ptero'?(cr.zz?8:34):cr.kind==='ghost'?14:0;if(Math.abs(wx-cr.x)<(cr.kind==='longneck'?30:big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(tall||(big?32:24)))return{k:'critter',cr}}
+  for(const cr of critters){if(cr.hide||cr.gone)continue;const big=cr.kind==='bear'||cr.kind==='rex'||cr.kind==='trike'||cr.kind==='terror'||cr.kind==='moa',tall=cr.kind==='longneck'?76:cr.kind==='rex'?50:cr.kind==='terror'?44:cr.kind==='moa'?44:0,up=cr.zz&&cr.kind==='parrot'?6:cr.kind==='parrot'||cr.kind==='bat'?24:cr.kind==='ptero'?(cr.zz?8:34):cr.kind==='ghost'?14:0;if(Math.abs(wx-cr.x)<(cr.kind==='longneck'?30:big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(tall||(big?32:24)))return{k:'critter',cr}}
   for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
   const tx=Math.floor(wx/T),ty=Math.floor(wy/T);
   for(let d=0;d<4;d++){
@@ -764,7 +764,7 @@ function drawScorp(c,sc,t){
 // ── Ice Island: snow, slippery frozen lakes, penguins and polar bears ────────
 let critters=[];
 function spawnCritters(){
-  const kinds=curKind==='dino'?['rex','rex','longneck','longneck','longneck','trike','trike','trike','trike','ptero','ptero','ptero','terror','terror','terror']:curKind==='haunted'?['ghost','ghost','ghost','ghost','ghost','ghost','bat','bat','bat','bat']:curKind==='pirate'?['crab','crab','crab','crab','crab','crab','crab','parrot','parrot']:curKind==='autumn'?['squirrel','squirrel','squirrel','squirrel','squirrel','squirrel']:curKind==='ice'?['peng','peng','peng','peng','peng','peng','peng','bear','bear','bear']:curKind==='jungle'?['monkey','monkey','monkey','monkey','monkey','parrot','parrot','parrot','parrot']:curKind==='volcano'?['terror','terror','terror']:[];
+  const kinds=curKind==='dino'?['rex','rex','longneck','longneck','longneck','trike','trike','trike','trike','ptero','ptero','ptero','terror','terror','terror','moa','moa','moa']:curKind==='haunted'?['ghost','ghost','ghost','ghost','ghost','ghost','bat','bat','bat','bat']:curKind==='pirate'?['crab','crab','crab','crab','crab','crab','crab','parrot','parrot']:curKind==='autumn'?['squirrel','squirrel','squirrel','squirrel','squirrel','squirrel']:curKind==='ice'?['peng','peng','peng','peng','peng','peng','peng','bear','bear','bear']:curKind==='jungle'?['monkey','monkey','monkey','monkey','monkey','parrot','parrot','parrot','parrot']:curKind==='volcano'?['terror','terror','terror']:[];
   const nightOnly=curKind==='dino'||curKind==='volcano'?['terror','terror','terror','terror']:curKind==='ice'?['bear','bear','bear']:[];kinds.push(...nightOnly); // these only come out at night
   critters=kinds.map((kind,i)=>({kind,night:i>=kinds.length-nightOnly.length?1:0,gone:0,fly:0,loot:null,hide:0,...(kind==='crab'?sandSpot():scorpSpot()),wa:Math.random()*6,wt:0,dir:1,walk:0,happy:0,calm:0,still:false}));
 }
@@ -821,7 +821,7 @@ function critterUpdate(dt){
     else if(cr.kind==='monkey'&&cr.loot&&d<T*8){vx=-dx;vy=-dy;sp=T*3.2}  // running off with your bananas
     else if(cr.kind==='monkey'&&!cr.loot&&!cr.calm&&S.inv.banana&&d<T*5&&!stealCool&&!player.stun){vx=dx;vy=dy;sp=T*2.6;if(d<15){swipe(cr);continue}} // it smells your bananas!
     else{if((cr.wt-=dt)<=0){cr.wt=1+Math.random()*3;cr.wa=Math.random()*Math.PI*2;cr.still=Math.random()<.4}
-      if(cr.still){cr.walk=0;continue}vx=Math.cos(cr.wa);vy=Math.sin(cr.wa);sp=cr.kind==='terror'?T*1.1:cr.kind==='longneck'?T*.35:cr.kind==='bear'||cr.kind==='rex'?T*.6:cr.kind==='crab'?T*.7:T*.9}
+      if(cr.still){cr.walk=0;continue}vx=Math.cos(cr.wa);vy=Math.sin(cr.wa);sp=cr.kind==='moa'?T*.8:cr.kind==='terror'?T*1.1:cr.kind==='longneck'?T*.35:cr.kind==='bear'||cr.kind==='rex'?T*.6:cr.kind==='crab'?T*.7:T*.9}
     const l=Math.hypot(vx,vy)||1,mx=vx/l*sp*dt,my=vy/l*sp*dt;let moved=false;
     if(animalOk(cr.x+mx,cr.y)){cr.x+=mx;moved=true}if(animalOk(cr.x,cr.y+my)){cr.y+=my;moved=true}
     if(!moved)cr.wa=Math.random()*Math.PI*2;if(mx)cr.dir=mx<0?-1:1;cr.walk+=dt*10;
@@ -898,7 +898,7 @@ function flyParrot(cr,dt){
   const sp=cr.happy>0?0:T*1.6;cr.x+=Math.cos(cr.wa)*sp*dt;cr.y+=Math.sin(cr.wa)*sp*dt;cr.dir=Math.cos(cr.wa)<0?-1:1;cr.walk+=dt*12;
 }
 const DINO_SAYS=['Skreee! Warm the giant egg in the nest every day!','Skreee! The T-Rex loves 🐟 fish!','Skreee! Triceratops love 🌼 wildflowers!',
-  'Skreee! Look for 🦴 fossils on the ground!','Skreee! The long-necks are big softies!','Skreee! Amber 🟠 hides under the tree ferns!','Skreee! Stomp stomp stomp!','Skreee! Watch out for terror birds — they\'re fast!','Skreee! Terror birds give up if you run far enough!','Skreee! Dinosaurs sleep at night — but even more terror birds come out!'];
+  'Skreee! Look for 🦴 fossils on the ground!','Skreee! The long-necks are big softies!','Skreee! Amber 🟠 hides under the tree ferns!','Skreee! Stomp stomp stomp!','Skreee! Watch out for terror birds — they\'re fast!','Skreee! Terror birds give up if you run far enough!','Skreee! Dinosaurs sleep at night — but even more terror birds come out!','Skreee! Moas are friendly — give one a pat!'];
 const PIRATE_SAYS=['Squawk! Arrr, matey!','Squawk! Three map pieces find the gold!','Squawk! X marks the spot!','Squawk! The captain\'s chest is on the old ship!',
   'Squawk! Shiver me timbers!','Squawk! Crabs love fish!','Squawk! Pieces of eight! Pieces of eight!'];
 const PARROT_SAYS=['Squawk! Pretty bird!','Squawk! Three keys open the temple!','Squawk! Keys hide in treasure chests!','Squawk! Monkeys love bananas!',
@@ -912,6 +912,9 @@ function templeModal(){
 }
 function feedCritter(cr){
   if(cr.zz){cr.happy=.4;toast(`💤 Shh… the ${CRIT_NAMES[cr.kind]||'animal'} is fast asleep. Come back in the morning!`,2600);return}
+  if(cr.kind==='moa'){cr.happy=1.6;for(let k=0;k<3;k++)setTimeout(()=>floatAt(cr.x+(k-1)*10,cr.y-56,'❤️'),k*150);
+    if(cr.gave&&cr.gave>now()){toast(['🦤 Boom-boom! The moa gives you a big fluffy hug','🦤 The moa does a happy little dance!','🦤 Boom-boom! Moas are the terror birds\' friendly cousins'][Math.random()*3|0]);return}
+    cr.gave=now()+120000;doAct('giveBack',{k:'feather',n:1});floatAt(cr.x,cr.y-40,'+🪶');toast('🦤 Boom-boom! The friendly moa loves you — it gave you a 🪶 Moa Feather!',2800);return}
   if(cr.kind==='terror'){floatAt(cr.x,cr.y-50,'SKRAW!');toast('🦤 Terror birds are much too fierce to make friends with — RUN!',2600);return}
   if(cr.kind==='ptero'){cr.happy=2;floatAt(cr.x,cr.y-54,'🎵');toast('🦅 '+DINO_SAYS[Math.random()*DINO_SAYS.length|0],2800);return}
   if(cr.kind==='rex'){
@@ -986,9 +989,9 @@ function drawCritterRaw(c,cr,t){
 const zzz=(c,x,y,t)=>{c.font='13px sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText('💤',x+10,y+Math.sin(t*2+x)*2)};
 const drawCritter=(c,cr,t)=>{plain(drawCritterRaw)(c,cr,t);if(cr.zz)zzz(c,cr.x,cr.y-(ZZ_UP[cr.kind]||30),t)};
 // Dino Island's dinosaurs
-const DINOS=['rex','longneck','trike','ptero','terror'],NIGHT_OWLS=['terror','bear','ghost','bat'],
-  CRIT_NAMES={rex:'T-Rex',longneck:'long-neck',trike:'triceratops',ptero:'pterodactyl',terror:'terror bird',peng:'penguin',bear:'polar bear',monkey:'monkey',parrot:'parrot',crab:'crab',squirrel:'squirrel'},
-  ZZ_UP={longneck:78,rex:56,bear:40,ptero:20,parrot:18,crab:26,trike:30,peng:32,monkey:32,squirrel:30};
+const DINOS=['rex','longneck','trike','ptero','terror','moa'],NIGHT_OWLS=['terror','bear','ghost','bat'],
+  CRIT_NAMES={rex:'T-Rex',longneck:'long-neck',trike:'triceratops',ptero:'pterodactyl',terror:'terror bird',moa:'moa',peng:'penguin',bear:'polar bear',monkey:'monkey',parrot:'parrot',crab:'crab',squirrel:'squirrel'},
+  ZZ_UP={moa:50,longneck:78,rex:56,bear:40,ptero:20,parrot:18,crab:26,trike:30,peng:32,monkey:32,squirrel:30};
 function drawDino(c,cr,t){
   const s=cr.dir,x=cr.x,hop=cr.happy>0?Math.abs(Math.sin(cr.happy*8))*4:0,y=cr.y-hop,zz=cr.calm>30;
   if(cr.kind==='rex'){const st=cr.walk?Math.sin(cr.walk*.8)*3:0,col='#5e9a3a',dk='#4a7d2c',open=cr.happy>0||cr.calm>0&&cr.calm<6.5&&cr.calm>5;
@@ -1002,10 +1005,10 @@ function drawDino(c,cr,t){
     ell(c,x+10*s,y-43,2.3,2.3,'#fff');ell(c,x+10.6*s,y-43,1.1,1.1,'#222');
     for(let k=0;k<4;k++)poly(c,dk,x-(2+k*5)*s,y-34+k*3,x-(4+k*5)*s,y-39+k*3,x-(6+k*5)*s,y-33+k*3);
     if(zz){c.font='12px sans-serif';c.textAlign='center';c.fillText('💤',x+10*s,y-56)}return}
-  if(cr.kind==='terror'){const st=cr.walk?Math.sin(cr.walk*1.4)*4:0,col='#5e4a3a',dk='#3f3126',ch=cr.chase>0;
+  if(cr.kind==='terror'||cr.kind==='moa'){const moa=cr.kind==='moa',st=cr.walk?Math.sin(cr.walk*1.4)*4:0,col=moa?'#2b2b30':'#5e4a3a',dk=moa?'#151518':'#3f3126',ch=!moa&&cr.chase>0; // a moa is a black (and friendly) terror bird
     ell(c,x,cr.y,12,3.5,'rgba(0,0,0,.2)');c.strokeStyle='#d9a23a';c.lineWidth=2.4;c.lineCap='round';
     for(const k of[-1,1]){const lx=x+k*3;c.beginPath();c.moveTo(lx,y-20);c.lineTo(lx+st*k*s,y-9);c.lineTo(lx+st*k*s*1.5+3*s,y);c.stroke()}
-    poly(c,dk,x-8*s,y-26,x-20*s,y-30,x-18*s,y-22,x-8*s,y-18);ell(c,x,y-24,11,8,col);ell(c,x+2*s,y-21,6,4,'#8a7058');
+    poly(c,dk,x-8*s,y-26,x-20*s,y-30,x-18*s,y-22,x-8*s,y-18);ell(c,x,y-24,11,8,col);ell(c,x+2*s,y-21,6,4,moa?'#4a4a54':'#8a7058');
     c.strokeStyle=col;c.lineWidth=6;c.beginPath();c.moveTo(x+6*s,y-28);c.lineTo(x+9*s,y-38+(ch?3:0));c.stroke();
     const hx=x+11*s,hy=y-41+(ch?4:0);ell(c,hx,hy,6,5.5,col);poly(c,dk,hx-4*s,hy-4,hx-11*s,hy-9,hx-6*s,hy-1);
     poly(c,'#e8a33a',hx+3*s,hy-4,hx+16*s,hy-2,hx+17*s,hy+3,hx+14*s,hy+1,hx+3*s,hy+3);
@@ -2940,6 +2943,7 @@ const PETS={
   fox:{n:'Fox',pl:'Foxes',cost:160,food:'egg',speed:2,names:['Rusty','Ember','Foxy','Maple'],cols:['#e8742a','#d9d9e0','#c0392b']},
   owl:{n:'Owl',pl:'Owls',cost:180,food:'corn',speed:1.2,names:['Hoot','Professor','Luna','Twiggy'],cols:['#8a6a4a','#d9cbb5','#6b6b75']},
   dino:{n:'Baby Dino',pl:'Baby Dinos',cost:0,hide:1,food:'flower',speed:1.5,names:['Chomp','Pebbles','Rexy','Spike','Tiny','Stompy'],cols:['#6fcf5a','#5fb8ff','#ff9a4a','#c58bff']},
+  moa:{n:'Baby Moa',pl:'Baby Moas',cost:250,food:'corn',speed:1.6,names:['Boomer','Pip','Inky','Shadow','Fluff','Moana'],cols:['#2b2b30','#3a3a44']},
   unicorn:{n:'Unicorn',pl:'Unicorns',cost:1000,food:'carrot',speed:1.7,names:['Sparkle','Rainbow','Stardust','Twinkle'],cols:['#fbfbff','#ffd6ec','#d9e8ff']},
 };
 function pets(){return S.home.pets||(S.home.pets=[])}
@@ -3045,6 +3049,12 @@ function drawPetRaw(c,p,q,t){
   case'duck':{const w=mv?Math.sin(q.walk*1.4)*.12:0;c.save();c.translate(x,y);c.rotate(w);
     rect(c,-2,-2,1.5,2,'#f4a72a');rect(c,1,-2,1.5,2,'#f4a72a');ell(c,0,-6,7.5,5,col);poly(c,col,-6*s,-7,-10*s,-10,-7*s,-4);ell(c,-1*s,-6,4,2.6,'rgba(0,0,0,.08)');
     ell(c,4*s,-12,4,4,p.v===2?'#2e7d4f':col);poly(c,'#f4a72a',7*s,-13,11*s,-11.5,7*s,-10);c.fillStyle='#222';c.fillRect(5*s-.6,-13.5,1.3,1.3);c.restore();break}
+  case'moa':{c.strokeStyle='#d9a23a';c.lineWidth=1.8;c.lineCap='round';
+    for(const k of[-1,1]){const lx=x+k*2.5,st=mv?step*2*k:0;c.beginPath();c.moveTo(lx,y-9);c.lineTo(lx+st*s,y-4);c.lineTo(lx+st*s+2*s,y);c.stroke()}
+    poly(c,'#151518',x-5*s,y-14,x-11*s,y-16,x-10*s,y-11);ell(c,x,y-13,7,6,col);ell(c,x+1*s,y-11,3.5,2.5,'#4a4a54');
+    c.strokeStyle=col;c.lineWidth=4;c.beginPath();c.moveTo(x+4*s,y-16);c.lineTo(x+6*s,y-21);c.stroke();
+    ell(c,x+7*s,y-23,4.5,4,col);poly(c,'#e8a33a',x+9*s,y-25,x+16*s,y-23.5,x+16*s,y-21,x+9*s,y-21);
+    ell(c,x+7.5*s,y-24,1.5,1.5,'#ffd23f');ell(c,x+7.8*s,y-24,.7,.7,'#222');break}
   case'dino':{for(const dx of[-4,3])rect(c,x+dx*s-1.5,y-6+(dx<0?step:-step),3.5,6,col,1);
     poly(c,col,x-6*s,y-10,x-17*s,y-6+Math.sin(t*5)*1.5,x-5*s,y-4);ell(c,x,y-9,8,6,col);ell(c,x+2*s,y-7,4.5,3.5,'rgba(255,255,220,.45)');
     for(let k=0;k<3;k++){const px=x+(-5+k*4)*s;poly(c,'#ffb03a',px-2,y-14,px,y-19,px+2,y-14)}
