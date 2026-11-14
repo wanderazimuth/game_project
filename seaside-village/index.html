@@ -2050,7 +2050,7 @@ function placeCave(){
 const CAVE_ITEMS=[{id:1,k:'crystal',x:1,y:1},{id:2,k:'crystal',x:8,y:0},{id:3,k:'crystal',x:2,y:4},{id:4,k:'crystal',x:7,y:5},{id:5,k:'crystal',x:5,y:0},
   {id:6,k:'cavepool',x:4,y:2},{id:7,k:'stalagmite',x:0,y:3},{id:8,k:'stalagmite',x:9,y:2},{id:9,k:'cavechest',x:9,y:5}];
 function caveState(){const cv=S.cave||(S.cave={day:S.day,mined:[],chest:0});if(cv.day!==S.day){cv.day=S.day;cv.mined=[]}return cv}
-function caveRoom(){const cv=caveState();return{wall:0,floor:0,items:CAVE_ITEMS.filter(f=>!cv.mined.includes(f.id)).map(f=>f.k==='cavechest'?{...f,open:cv.chest}:f)}}
+function caveRoom(){const cv=caveState();return{wall:0,floor:0,items:CAVE_ITEMS.filter(f=>!cv.mined.includes(f.id)&&!(f.k==='cavechest'&&cv.chest))}}
 function enterCave(){
   if(!CAVE_AT)return;enterHouse(null,false,0,true);
   const cv=caveState(),left=CAVE_ITEMS.filter(f=>f.k==='crystal'&&!cv.mined.includes(f.id)).length;
