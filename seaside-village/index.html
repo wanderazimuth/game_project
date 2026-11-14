@@ -98,7 +98,7 @@ const ITEMS={...CROPS,
   fish:{n:'Fish',e:'🐟',sell:30},wood:{n:'Wood',e:'🪵',sell:3},moss:{n:'Moss',e:'🌿',sell:3},stone:{n:'Stone',e:'🪨',sell:4},
   gem:{n:'Gem',e:'💎',sell:50},shell:{n:'Seashell',e:'🐚',sell:8},mushroom:{n:'Mushroom',e:'🍄',sell:12},
   flower:{n:'Wildflower',e:'🌼',sell:5},coconut:{n:'Coconut',e:'🥥',sell:15},pearl:{n:'Pearl',e:'🦪',sell:60},mappiece:{n:'Map Piece',e:'🗺️',sell:0,keep:1},
-  apple:{n:'Apple',e:'🍎',sell:10},acorn:{n:'Acorn',e:'🌰',sell:5},candy:{n:'Spooky Candy',e:'🍬',sell:20},
+  apple:{n:'Apple',e:'🍎',sell:10},acorn:{n:'Acorn',e:'🌰',sell:5},candy:{n:'Spooky Candy',e:'🍬',sell:20},bandaid:{n:'Band-aid',e:'🩹',sell:5},
   fossil:{n:'Fossil',e:'🦴',sell:40},amber:{n:'Amber',e:'🟠',sell:80}};
 
 // ── Things you can build. on: where it goes; walk: you can walk over it; tall: px drawn above it ──
@@ -134,9 +134,10 @@ const BUILD={
   bin:{n:'Shipping Bin',cost:100,w:1,h:1,d:'Ship things for coins'},
   market:{n:'Market Stall',cost:700,w:2,h:1,tall:14,d:'Everything sells for 20% more (up to 2)'},
   fountain:{n:'Fountain',cost:400,w:2,h:2,d:'Makes the village sparkle'},
+  hospital:{n:'Hospital',cost:300,w:2,h:2,d:'Sells 🩹 band-aids for hurt villagers'},
   lighthouse:{n:'Lighthouse',cost:2500,w:2,h:2,tall:80,d:'Shows the whole island — go inside and decorate it!'},
 };
-const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','lighthouse'];
+const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','hospital','lighthouse'];
 let guestMode=false,guestSel='carrot'; // guestMode: you're on a friend's island
 let visit=null,hostPos=null; // visit: the villager house you're in (null: Your House)
 let inCab=false,inLight=0,inCave=false,caveLv=1; // caveLv: 1 the cave, 2 the deep cave (down through its pool) // inCab: inside the cabin (where a friend who joins your island stays); inLight: the lighthouse you're in
@@ -566,6 +567,7 @@ function useObj(o,act){
     case'myhouse':enterHouse();break;
     case'cabin':enterCabin();break;
     case'house':{const v=villagers.find(v=>v.v.house===o.id);if(v&&isGuest(v.v.name))toast(`🏠 ${v.v.name} isn't home — they're visiting ${guestOf(v.v.name).to?'the lighthouse':'your house'}!`);else if(v&&v.asleep)toast(`💤 Shh… ${v.v.name} is fast asleep. Come back in the morning!`,2800);else if(v)enterHouse(o.id);else toast('🏠 An empty house — nobody lives here yet');break}
+    case'hospital':hospitalModal();break;
     case'well':toast('💧 Crops within 3 steps of the well grow 2× faster');break;
     case'market':toast('🧺 The market makes everything sell for 20% more — tap 💼 Work to work here!',2800);break;
     case'lighthouse':enterHouse(null,false,o.id);break;
@@ -796,10 +798,15 @@ function critterUpdate(dt){
       if(!cr.chase){cr.chase=.01;floatAt(cr.x,cr.y-50,'SKRAAAW!');toast('🦤 A terror bird spotted you — RUN!',2200)}
       cr.chase+=dt;if(d>T*10||cr.chase>6){cr.chase=0;cr.calm=5;continue} // it gives up
       if(d<16){terrorCatch(cr);continue}
-      if(d>T*1.3){ // run around trees and rocks to get you
-        if((cr.repath=(cr.repath||0)-dt)<=0){cr.repath=.35;const ct=tileOf(cr),pt=tileOf(player),r=findPath(ct.x,ct.y,(x,y)=>x===pt.x&&y===pt.y,null,(x,y)=>animalOk(x*T+16,y*T+20));cr.path=r?r.path:[]}
-        const dir=cr.dir;if(cr.path&&cr.path.length&&followPath(cr,T*3.6,dt)){cr.dir=cr.dir==='left'?-1:cr.dir==='right'?1:dir;continue}cr.dir=dir}
+      if(d>T*1.3&&chaseStep(cr,player,T*3.6,dt))continue;
       vx=dx;vy=dy;sp=T*3.6}
+    else if(cr.kind==='terror'&&!cr.calm&&!guestMode&&(cr.prey=preyOk(cr.prey)?cr.prey:preyNear(cr))){ // …or one of your villagers!
+      const pv=cr.prey,pdx=pv.x-cr.x,pdy=pv.y-cr.y,pd=Math.hypot(pdx,pdy);
+      if(!cr.hunt){cr.hunt=.01;pv.say='Help! A terror bird! 😱';pv.talkT=2.5;floatAt(cr.x,cr.y-50,'SKRAW!')}
+      cr.hunt+=dt;if(pd>T*10||cr.hunt>8){cr.hunt=0;cr.prey=null;cr.calm=5;continue}
+      if(pd<16){hurtVillager(pv);cr.hunt=0;cr.prey=null;cr.calm=12;continue}
+      if(pd>T*1.3&&chaseStep(cr,pv,T*3.2,dt))continue;
+      vx=pdx;vy=pdy;sp=T*3.2}
     else if(cr.kind==='rex'&&!cr.calm&&d<T*4&&!player.stun){vx=dx;vy=dy;sp=T*1.6;if(d<20){rexRoar(cr);continue}} // STOMP STOMP STOMP
     else if(cr.kind==='crab'&&!cr.calm&&d<T*1.8&&!player.stun){vx=dx;vy=dy;sp=T*1.4;if(d<16){crabPinch(cr);continue}} // snip snap!
     else if(cr.kind==='squirrel'&&cr.loot&&d<T*8){vx=-dx;vy=-dy;sp=T*3.4}  // running off with your acorns
@@ -812,6 +819,27 @@ function critterUpdate(dt){
     if(animalOk(cr.x+mx,cr.y)){cr.x+=mx;moved=true}if(animalOk(cr.x,cr.y+my)){cr.y+=my;moved=true}
     if(!moved)cr.wa=Math.random()*Math.PI*2;if(mx)cr.dir=mx<0?-1:1;cr.walk+=dt*10;
   }
+}
+// a terror bird runs around trees and rocks to get to e (you, or a villager)
+function chaseStep(cr,e,speed,dt){
+  if((cr.repath=(cr.repath||0)-dt)<=0){cr.repath=.35;const ct=tileOf(cr),pt=tileOf(e),r=findPath(ct.x,ct.y,(x,y)=>x===pt.x&&y===pt.y,null,(x,y)=>animalOk(x*T+16,y*T+20));cr.path=r?r.path:[]}
+  const dir=cr.dir;if(cr.path&&cr.path.length&&followPath(cr,speed,dt)){cr.dir=cr.dir==='left'?-1:cr.dir==='right'?1:dir;return true}cr.dir=dir;return false;
+}
+const preyOk=v=>v&&villagers.includes(v)&&!v.asleep&&!v.v.hurt&&!isGuest(v.v.name);
+const preyNear=cr=>villagers.find(v=>preyOk(v)&&Math.hypot(v.x-cr.x,v.y-cr.y)<T*5)||null;
+// a villager pecked by a terror bird needs band-aids — the hospital sells them
+const BANDAID=5;
+function hospitalModal(){
+  const hurt=S.villagers.filter(v=>v.hurt).map(v=>v.name.replace(/[<>&"]/g,'')),have=S.inv.bandaid||0;
+  let h=`<h2>🏥 ${bname('hospital')}</h2><p>“Hello! Here are some 🩹 band-aids to patch people up. Only 🪙${BANDAID} each!”</p>`;
+  h+=`<p>${hurt.length?`🤕 <b>${hurt.join(', ')}</b> ${hurt.length>1?'need':'needs'} band-aids.`:'Nobody is hurt right now. 😊'} You have <b>${have}</b> 🩹.</p>`;
+  h+=`<div class="btns"><button class="btn" data-a="buy" data-v="1" ${S.coins<BANDAID?'disabled':''}>Buy 1 🩹 — 🪙${BANDAID}</button><button class="btn" data-a="buy" data-v="3" ${S.coins<BANDAID*3?'disabled':''}>Buy 3 🩹 — 🪙${BANDAID*3}</button><button class="btn gray" data-a="close">Bye!</button></div>`;
+  openModal(h,{buy:n=>{doAct('buyBandaid',{n:+n});setTimeout(hospitalModal,guestMode?300:0)}});
+}
+// a villager pecked by a terror bird needs band-aids
+function hurtVillager(vw){
+  const v=vw.v;v.hurt=1;v.req={k:'bandaid',n:1+(Math.random()*2|0),reward:50,hurt:1};vw.path=[];vw.wait=3;vw.say='Ouch! 🤕';vw.talkT=3;
+  floatAt(vw.x,vw.y-50,'PECK!');toast(`🦤 A terror bird pecked ${v.name}! They need 🩹 band-aids${count('hospital')?' from the 🏥 Hospital':' — build a 🏥 Hospital to get some'}`,3200);dirty();
 }
 // caught by a terror bird: you faint, and wake up back on the beach where you landed
 function terrorCatch(cr){
@@ -1151,7 +1179,7 @@ function makeRequest(){
 function talk(vw){
   const v=vw.v;vw.wait=Math.max(vw.wait,2);vw.dir='down';
   if(v.req){const r=v.req,have=S.inv[r.k]||0;
-    openModal(`<h2>${v.name}</h2><p>“Could you bring me <b>${r.n} ${ITEMS[r.k].e} ${ITEMS[r.k].n}</b>? I'll give you <b>🪙${r.reward}</b>!”</p><p style="font-size:13px">You have ${have}.</p>
+    openModal(`<h2>${v.name}</h2><p>“${r.hurt?'Ouch! A terror bird pecked me! 🤕 ':''}Could you bring me <b>${r.n} ${ITEMS[r.k].e} ${ITEMS[r.k].n}</b>? I'll give you <b>🪙${r.reward}</b>!”</p><p style="font-size:13px">You have ${have}.</p>
       <div class="btns"><button class="btn" data-a="give" ${have<r.n?'disabled':''}>Give ${r.n} ${ITEMS[r.k].e}</button><button class="btn gray" data-a="close">Okay!</button></div>`,
       {give:()=>{closeModal();doAct('give',{name:v.name})}});
   }else{vw.say=LINES[Math.random()*LINES.length|0];vw.talkT=3.5}
@@ -1180,7 +1208,7 @@ function takeForage(i){const fi=forageAt.get(i);if(fi!==undefined){S.taken.push(
 const dayNow=()=>Math.floor((now()-S.t0)/DAY_MS)+1;
 function newDay(quiet){
   S.day=dayNow();S.taken=[];genForage();
-  for(const v of S.villagers)v.req=Math.random()<.65?makeRequest():null;
+  for(const v of S.villagers)if(!(v.req&&v.req.hurt))v.req=Math.random()<.65?makeRequest():null; // a hurt villager still needs band-aids
   for(const p of pets())if(p.fed<S.day-1)p.hearts=Math.max(0,p.hearts-1); // nobody fed it yesterday
   if(S.villagers.length&&Math.random()<.6)S.home.drop={name:S.villagers[Math.random()*S.villagers.length|0].name,at:now()+30000+Math.random()*150000}; // someone drops by today
   dirty();if(!quiet)toast(`☀️ Good morning! Day ${S.day}${S.villagers.some(v=>v.req)?' — some villagers need help ❗':''}`,3000);
@@ -1401,8 +1429,9 @@ const ACT={
     const msg=S.ship>=3?'⛵ The ship is fixed! Hooray!':`🔧 ${st.n} — done!`;toast(msg,3000);if(actor){actor=null;toast(msg,3000)}},
   give({name}){const v=S.villagers.find(v=>v.name===name),r=v&&v.req;if(!r)return;
     if((S.inv[r.k]||0)<r.n){toast(`You need ${r.n} ${ITEMS[r.k].e}`);return}
-    S.inv[r.k]-=r.n;if(!S.inv[r.k])delete S.inv[r.k];S.coins+=r.reward;S.stats.helped++;tally('help');v.req=null;dirty();refreshTray();
-    const vw=villagers.find(w=>w.v===v);if(vw)floatAt(vw.x,vw.y-44,`+🪙${r.reward}`);toast(`💛 ${v.name}: “Thank you so much!”`)},
+    S.inv[r.k]-=r.n;if(!S.inv[r.k])delete S.inv[r.k];S.coins+=r.reward;S.stats.helped++;tally('help');v.req=null;if(r.hurt)v.hurt=0;dirty();refreshTray();
+    const vw=villagers.find(w=>w.v===v);if(vw)floatAt(vw.x,vw.y-44,`+🪙${r.reward}`);toast(r.hurt?`🩹 ${v.name}: “All better! Thank you so much!”`:`💛 ${v.name}: “Thank you so much!”`)},
+  buyBandaid({n}){n=Math.max(1,Math.min(10,n|0));if(!count('hospital')||S.coins<BANDAID*n)return;S.coins-=BANDAID*n;give('bandaid',n);dirty();refreshTray()},
   place({t,x,y}){if(BUILD[t])doPlace(t,x,y)},
   steal({k,n,coins}){if(coins){S.coins-=Math.min(coins,S.coins)}else if(S.inv[k]){S.inv[k]-=Math.min(n,S.inv[k]);if(!S.inv[k])delete S.inv[k];refreshTray()}dirty()},
   giveBack({k,n,coins}){if(coins)S.coins+=coins;else if(ITEMS[k])give(k,n);dirty()},
@@ -1473,7 +1502,7 @@ function pickTool(t){tool=t;lifted=null;ghost=null;refreshTray()}
 const tray=document.getElementById('tray'),modeBtn=document.getElementById('modeBtn');
 function iconFor(t){
   const b=BUILD[t],c=document.createElement('canvas');c.width=112;c.height=88;const x=c.getContext('2d');
-  const tall=t==='lighthouse'?80:['house','cabin','coop','barn','fountain','pond','pigpen','bakery','creamery','playground'].includes(t)?0:b.tall||0,dock=t==='dock';
+  const tall=t==='lighthouse'?80:['house','cabin','coop','barn','fountain','pond','pigpen','bakery','creamery','playground','hospital'].includes(t)?0:b.tall||0,dock=t==='dock';
   const s=Math.min(112/(b.w*T),88/(b.h*T+tall))*.9;
   x.translate(56-b.w*T*s/2,44-(b.h*T+tall)*s/2+tall*s);x.scale(s,s);
   if(dock){x.fillStyle='#4fb3e0';x.fillRect(-4,-4,T+8,T+8)}
@@ -1815,6 +1844,10 @@ function drawObjIn(c,o,t,icon){
   case'pigpen':ell(c,X+32,Y+50,27,11,'#8b6b4a');ell(c,X+30,Y+49,15,5,'#7a5a3a');rect(c,X+8,Y+14,30,26,'#d98c6a',3);
     poly(c,'#a0522d',X+4,Y+18,X+23,Y+2,X+42,Y+18);rect(c,X+18,Y+26,10,14,'#5a2e15',5);rect(c,X+44,Y+28,16,8,'#8a5a2c',2);rect(c,X+46,Y+28,12,3,'#e9c46a',1);
     for(const px of[X+2,X+60])rect(c,px,Y+38,3,16,'#b98549',1);break;
+  case'hospital':{const win=night>.2?'#ffe27a':'#9fd8ff';rect(c,X+4,Y+20,56,42,'#fbfbff',3);rect(c,X+4,Y+56,56,6,'rgba(0,0,0,.08)');rect(c,X+1,Y+14,62,8,'#d9534f',2);
+    for(const wx of[X+9,X+45]){rect(c,wx,Y+28,10,10,win,2);c.fillStyle='#fff';c.fillRect(wx+4.5,Y+28,1,10)}
+    rect(c,X+24,Y+40,16,22,'#bfe6ff',2);c.fillStyle='#fff';c.fillRect(X+31.5,Y+40,1,22);
+    rect(c,X+21,Y-4,22,20,'#fff',4);rect(c,X+29,Y-1,6,14,'#e63946',1);rect(c,X+25,Y+3,14,6,'#e63946',1);break}
   case'bakery':shop(c,X,Y,'#fbe7c6','#b5651d','#e74c3c','🥖',icon,t);
     for(let k=0;k<3;k++)ell(c,X+14+k*5,Y+49,3,2,'#d99a4e');break;
   case'creamery':shop(c,X,Y,'#eaf4ff','#3d7fc4','#3d7fc4','🧀',icon,t);
@@ -2087,7 +2120,7 @@ function draw(t){
     for(const b of bombs){const p=Math.min(1,b.t/b.dur);ell(ctx,b.tx,b.ty,6+p*8,3+p*4,`rgba(0,0,0,${.12+p*.25})`)}}
   for(const a of animals)list.push([a.y,()=>{drawAnimal(ctx,a,t);if(a.zz)zzz(ctx,a.x,a.y-(a.kind==='cow'?34:24),t)}]);
   for(const cr of critters)if(!cr.hide)list.push([cr.y+(cr.kind==='parrot'?40:0),()=>drawCritter(ctx,cr,t)]);
-  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep)list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-40,'❗')}]);
+  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep)list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-40,v.v.req.hurt?'🩹':'❗')}]);
   list.push([player.y,()=>drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t)]);
   if(friend&&!friend.in)list.push([friend.y,()=>drawPerson(ctx,friend.x,friend.y,guestMode?PLAYER_LOOK:FRIEND_LOOK,friend.dir,friend.walk,friend.act,t)]);
   list.sort((a,b)=>a[0]-b[0]);for(const d of list)d[1]();
