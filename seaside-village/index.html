@@ -845,13 +845,15 @@ function critterUpdate(dt){
     else{if((cr.wt-=dt)<=0){cr.wt=1+Math.random()*3;cr.wa=Math.random()*Math.PI*2;cr.still=Math.random()<.4}
       if(cr.still){cr.walk=0;continue}vx=Math.cos(cr.wa);vy=Math.sin(cr.wa);sp=cr.kind==='moa'?T*.8:cr.kind==='terror'?T*1.1:cr.kind==='longneck'?T*.35:cr.kind==='bear'||cr.kind==='rex'?T*.6:cr.kind==='crab'?T*.7:T*.9}
     const l=Math.hypot(vx,vy)||1,mx=vx/l*sp*dt,my=vy/l*sp*dt;let moved=false;
-    if(animalOk(cr.x+mx,cr.y)){cr.x+=mx;moved=true}if(animalOk(cr.x,cr.y+my)){cr.y+=my;moved=true}
+    const ok=cr.kind==='terror'?terrorOk:animalOk;if(ok(cr.x+mx,cr.y)){cr.x+=mx;moved=true}if(ok(cr.x,cr.y+my)){cr.y+=my;moved=true}
     if(!moved)cr.wa=Math.random()*Math.PI*2;if(mx)cr.dir=mx<0?-1:1;cr.walk+=dt*10;
   }
 }
+// terror birds hop right over fences and gates (but not hedges)
+function terrorOk(x,y){const tx=Math.floor(x/T),ty=Math.floor(y/T);if(!inMap(tx,ty))return false;const o=objAt(ty*W+tx);return o&&(o.t==='fence'||o.t==='gate')?true:walkable(tx,ty)}
 // a terror bird runs around trees and rocks to get to e (you, or a villager)
 function chaseStep(cr,e,speed,dt){
-  if((cr.repath=(cr.repath||0)-dt)<=0){cr.repath=.35;const ct=tileOf(cr),pt=tileOf(e),r=findPath(ct.x,ct.y,(x,y)=>x===pt.x&&y===pt.y,null,(x,y)=>animalOk(x*T+16,y*T+20));cr.path=r?r.path:[]}
+  if((cr.repath=(cr.repath||0)-dt)<=0){cr.repath=.35;const ct=tileOf(cr),pt=tileOf(e),r=findPath(ct.x,ct.y,(x,y)=>x===pt.x&&y===pt.y,null,(x,y)=>(cr.kind==='terror'?terrorOk:animalOk)(x*T+16,y*T+20));cr.path=r?r.path:[]}
   const dir=cr.dir;if(cr.path&&cr.path.length&&followPath(cr,speed,dt)){cr.dir=cr.dir==='left'?-1:cr.dir==='right'?1:dir;return true}cr.dir=dir;return false;
 }
 const preyOk=v=>v&&villagers.includes(v)&&!v.asleep&&!v.v.hurt&&!isGuest(v.v.name);
