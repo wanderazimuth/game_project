@@ -98,7 +98,7 @@ const ITEMS={...CROPS,
   fish:{n:'Fish',e:'🐟',sell:30},wood:{n:'Wood',e:'🪵',sell:3},moss:{n:'Moss',e:'🌿',sell:3},stone:{n:'Stone',e:'🪨',sell:4},
   gem:{n:'Gem',e:'💎',sell:50},shell:{n:'Seashell',e:'🐚',sell:8},mushroom:{n:'Mushroom',e:'🍄',sell:12},
   flower:{n:'Wildflower',e:'🌼',sell:5},coconut:{n:'Coconut',e:'🥥',sell:15},pearl:{n:'Pearl',e:'🦪',sell:60},mappiece:{n:'Map Piece',e:'🗺️',sell:0,keep:1},
-  apple:{n:'Apple',e:'🍎',sell:10},acorn:{n:'Acorn',e:'🌰',sell:5},candy:{n:'Spooky Candy',e:'🍬',sell:20},bandaid:{n:'Band-aid',e:'🩹',sell:5},feather:{n:'Moa Feather',e:'🪶',sell:30},
+  apple:{n:'Apple',e:'🍎',sell:10},acorn:{n:'Acorn',e:'🌰',sell:5},candy:{n:'Spooky Candy',e:'🍬',sell:20},ribbon:{n:'Festival Ribbon',e:'🎀',sell:100},cottoncandy:{n:'Cotton Candy',e:'🍭',sell:10},bandaid:{n:'Band-aid',e:'🩹',sell:5},feather:{n:'Moa Feather',e:'🪶',sell:30},
   fossil:{n:'Fossil',e:'🦴',sell:40},amber:{n:'Amber',e:'🟠',sell:80}};
 
 // ── Things you can build. on: where it goes; walk: you can walk over it; tall: px drawn above it ──
@@ -473,6 +473,7 @@ function pickAt(wx,wy){
   for(const sc of scorps)if(!sc.hide&&Math.abs(wx-sc.x)<17&&Math.abs(wy-sc.y+6)<15)return{k:'scorp',sc};
   for(const cr of critters){if(cr.hide||cr.gone)continue;const big=cr.kind==='bear'||cr.kind==='rex'||cr.kind==='trike'||cr.kind==='terror'||cr.kind==='moa',tall=cr.kind==='longneck'?76:cr.kind==='rex'?50:cr.kind==='terror'?44:cr.kind==='moa'?44:0,up=cr.zz&&cr.kind==='parrot'?6:cr.kind==='parrot'||cr.kind==='bat'?24:cr.kind==='ptero'?(cr.zz?8:34):cr.kind==='ghost'?14:0;if(Math.abs(wx-cr.x)<(cr.kind==='longneck'?30:big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(tall||(big?32:24)))return{k:'critter',cr}}
   for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
+  if(festNow()){const fs=festSpot();for(const st of FEST_STALLS){const X=(fs.x+st.dx)*T,Y=(fs.y+st.dy)*T;if(wx>X-14&&wx<X+T+14&&wy>Y-46&&wy<Y+T)return{k:'fest',st}}}
   const tx=Math.floor(wx/T),ty=Math.floor(wy/T);
   for(let d=0;d<4;d++){
     const x=tx,y=ty+d;if(!inMap(x,y))continue;const i=y*W+x;if(!rev[i])continue;
@@ -506,6 +507,7 @@ function footprintOf(tg){
   if(tg.k==='galleon')return GAL_AT;
   if(tg.k==='mill')return MILL_AT;
   if(tg.k==='nest')return NEST_AT;
+  if(tg.k==='fest'){const fs=festSpot();return{x:fs.x+tg.st.dx,y:fs.y+tg.st.dy,w:1,h:1}}
   if(tg.k==='xspot')return X_AT;
   return{x:tg.x??tg.i%W,y:tg.y??(tg.i/W|0),w:1,h:1};
 }
@@ -554,6 +556,7 @@ function arrive(tg){
     case'galleon':enterGalleon();break;
     case'mill':ghostModal();break;
     case'nest':nestModal();break;
+    case'fest':festStall(tg.st);break;
     case'xspot':digModal();break;
     case'feat':{const kind=feat[tg.i];if(kind>=VOLC)break;if(kind)act(kind===ROCK?800:700,kind===ROCK?'mine':'chop',()=>doAct('feat',{i:tg.i}));break}
     case'obj':useObj(tg.o,act);break;
@@ -1252,7 +1255,8 @@ function newDay(quiet){
   for(const v of S.villagers)if(!(v.req&&v.req.hurt))v.req=Math.random()<.65?makeRequest():null; // a hurt villager still needs band-aids
   for(const p of pets())if(p.fed<S.day-1)p.hearts=Math.max(0,p.hearts-1); // nobody fed it yesterday
   if(S.villagers.length&&Math.random()<.6)S.home.drop={name:S.villagers[Math.random()*S.villagers.length|0].name,at:now()+30000+Math.random()*150000}; // someone drops by today
-  dirty();if(!quiet)toast(`☀️ Good morning! Day ${S.day}${S.villagers.some(v=>v.req)?' — some villagers need help ❗':''}`,3000);
+  dirty();if(!quiet&&isFestDay())setTimeout(()=>toast('🎪 It\'s Festival Day! Everyone is partying at the village square 🎉',3600),3200);
+  if(!quiet)toast(`☀️ Good morning! Day ${S.day}${S.villagers.some(v=>v.req)?' — some villagers need help ❗':''}`,3000);
 }
 if(S.day!==dayNow())newDay(true);else if(S.fg)loadForage();else genForage();
 
@@ -1487,6 +1491,8 @@ const ACT={
     S.templeOpen=1;S.coins+=1000;give('idol',1);dirty();refreshTray();
     if(TEMPLE_AT)for(let k=0;k<70;k++)confetti.push({x:(TEMPLE_AT.x+1.5)*T,y:TEMPLE_AT.y*T,vx:(Math.random()-.5)*280,vy:-120-Math.random()*240,c:['#ffd23f','#f39c12','#fff'][k%3],t:0});
     openModal('<h2>🗿 The Temple Treasure!</h2><p style="font-size:44px;text-align:center">🗿🪙</p><p>Inside, a golden glow… you found the <b>Golden Idol</b> and <b>1000 coins</b>!</p><div class="btns"><button class="btn" data-a="close">WOW!</button></div>')},
+  festPay({n}){if(!isFestDay()||S.festPlayed===S.day)return;S.festPlayed=S.day;n=Math.max(0,Math.min(400,Math.floor(+n)||0));S.coins+=n;if(n>=FEST_RIBBON)give('ribbon',1);dirty();refreshTray()},
+  festBuy({k}){const st=FEST_STALLS.find(s=>s.k===k);if(!st||!st.cost||!isFestDay()||S.coins<st.cost)return;S.coins-=st.cost;if(st.give)give(st.give,1);dirty();refreshTray()},
   workPay({k,n}){if(!JOBS[k]||!count(k))return;const w=S.worked||(S.worked={});if(w[k]===S.day)return;w[k]=S.day;n=Math.max(0,Math.min(600,Math.floor(+n)||0));S.coins+=n;tally('work');dirty();refreshTray()},
   skipJob(){if(S.job){newJob();toast('🔄 Here\'s a different job!')}},
   homePlace({k,x,y,cab,lh}){const F=FURN[k],H=homeOf(cab,lh);if(!H)return;if(!F)return;const why=furnWhy(k,x,y,null,H.items)||(S.coins<F.cost?`Need 🪙${F.cost} for ${F.n}`:'');if(why){toast(why);return}
@@ -1699,7 +1705,7 @@ function update(dt){
   const pt=tileOf(player),pk=pt.y*W+pt.x;
   if(inside){if(pt.x===DOOR_X&&pt.y===RH&&!player.path.length)exitHouse();else petsWander(dt)}
   else if(pk!==lastTile){lastTile=pk;reveal(pt.x,pt.y,4.6)}
-  trainUpdate(dt);ambUpdate(dt);
+  trainUpdate(dt);ambUpdate(dt);festUpdate(dt);
   // Villagers wander near home
   for(const v of villagers){
     v.talkT=Math.max(0,v.talkT-dt);
@@ -1726,7 +1732,12 @@ function update(dt){
       v.homing=0;v.asleep=1;v.walk=0;v.path=[];continue}
     v.homing=0;
     if(followPath(v,T*1.8,dt))continue;v.walk=0;
+    const fs=festNow()?festSpot():null;
+    if(fs&&Math.hypot(v.x-(fs.x*T+16),v.y-(fs.y*T+22))<T*6){v.dance=(v.dance||Math.random()*9)+dt*9;v.walk=v.dance} // dancing!
     if((v.wait-=dt)>0)continue;v.wait=2+Math.random()*5;
+    if(fs){const gx=fs.x+Math.round((Math.random()-.5)*9),gy=fs.y+Math.round((Math.random()-.5)*5),t=tileOf(v);
+      if(walkable(gx,gy)){const r=findPath(t.x,t.y,(x,y)=>x===gx&&y===gy,null);if(r)v.path=r.path}
+      if(Math.random()<.35){v.say=FEST_LINES[Math.random()*FEST_LINES.length|0];v.talkT=2.5}continue}
     const h=S.objs.find(o=>o.id===v.v.house);if(!h)continue;
     const gx=h.x+1+Math.round((Math.random()-.5)*10),gy=h.y+2+Math.round((Math.random()-.3)*8),t=tileOf(v);
     if(walkable(gx,gy)&&rev[gy*W+gx]){const r=findPath(t.x,t.y,(x,y)=>x===gx&&y===gy,null);if(r&&r.path.length<16)v.path=r.path}
@@ -2199,6 +2210,7 @@ function draw(t){
   if(NEST_AT)list.push([(NEST_AT.y+3)*T,()=>drawNest(ctx,t)]);
   if(X_AT)list.push([X_AT.y*T+2,()=>drawXSpot(ctx,t)]);
   if(amb)list.push([amb.y,()=>drawAmb(ctx,amb,t)]);
+  if(festNow())drawFest(list,t);
   if(train)drawTrainList(list,t);
   if(VOLCANO){list.push([(VOLCANO.y+3)*T,()=>drawVolcano(ctx,t)]);
     for(const d of lavaDrops)list.push([d.y,()=>drawLavaRock(ctx,d,t)]);
@@ -3376,6 +3388,48 @@ function netTick(dt){
   if(net.host&&(netDirty&&(net.snapT-=dt)<=0||(net.fullT-=dt)<=0)){netDirty=false;net.snapT=.25;net.fullT=5;netSend(snapMsg())}
 }
 
+// ── Festival Day: every 4th day the villagers throw a party at the village square ──
+const FEST_EVERY=4,FEST_RIBBON=80;
+const isFestDay=()=>S.day>=FEST_EVERY&&S.day%FEST_EVERY===0;
+const festNow=()=>isFestDay()&&!bedtime()&&S.villagers.length>0&&!inside;
+const FEST_LINES=['Happy Festival Day! 🎉','Wheee! 💃','I love this song! 🎵','Have you tried the ice cream? 🍦','Pop some balloons! 🎈','Best party ever!','Dance with me! 🕺','Yay, festival! 🎪'];
+const FEST_STALLS=[{k:'ice',e:'🍦',n:'Ice Cream',cost:10,dx:-3,dy:0,col:'#ff8fb8'},{k:'game',e:'🎈',n:'Balloon Pop',cost:0,dx:0,dy:-3,col:'#5fb8ff'},{k:'candy',e:'🍭',n:'Cotton Candy',cost:15,give:'cottoncandy',dx:3,dy:0,col:'#b980ff'}];
+// the village square: in front of a fountain if you have one, or Your House, or the beach where you landed
+function festSpot(){const f=S.objs.find(o=>o.t==='fountain')||S.objs.find(o=>o.t==='myhouse');
+  return f?{x:f.x+(BUILD[f.t].w>>1),y:f.y+BUILD[f.t].h+2}:{x:SPAWN.x,y:SPAWN.y-4}}
+let festT=0;
+function festUpdate(dt){
+  if(!festNow())return;const fs=festSpot(),X=fs.x*T+16,Y=fs.y*T;
+  if((festT-=dt)<=0){festT=.5+Math.random()*.8;floats.push({x:X+(Math.random()-.5)*T*7,y:Y-10-Math.random()*30,txt:['🎵','🎶','🎉','✨'][Math.random()*4|0],t:0})}
+  if(Math.random()<dt*.15)for(let k=0;k<30;k++)confetti.push({x:X+(Math.random()-.5)*T*4,y:Y-T,vx:(Math.random()-.5)*220,vy:-100-Math.random()*200,c:SHIRTS[k%8],t:0});
+}
+function festStall(st){
+  if(!festNow()){toast('The festival is over — see you next time! 🎪');return}
+  if(st.k==='game'){
+    if(S.festPlayed===S.day){toast('🎈 You already played Balloon Pop today — come back next festival!');return}
+    openModal(`<h2>🎈 Balloon Pop!</h2><p>Pop as many balloons as you can before time runs out! 🌟 Gold balloons are worth extra.</p><p>Score <b>🪙${FEST_RIBBON}</b> or more to win a 🎀 <b>Festival Ribbon</b>! (One go per festival)</p>
+      <div class="btns"><button class="btn" data-a="go">🎈 Play!</button><button class="btn gray" data-a="close">Not now</button></div>`,{go:()=>{closeModal();
+        player.path=[];player.target=null;player.act=null;player.steer=null;
+        work={k:'fest',fest:1,job:{n:'Balloon Pop',icon:'🎈',say:'Pop the balloons! 🎈',items:['🎈','🎈','🎈','🎈'],done:'💥',bg:['#fff1f8','#cfe8ff']},t:0,dur:20,next:.6,targets:[],earned:0,fx:[]};workEl.style.display='block'}});return}
+  openModal(`<h2>${st.e} ${st.n}</h2><p>${st.k==='ice'?'“Ice cream! Get your ice cream! Strawberry, chocolate or vanilla!”':'“Fluffy cotton candy, as pink as a sunset!”'}</p>
+    <div class="btns"><button class="btn" data-a="buy" ${S.coins<st.cost?'disabled':''}>Buy one — 🪙${st.cost}</button><button class="btn gray" data-a="close">No thanks</button></div>`,
+    {buy:()=>{closeModal();doAct('festBuy',{k:st.k});for(let k=0;k<3;k++)setTimeout(()=>floats.push({x:player.x+(k-1)*10,y:player.y-40,txt:'❤️',t:0}),k*150);
+      toast(st.k==='ice'?`🍦 Yum! ${['Strawberry','Chocolate','Vanilla','Mint','Bubblegum'][Math.random()*5|0]} — your favorite!`:'🍭 You got some cotton candy! It\'s in your bag',2600)}});
+}
+// bunting over the square, and the stalls
+function drawFest(list,t){
+  const fs=festSpot(),cx=fs.x*T+16,cy=fs.y*T+8,L=cx-T*4.5,R=cx+T*4.5,top=cy-T*3-30;
+  list.push([cy-T*3.5,()=>{const c=ctx;for(const px of[L,R])rect(c,px-2,top,4,T*3+40,'#8a5a2c',1);
+    c.strokeStyle='#6b4226';c.lineWidth=1.2;c.beginPath();c.moveTo(L,top+2);c.quadraticCurveTo(cx,top+30,R,top+2);c.stroke();
+    for(let k=1;k<12;k++){const u=k/12,x=L+(R-L)*u,y=top+2+ 28*4*u*(1-u)*.5*2/2+Math.sin(t*3+k)*1;poly(c,SHIRTS[k%8],x-5,y,x+5,y,x,y+10)}}]);
+  for(const st of FEST_STALLS){const X=(fs.x+st.dx)*T,Y=(fs.y+st.dy)*T;
+    list.push([Y+T,()=>{const c=ctx;ell(c,X+16,Y+T-2,22,5,'rgba(0,0,0,.18)');rect(c,X-6,Y+8,44,22,'#fff4e0',3);rect(c,X-6,Y+22,44,8,'#e8d4b0',2);
+      rect(c,X-4,Y-24,3,32,'#8a5a2c');rect(c,X+33,Y-24,3,32,'#8a5a2c');
+      for(let k=0;k<6;k++)rect(c,X-8+k*8,Y-30,8,10,k%2?'#fff':st.col,2);for(let k=0;k<6;k++)ell(c,X-4+k*8,Y-20,4,3,k%2?'#fff':st.col);
+      c.font='16px '+EMOJI_FONT;c.textAlign='center';c.textBaseline='middle';c.fillText(st.e,X+16,Y+2);
+      if(st.k==='game')for(let k=0;k<3;k++){const bx=X+2+k*14,by=Y-44+Math.sin(t*2+k)*3;c.strokeStyle='#999';c.lineWidth=1;c.beginPath();c.moveTo(bx,by+8);c.lineTo(X+16,Y-28);c.stroke();ell(c,bx,by,6,7.5,['#e74c3c','#ffd23f','#2ecc71'][k])}
+      else{const g=(Math.sin(t*3+st.dx)+1)/2;bubble(c,X+16,Y-34+g*3,st.e)}}]);}
+}
 // ── Work: a job at your Market, Bakery or Creamery (once a day each) ─────────────
 // A tapping game, like in Dream House: tap each order before it disappears.
 const JOBS={
@@ -3399,6 +3453,8 @@ function startWork(k){
 }
 function endWork(){
   const w=work;work=null;workEl.style.display='none';
+  if(w.fest){doAct('festPay',{n:w.earned});setTimeout(refreshTray,guestMode?300:0);
+    openModal(`<h2>🎈 POP POP POP!</h2><p style="font-size:44px;text-align:center">🎈🎉</p><p>You popped balloons for <b>🪙${w.earned}</b>!${w.earned>=FEST_RIBBON?' And you won a <b>🎀 Festival Ribbon</b>!':` Score ${FEST_RIBBON} to win a 🎀 Festival Ribbon next time!`}</p><div class="btns"><button class="btn" data-a="close">Yay!</button></div>`);return}
   doAct('workPay',{k:w.k,n:w.earned});setTimeout(refreshTray,guestMode?300:0);
   openModal(`<h2>🎉 Great work!</h2><p style="font-size:44px;text-align:center">${w.job.icon}</p><p>You were a great ${w.job.n.toLowerCase()} today and earned <b>🪙${w.earned}</b>!</p><div class="btns"><button class="btn" data-a="close">Yay!</button></div>`);
 }
