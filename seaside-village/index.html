@@ -134,6 +134,7 @@ const BUILD={
 const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','lighthouse'];
 let guestMode=false,guestSel='carrot'; // guestMode: you're on a friend's island
 let visit=null,hostPos=null; // visit: the villager house you're in (null: Your House)
+let inCab=false; // inCab: inside the cabin (where a friend who joins your island stays)
 let inside=false,outPos=null,itool='color',inG=null,inLifted=null,sleepFade=0; // inside: in Your House
 let net=null,friend=null,actor=null; // actor: the friend, while the host does something for them
 const mySeed=()=>guestMode?guestSel:S.sel;
@@ -514,7 +515,7 @@ function useObj(o,act){
       if(!produced(o)){toast('🎣 The fish aren\'t biting… try again soon');break}
       act(1400,'fish',()=>doAct('fish',{id:o.id}));break}
     case'myhouse':enterHouse();break;
-    case'cabin':toast(net&&net.joined?'🛖 Your friend\'s cabin':'🛖 A friend can join your island and stay here — tap 👥 at the top');break;
+    case'cabin':enterCabin();break;
     case'house':{const v=villagers.find(v=>v.v.house===o.id);if(v&&isGuest(v.v.name))toast(`🏠 ${v.v.name} isn't home — they're visiting your house!`);else if(v)enterHouse(o.id);else toast('🏠 An empty house — nobody lives here yet');break}
     case'well':toast('💧 Crops within 3 steps of the well grow 2× faster');break;
     case'market':toast('🧺 The market makes everything sell for 20% more');break;
@@ -893,7 +894,7 @@ function enterIsland(ns){
   rebuildOcc();roomCache.clear();petAt.clear();guestAt.clear();spawnScorps();
   if(S.day!==dayNow())newDay(true);else if(S.fg)loadForage();else genForage();
   villagers=[];S.villagers.forEach(spawnVillager);spawnAnimals();
-  inside=false;visit=null;hostPos=null;outPos=null;
+  inside=false;inCab=false;visit=null;hostPos=null;outPos=null;
   Object.assign(player,{x:S.px,y:S.py,path:[],target:null,act:null,steer:null});unstick(player);
   cam.x=player.x;cam.y=player.y;lastTile=-1;lastCoins=-1;
   reveal(Math.floor(player.x/T),Math.floor(player.y/T),6);setMode('play');
@@ -1159,17 +1160,17 @@ const ACT={
     if(TEMPLE_AT)for(let k=0;k<70;k++)confetti.push({x:(TEMPLE_AT.x+1.5)*T,y:TEMPLE_AT.y*T,vx:(Math.random()-.5)*280,vy:-120-Math.random()*240,c:['#ffd23f','#f39c12','#fff'][k%3],t:0});
     openModal('<h2>🗿 The Temple Treasure!</h2><p style="font-size:44px;text-align:center">🗿🪙</p><p>Inside, a golden glow… you found the <b>Golden Idol</b> and <b>1000 coins</b>!</p><div class="btns"><button class="btn" data-a="close">WOW!</button></div>')},
   skipJob(){if(S.job){newJob();toast('🔄 Here\'s a different job!')}},
-  homePlace({k,x,y}){const F=FURN[k];if(!F)return;const why=furnWhy(k,x,y,null,S.home.items)||(S.coins<F.cost?`Need 🪙${F.cost} for ${F.n}`:'');if(why){toast(why);return}
-    S.coins-=F.cost;S.home.items.push({id:S.home.next++,k,x,y,c:0});if(F.cost)floatAt((x+F.w/2)*T,y*T,`-🪙${F.cost}`);
+  homePlace({k,x,y,cab}){const F=FURN[k],H=homeOf(cab);if(!F)return;const why=furnWhy(k,x,y,null,H.items)||(S.coins<F.cost?`Need 🪙${F.cost} for ${F.n}`:'');if(why){toast(why);return}
+    S.coins-=F.cost;H.items.push({id:H.next++,k,x,y,c:0});if(F.cost)floatAt((x+F.w/2)*T,y*T,`-🪙${F.cost}`);
     if(inside)unstick(player,inWalkable);dirty()},
-  homeRemove({id}){const H=S.home,k=H.items.findIndex(f=>f.id===id);if(k<0)return;const F=FURN[H.items[k].k],f=H.items[k],back=Math.floor(F.cost/2);
+  homeRemove({id,cab}){const H=homeOf(cab),k=H.items.findIndex(f=>f.id===id);if(k<0)return;const F=FURN[H.items[k].k],f=H.items[k],back=Math.floor(F.cost/2);
     H.items.splice(k,1);S.coins+=back;if(back)floatAt((f.x+F.w/2)*T,f.y*T,`+🪙${back}`);
     if(f.store){for(const it in f.store)give(it,f.store[it]);toast('🧰 Everything in the chest went back in your bag')}dirty()},
-  chestMove({id,k,n,out}){const f=S.home.items.find(f=>f.id===id&&f.k==='chest');if(!f||!ITEMS[k])return;const st=f.store||(f.store={}),from=out?st:S.inv,to=out?S.inv:st;
+  chestMove({id,k,n,out,cab}){const f=homeOf(cab).items.find(f=>f.id===id&&f.k==='chest');if(!f||!ITEMS[k])return;const st=f.store||(f.store={}),from=out?st:S.inv,to=out?S.inv:st;
     n=Math.min(Math.floor(+n)||0,from[k]||0);if(n<=0)return;from[k]-=n;if(!from[k])delete from[k];to[k]=(to[k]||0)+n;dirty();refreshTray()},
-  homeMove({id,x,y}){const f=S.home.items.find(f=>f.id===id);if(!f)return;const why=furnWhy(f.k,x,y,f,S.home.items);if(why){toast(why);return}
+  homeMove({id,x,y,cab}){const H=homeOf(cab),f=H.items.find(f=>f.id===id);if(!f)return;const why=furnWhy(f.k,x,y,f,H.items);if(why){toast(why);return}
     f.x=x;f.y=y;if(inside)unstick(player,inWalkable);dirty()},
-  homeColor({id}){const f=S.home.items.find(f=>f.id===id);if(f&&FURN[f.k].col){f.c=((f.c||0)+1)%FCOLS.length;dirty()}},
+  homeColor({id,cab}){const f=homeOf(cab).items.find(f=>f.id===id);if(f&&FURN[f.k].col){f.c=((f.c||0)+1)%FCOLS.length;dirty()}},
   petAdopt({k}){const P=PETS[k];if(!P)return;if(pets().length>=MAX_PETS){toast(`Your house is full — you can have ${MAX_PETS} pets`);return}
     if(S.coins<P.cost){toast(`Need 🪙${P.cost} for a ${P.n}`);return}
     const used=pets().map(p=>p.name),name=P.names.find(n=>!used.includes(n))||P.n;
@@ -1186,8 +1187,8 @@ const ACT={
   invite({name}){if(!count('myhouse'))return;const v=S.villagers.find(v=>v.name===name);if(!v||isGuest(name))return;
     if(guests().length>=MAX_GUESTS){toast('Your house is full of visitors! 🎉');return}
     guests().push({name,until:now()+VISIT_MS});tally('visit');dirty();toast(`🔔 Knock knock! ${name} is here!`)},
-  homeWall({i}){if(WALLPAPERS[i]){S.home.wall=i;dirty()}},
-  homeFloor({i}){if(FLOORS[i]){S.home.floor=i;dirty()}},
+  homeWall({i,cab}){if(WALLPAPERS[i]){homeOf(cab).wall=i;dirty()}},
+  homeFloor({i,cab}){if(FLOORS[i]){homeOf(cab).floor=i;dirty()}},
   sleep(){const tod=((now()-S.t0)%DAY_MS)/DAY_MS;if(tod<.6){toast('😴 You\'re not sleepy yet — come back in the evening');return}
     S.t0=now()-(dayNow()+.01)*DAY_MS;dirty();if(!actor)sleepFade=1.2;else netSend({t:'sleep'});toast('💤 Good night… ☀️ Good morning!',2600)},
   remove({id}){const o=byId(id);if(o)doRemove(o)},
@@ -1231,7 +1232,7 @@ let lastCoins=-1;
 function setMode(m){
   mode=m;ghost=null;lifted=null;inG=null;inLifted=null;modeBtn.textContent=m==='play'?(inside?'🎨 Decorate':'🔨 Build'):'▶ Play';
   if(m==='build'){tool=BUILD[tool]?'hand':tool;player.path=[];player.target=null;player.steer=null}
-  document.getElementById('zoom').style.display=inside?'none':'';modeBtn.style.display=inside&&visit?'none':'';
+  document.getElementById('zoom').style.display=inside?'none':'';modeBtn.style.display=inside&&(visit||inCab&&!canDecorate())?'none':'';
   refreshTray();
 }
 modeBtn.onclick=()=>setMode(mode==='play'?'build':'play');
@@ -1293,7 +1294,7 @@ addEventListener('keydown',e=>{
   if(busy()){if(e.key==='Escape')closeModal();return}
   const k=e.key.toLowerCase();keys.add(k);
   if(k===' '||k==='e'){e.preventDefault();if(mode==='play'){if(inside)useNearestIn();else useNearest()}}
-  if(k==='b'&&!visit)setMode(mode==='play'?'build':'play');
+  if(k==='b'&&!(inside&&(visit||inCab&&!canDecorate())))setMode(mode==='play'?'build':'play');
   if(k==='escape'&&mode==='build'){if(inside){itool='color';inLifted=null;inG=null;refreshTray()}else pickTool('hand')}
 });
 addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
@@ -1827,9 +1828,14 @@ const FURN={
 const WALLPAPERS=[['Cream','#fbf1dc',0],['Mint','#cdeedd',1],['Sky','#cfe6ff',0],['Pink','#ffd9e6',1],['Lavender','#e4d9ff',0],['Sunny','#fff1a8',1],['Wood','#c8935a',2],['Starry','#2c3a6b',3]];
 const FLOORS=[['Wood','#c18a55',0],['Light wood','#e2bf8c',0],['Checker','#f4f4f4',1],['Blue carpet','#6d9de0',2],['Pink carpet','#f2a7c3',2],['Stone','#b9b4ad',3]];
 const roomCache=new Map();
-function room(){return visit?visitRoom(visit):S.home}
-function roomPets(){return visit?room().pets:pets()}
-function roomKey(){return inside?visit||'me':0} // which room you're in, for the friend's screen
+function room(){return inCab?cabinRoom():visit?visitRoom(visit):S.home}
+function roomPets(){return inCab?[]:visit?room().pets:pets()}
+function roomKey(){return inside?inCab?'cab':visit||'me':0}
+// The cabin: whoever stays in it (the friend who joins your island) decorates it, just like Your House
+function cabinRoom(){return S.cabin||(S.cabin={wall:2,floor:1,next:3,items:[{id:1,k:'bed',x:0,y:0,c:1},{id:2,k:'window',x:4,y:-2,c:0}]})}
+function homeOf(cab){return cab?cabinRoom():S.home}
+const withRoom=a=>inCab?{...a,cab:1}:a; // tell the island which room you're decorating
+const canDecorate=()=>!inCab||guestMode; // which room you're in, for the friend's screen
 function visitRoom(id){if(!roomCache.has(id))roomCache.set(id,genRoom(id));return roomCache.get(id)}
 // can every free floor tile be reached from the door?
 function roomOpen(items){
@@ -1866,6 +1872,7 @@ function guests(){return S.home.guests||(S.home.guests=[])}
 function isGuest(name){return guests().some(g=>g.name===name)}
 // the villagers in the room you're in, and where they are: [villager, spot]
 function speakers(){
+  if(inCab)return[];
   if(visit){const vw=hostVw();return vw&&hostPos?[[vw,hostPos]]:[]}
   return guests().map(g=>[villagers.find(v=>v.v.name===g.name),guestAt.get(g.name)]).filter(([v,q])=>v&&q);
 }
@@ -1938,20 +1945,22 @@ function furnWhy(k,x,y,ignore,list=room().items){
   if(!F.walk&&x<=DOOR_X&&x+F.w>DOOR_X&&y+F.h>=RH)return'Keep the door free';
   return'';
 }
-function enterHouse(id){
-  visit=id||null;inside=true;outPos={x:player.x,y:player.y};player.x=DOOR_X*T+16;player.y=(RH-1)*T+22;player.dir='up';
+function enterCabin(){enterHouse(null,true)}
+function enterHouse(id,cab){
+  visit=id||null;inCab=!!cab;inside=true;outPos={x:player.x,y:player.y};player.x=DOOR_X*T+16;player.y=(RH-1)*T+22;player.dir='up';
   player.path=[];player.target=null;player.steer=null;unstick(player,inWalkable);itool='color';
   hostPos=null;const vw=hostVw();
   if(vw)hostPos=spotIn();
   setMode('play');
-  if(!visit){guestAt.clear();for(const g of guests()){const q=spotIn();q.first=1;guestAt.set(g.name,q)}}
+  if(!visit&&!inCab){guestAt.clear();for(const g of guests()){const q=spotIn();q.first=1;guestAt.set(g.name,q)}}
   if(vw){vw.say='Welcome to my home!';vw.talkT=3;toast(`🏠 You're visiting ${vw.v.name}`,2400)}
+  else if(inCab)toast(guestMode?'🛖 Your cabin! Tap 🎨 Decorate to make it your own':net&&net.joined?'🛖 Your friend\'s cabin':'🛖 The guest cabin — a friend who joins your island (👥) stays here and decorates it',3200);
   else toast('🏠 Welcome home! Tap 🎨 Decorate to add furniture',2800);
 }
 function hostVw(){return visit?villagers.find(v=>v.v.house===visit&&!isGuest(v.v.name)):null}
 function exitHouse(){
-  const h=visit?byId(visit):S.objs.find(o=>o.t==='myhouse');
-  inside=false;visit=null;hostPos=null;
+  const h=visit?byId(visit):S.objs.find(o=>o.t===(inCab?'cabin':'myhouse'));
+  inside=false;inCab=false;visit=null;hostPos=null;
   if(h){player.x=(h.x+1)*T+(h.t==='myhouse'?16:0);player.y=(h.y+2)*T+22}else if(outPos){player.x=outPos.x;player.y=outPos.y}
   player.dir='down';player.path=[];player.target=null;unstick(player);cam.x=player.x;cam.y=player.y;lastTile=-1;setMode('play');
 }
@@ -1988,12 +1997,12 @@ function useFurn(f){
   const F=FURN[f.k],b=furnBox(f);facePoint((b.x+b.w/2)*T,(b.y+b.h/2)*T);
   if(F.say==='sleep'){if(visit){const vw=hostVw();toast(`That's ${vw?vw.v.name+'\'s':'their'} bed — no napping! 😄`)}else doAct('sleep',{})}
   else if(F.say==='music'){for(let k=0;k<4;k++)setTimeout(()=>floats.push({x:(b.x+1)*T+(Math.random()-.5)*30,y:b.y*T-30,txt:['🎵','🎶'][k%2],t:0}),k*250);toast('🎹 La la la!')}
-  else if(F.say==='chest'){if(visit){const vw=hostVw();toast(`🧰 That's ${vw?vw.v.name+'\'s':'their'} chest — no peeking!`)}else chestModal(f.id)}
+  else if(F.say==='chest'){if(visit){const vw=hostVw();toast(`🧰 That's ${vw?vw.v.name+'\'s':'their'} chest — no peeking!`)}else chestModal(f.id,inCab)}
   else if(F.say==='clock'){const tod=((now()-S.t0)%DAY_MS)/DAY_MS,mins=Math.floor(tod*1440)+360,h=Math.floor(mins/60)%24;toast(`🕰️ It's ${h%12||12} o'clock${h<12?' in the morning':h<18?' in the afternoon':' at night'} on day ${S.day}`)}
   else toast(`${F.e} ${F.say}`);
 }
-function chestModal(id){
-  const f=S.home.items.find(f=>f.id===id);if(!f){closeModal();return}
+function chestModal(id,cab){
+  const f=homeOf(cab).items.find(f=>f.id===id);if(!f){closeModal();return}
   const st=f.store||{},inChest=Object.keys(st).filter(k=>st[k]>0),inBag=Object.keys(S.inv).filter(k=>S.inv[k]>0&&ITEMS[k]);
   const row=(k,n,out)=>`<div class="irow"><span class="ie">${ITEMS[k].e}</span><span class="in">${ITEMS[k].n} ×${n}</span>
     <button class="btn gray" data-a="${out?'take':'put'}" data-v="${k}:1" style="padding:0 10px">${out?'Take':'Put'} 1</button><button class="btn${out?' blue':''}" data-a="${out?'take':'put'}" data-v="${k}:${n}" style="padding:0 10px">All</button></div>`;
@@ -2002,17 +2011,17 @@ function chestModal(id){
   h+='<p style="margin-top:10px"><b>In your bag</b></p>'+(inBag.length?inBag.map(k=>row(k,S.inv[k],false)).join(''):'<p style="font-size:13px;opacity:.7">Your bag is empty.</p>');
   h+=`<div class="btns">${inBag.length?'<button class="btn" data-a="all">Put everything in</button>':''}${inChest.length?'<button class="btn blue" data-a="out">Take everything out</button>':''}<button class="btn gray" data-a="close">Close</button></div>`;
   // after moving things, show the chest again (a friend's screen waits a moment for the island to come back)
-  const again=()=>setTimeout(()=>{if(busy())chestModal(id)},guestMode?300:0);
-  const mv=(v,out)=>{const[k,n]=v.split(':');doAct('chestMove',{id,k,n:+n,out});again()};
+  const again=()=>setTimeout(()=>{if(busy())chestModal(id,cab)},guestMode?300:0);
+  const mv=(v,out)=>{const[k,n]=v.split(':');doAct('chestMove',{id,k,n:+n,out,cab});again()};
   openModal(h,{put:v=>mv(v,false),take:v=>mv(v,true),
-    all:()=>{for(const k of inBag)doAct('chestMove',{id,k,n:S.inv[k],out:false});again()},
-    out:()=>{for(const k of inChest)doAct('chestMove',{id,k,n:st[k],out:true});again()}});
+    all:()=>{for(const k of inBag)doAct('chestMove',{id,k,n:S.inv[k],out:false,cab});again()},
+    out:()=>{for(const k of inChest)doAct('chestMove',{id,k,n:st[k],out:true,cab});again()}});
 }
 function inTray(chip){
   if(mode==='play'){
     chip('<span class="e">🚪</span>Go outside',false,false,exitHouse);
     chip(`<span class="e">🎒</span>Bag<span class="p">${invTotal()} things</span>`,false,false,bagModal);
-    if(!visit)chip(`<span class="e">📨</span>Invite<span class="p">${guests().length?guests().length+' here':'a villager'}</span>`,false,false,inviteModal);
+    if(!visit&&!inCab)chip(`<span class="e">📨</span>Invite<span class="p">${guests().length?guests().length+' here':'a villager'}</span>`,false,false,inviteModal);
     return}
   chip('<span class="e">🎨</span>Color',itool==='color',false,()=>{itool='color';inLifted=null;inG=null;refreshTray();toast('Tap a bed, sofa or rug to change its color')});
   chip('<span class="e">↔️</span>Move<span class="p">Free</span>',itool==='move',false,()=>{itool='move';inLifted=null;inG=null;refreshTray();toast('Tap something to pick it up')});
@@ -2021,12 +2030,12 @@ function inTray(chip){
     const d=chip(`${F.n}<span class="p">🪙${F.cost}</span>`,itool===k,S.coins<F.cost,()=>{itool=k;inLifted=null;inG=null;refreshTray();toast(`${F.e} ${F.n}: ${F.wall?'tap the wall':'tap the floor'} to put it there`)});
     const fk='f_'+curKind+k;icons[fk]=icons[fk]||furnIcon(k);const ic=icons[fk].cloneNode();ic.getContext('2d').drawImage(icons[fk],0,0);d.prepend(ic)}
   const lbl=t=>{const l=document.createElement('span');l.className='lbl';l.textContent=t;tray.appendChild(l)};
-  lbl('PETS');
+  if(!inCab){lbl('PETS');
   for(const k in PETS){const P=PETS[k];
     const d=chip(`${P.n}<span class="p">🪙${P.cost}</span>`,false,S.coins<P.cost,()=>adoptModal(k));
-    icons['p_'+k]=icons['p_'+k]||petIcon(k);const ic=icons['p_'+k].cloneNode();ic.getContext('2d').drawImage(icons['p_'+k],0,0);d.prepend(ic)}
-  lbl('WALLS');WALLPAPERS.forEach(([n,col],i)=>chip(`<span class="e" style="width:44px;height:30px;border-radius:6px;background:${col};margin-bottom:4px"></span>${n}`,S.home.wall===i,false,()=>{doAct('homeWall',{i});setTimeout(refreshTray,150)}));
-  lbl('FLOORS');FLOORS.forEach(([n,col],i)=>chip(`<span class="e" style="width:44px;height:30px;border-radius:6px;background:${col};margin-bottom:4px"></span>${n}`,S.home.floor===i,false,()=>{doAct('homeFloor',{i});setTimeout(refreshTray,150)}));
+    icons['p_'+k]=icons['p_'+k]||petIcon(k);const ic=icons['p_'+k].cloneNode();ic.getContext('2d').drawImage(icons['p_'+k],0,0);d.prepend(ic)}}
+  lbl('WALLS');WALLPAPERS.forEach(([n,col],i)=>chip(`<span class="e" style="width:44px;height:30px;border-radius:6px;background:${col};margin-bottom:4px"></span>${n}`,room().wall===i,false,()=>{doAct('homeWall',withRoom({i}));setTimeout(refreshTray,150)}));
+  lbl('FLOORS');FLOORS.forEach(([n,col],i)=>chip(`<span class="e" style="width:44px;height:30px;border-radius:6px;background:${col};margin-bottom:4px"></span>${n}`,room().floor===i,false,()=>{doAct('homeFloor',withRoom({i}));setTimeout(refreshTray,150)}));
 }
 function furnIcon(k){
   const F=FURN[k],c=document.createElement('canvas');c.width=112;c.height=88;const x=c.getContext('2d'),tall=F.tall||0;
@@ -2043,16 +2052,16 @@ function inDown(e){
 }
 function inUp(e,d,quick,w){
   if(FURN[itool]){if(inG){const F=FURN[itool],why=furnWhy(itool,inG.x,inG.y)||(S.coins<F.cost?`Need 🪙${F.cost} for ${F.n} — ship more crops!`:'');
-      if(why)toast(why);else doAct('homePlace',{k:itool,x:inG.x,y:inG.y})}if(e.pointerType!=='mouse')inG=null;return}
+      if(why)toast(why);else doAct('homePlace',withRoom({k:itool,x:inG.x,y:inG.y}))}if(e.pointerType!=='mouse')inG=null;return}
   if(itool==='move'){
     if(inLifted&&d.lifted&&!d.moved){toast(`Now tap where the ${FURN[inLifted.k].n} should go`);return}
-    if(inLifted&&inG){const why=furnWhy(inLifted.k,inG.x,inG.y,inLifted);if(why){toast(why);return}doAct('homeMove',{id:inLifted.id,x:inG.x,y:inG.y});inLifted=null;inG=null}
+    if(inLifted&&inG){const why=furnWhy(inLifted.k,inG.x,inG.y,inLifted);if(why){toast(why);return}doAct('homeMove',withRoom({id:inLifted.id,x:inG.x,y:inG.y}));inLifted=null;inG=null}
     else if(quick)toast('Tap something to pick it up');return}
   if(!quick)return;
   const p=petPick(w.x,w.y);if(p){petModal(p,itool==='remove');return}
   const f=furnPick(w.x,w.y);if(!f)return;
-  if(itool==='remove')doAct('homeRemove',{id:f.id});
-  else if(FURN[f.k].col)doAct('homeColor',{id:f.id});
+  if(itool==='remove')doAct('homeRemove',withRoom({id:f.id}));
+  else if(FURN[f.k].col)doAct('homeColor',withRoom({id:f.id}));
   else toast(`${FURN[f.k].e} ${FURN[f.k].n}`);
 }
 function drawFurn(c,f,t,icon){styled(c,themeFor(),()=>drawFurnIn(c,f,t,icon))}
@@ -2135,7 +2144,7 @@ function petPos(p){
 }
 function petsWander(dt){
   if(hostPos)wanderIn(hostPos,T*1.3,dt);
-  if(!visit)visitorsWander(dt);
+  if(!visit&&!inCab)visitorsWander(dt);
   for(const p of roomPets()){const q=petPos(p);q.happy=Math.max(0,q.happy-dt);
     if(q.happy>0){q.walk=0;continue}
     wanderIn(q,T*PETS[p.k].speed,dt);
@@ -2144,7 +2153,7 @@ function petsWander(dt){
 // a pet gets fed: a heart, and a happy pet sometimes finds coins
 function feedPet(p){
   p.fed=S.day;p.hearts=Math.min(5,p.hearts+1);tally('feed');dirty();
-  const q=petPos(p),here=inside&&!visit; // the hearts show only if you're in Your House
+  const q=petPos(p),here=inside&&!visit&&!inCab; // the hearts show only if you're in Your House
   if(here)floatAt(q.x,q.y-30,'❤️');
   if(p.hearts>=5&&Math.random()<.5){S.coins+=25;if(here)floatAt(q.x,q.y-46,'+🪙25');toast(`${p.name} found 🪙25 under the sofa for you!`,2800);return true}
   return false;
@@ -2402,8 +2411,8 @@ function applySnap(m){
     guestMode=true;net.joined=true;updateNetBtn();
     const cab=S.objs.find(o=>o.t==='cabin');
     if(cab){player.x=(cab.x+1)*T;player.y=(cab.y+2)*T+22}else{player.x=S.px+T;player.y=S.py}
-    player.path=[];player.target=null;player.act=null;inside=false;cam.x=player.x;cam.y=player.y;
-    closeModal();setMode('play');toast('🛖 Welcome to your friend\'s island! You\'re staying in the cabin.',3500);
+    player.path=[];player.target=null;player.act=null;inside=false;inCab=false;cam.x=player.x;cam.y=player.y;
+    closeModal();setMode('play');toast('🛖 Welcome to your friend\'s island! You\'re staying in the cabin — go inside to decorate it!',3500);
   }
   unstick(player,pWalk());
   const sig=invTotal()+'|'+S.found.join();if(first||sig!==lastTraySig){lastTraySig=sig;refreshTray()}
