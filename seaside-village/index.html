@@ -459,7 +459,7 @@ unstick(player);
 // ── What did you tap? ────────────────────────────────────────────────────────
 function pickAt(wx,wy){
   for(const sc of scorps)if(!sc.hide&&Math.abs(wx-sc.x)<17&&Math.abs(wy-sc.y+6)<15)return{k:'scorp',sc};
-  for(const cr of critters){if(cr.hide)continue;const big=cr.kind==='bear'||cr.kind==='rex'||cr.kind==='trike',tall=cr.kind==='longneck'?76:cr.kind==='rex'?50:0,up=cr.kind==='parrot'||cr.kind==='bat'?24:cr.kind==='ptero'?34:cr.kind==='ghost'?14:0;if(Math.abs(wx-cr.x)<(cr.kind==='longneck'?30:big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(tall||(big?32:24)))return{k:'critter',cr}}
+  for(const cr of critters){if(cr.hide)continue;const big=cr.kind==='bear'||cr.kind==='rex'||cr.kind==='trike'||cr.kind==='terror',tall=cr.kind==='longneck'?76:cr.kind==='rex'?50:cr.kind==='terror'?44:0,up=cr.kind==='parrot'||cr.kind==='bat'?24:cr.kind==='ptero'?34:cr.kind==='ghost'?14:0;if(Math.abs(wx-cr.x)<(cr.kind==='longneck'?30:big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(tall||(big?32:24)))return{k:'critter',cr}}
   for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
   const tx=Math.floor(wx/T),ty=Math.floor(wy/T);
   for(let d=0;d<4;d++){
@@ -760,7 +760,7 @@ function drawScorp(c,sc,t){
 // ── Ice Island: snow, slippery frozen lakes, penguins and polar bears ────────
 let critters=[];
 function spawnCritters(){
-  const kinds=curKind==='dino'?['rex','rex','longneck','longneck','longneck','trike','trike','trike','trike','ptero','ptero','ptero']:curKind==='haunted'?['ghost','ghost','ghost','ghost','ghost','ghost','bat','bat','bat','bat']:curKind==='pirate'?['crab','crab','crab','crab','crab','crab','crab','parrot','parrot']:curKind==='autumn'?['squirrel','squirrel','squirrel','squirrel','squirrel','squirrel']:curKind==='ice'?['peng','peng','peng','peng','peng','peng','peng','bear','bear','bear']:curKind==='jungle'?['monkey','monkey','monkey','monkey','monkey','parrot','parrot','parrot','parrot']:[];
+  const kinds=curKind==='dino'?['rex','rex','longneck','longneck','longneck','trike','trike','trike','trike','ptero','ptero','ptero','terror','terror','terror']:curKind==='haunted'?['ghost','ghost','ghost','ghost','ghost','ghost','bat','bat','bat','bat']:curKind==='pirate'?['crab','crab','crab','crab','crab','crab','crab','parrot','parrot']:curKind==='autumn'?['squirrel','squirrel','squirrel','squirrel','squirrel','squirrel']:curKind==='ice'?['peng','peng','peng','peng','peng','peng','peng','bear','bear','bear']:curKind==='jungle'?['monkey','monkey','monkey','monkey','monkey','parrot','parrot','parrot','parrot']:[];
   critters=kinds.map(kind=>({kind,fly:0,loot:null,hide:0,...(kind==='crab'?sandSpot():scorpSpot()),wa:Math.random()*6,wt:0,dir:1,walk:0,happy:0,calm:0,still:false}));
 }
 const onIce=e=>{const t=tileOf(e);return inMap(t.x,t.y)&&ter[t.y*W+t.x]===ICE};
@@ -790,6 +790,14 @@ function critterUpdate(dt){
     if(cr.happy>0){cr.walk=0;continue}
     const dx=player.x-cr.x,dy=player.y-cr.y,d=Math.hypot(dx,dy);let vx,vy,sp;
     if(cr.kind==='bear'&&!cr.calm&&d<T*4&&!player.stun&&!player.slide){vx=dx;vy=dy;sp=T*1.7;if(d<18){bearHit(cr);continue}} // here comes the bear!
+    else if(cr.kind==='terror'&&!cr.calm&&!player.stun&&(cr.chase>0||d<T*6)){ // RUN! It's a terror bird!
+      if(!cr.chase){cr.chase=.01;floatAt(cr.x,cr.y-50,'SKRAAAW!');toast('🦤 A terror bird spotted you — RUN!',2200)}
+      cr.chase+=dt;if(d>T*10||cr.chase>6){cr.chase=0;cr.calm=5;continue} // it gives up
+      if(d<16){terrorCatch(cr);continue}
+      if(d>T*1.3){ // run around trees and rocks to get you
+        if((cr.repath=(cr.repath||0)-dt)<=0){cr.repath=.35;const ct=tileOf(cr),pt=tileOf(player),r=findPath(ct.x,ct.y,(x,y)=>x===pt.x&&y===pt.y,null,(x,y)=>animalOk(x*T+16,y*T+20));cr.path=r?r.path:[]}
+        const dir=cr.dir;if(cr.path&&cr.path.length&&followPath(cr,T*3.6,dt)){cr.dir=cr.dir==='left'?-1:cr.dir==='right'?1:dir;continue}cr.dir=dir}
+      vx=dx;vy=dy;sp=T*3.6}
     else if(cr.kind==='rex'&&!cr.calm&&d<T*4&&!player.stun){vx=dx;vy=dy;sp=T*1.6;if(d<20){rexRoar(cr);continue}} // STOMP STOMP STOMP
     else if(cr.kind==='crab'&&!cr.calm&&d<T*1.8&&!player.stun){vx=dx;vy=dy;sp=T*1.4;if(d<16){crabPinch(cr);continue}} // snip snap!
     else if(cr.kind==='squirrel'&&cr.loot&&d<T*8){vx=-dx;vy=-dy;sp=T*3.4}  // running off with your acorns
@@ -797,11 +805,18 @@ function critterUpdate(dt){
     else if(cr.kind==='monkey'&&cr.loot&&d<T*8){vx=-dx;vy=-dy;sp=T*3.2}  // running off with your bananas
     else if(cr.kind==='monkey'&&!cr.loot&&!cr.calm&&S.inv.banana&&d<T*5&&!stealCool&&!player.stun){vx=dx;vy=dy;sp=T*2.6;if(d<15){swipe(cr);continue}} // it smells your bananas!
     else{if((cr.wt-=dt)<=0){cr.wt=1+Math.random()*3;cr.wa=Math.random()*Math.PI*2;cr.still=Math.random()<.4}
-      if(cr.still){cr.walk=0;continue}vx=Math.cos(cr.wa);vy=Math.sin(cr.wa);sp=cr.kind==='longneck'?T*.35:cr.kind==='bear'||cr.kind==='rex'?T*.6:cr.kind==='crab'?T*.7:T*.9}
+      if(cr.still){cr.walk=0;continue}vx=Math.cos(cr.wa);vy=Math.sin(cr.wa);sp=cr.kind==='terror'?T*1.1:cr.kind==='longneck'?T*.35:cr.kind==='bear'||cr.kind==='rex'?T*.6:cr.kind==='crab'?T*.7:T*.9}
     const l=Math.hypot(vx,vy)||1,mx=vx/l*sp*dt,my=vy/l*sp*dt;let moved=false;
     if(animalOk(cr.x+mx,cr.y)){cr.x+=mx;moved=true}if(animalOk(cr.x,cr.y+my)){cr.y+=my;moved=true}
     if(!moved)cr.wa=Math.random()*Math.PI*2;if(mx)cr.dir=mx<0?-1:1;cr.walk+=dt*10;
   }
+}
+// caught by a terror bird: you faint, and wake up back on the beach where you landed
+function terrorCatch(cr){
+  for(const c of critters)if(c.kind==='terror'){c.chase=0;c.calm=8}
+  player.path=[];player.target=null;player.act=null;player.steer=null;player.slide=null;
+  player.x=SPAWN.x*T+16;player.y=SPAWN.y*T+22;player.dir='down';unstick(player);cam.x=player.x;cam.y=player.y;lastTile=-1;sleepFade=1.2;
+  setTimeout(()=>toast('💀 CHOMP! The terror bird got you! …You woke up back on the beach 🏖️',3200),500);
 }
 function rexRoar(cr){
   const a=Math.atan2(player.y-cr.y,player.x-cr.x)||1.5;for(let k=0;k<8;k++)moveBy(player,Math.cos(a)*6,Math.sin(a)*6,walkable);
@@ -840,7 +855,7 @@ function flyParrot(cr,dt){
   const sp=cr.happy>0?0:T*1.6;cr.x+=Math.cos(cr.wa)*sp*dt;cr.y+=Math.sin(cr.wa)*sp*dt;cr.dir=Math.cos(cr.wa)<0?-1:1;cr.walk+=dt*12;
 }
 const DINO_SAYS=['Skreee! Warm the giant egg in the nest every day!','Skreee! The T-Rex loves 🐟 fish!','Skreee! Triceratops love 🌼 wildflowers!',
-  'Skreee! Look for 🦴 fossils on the ground!','Skreee! The long-necks are big softies!','Skreee! Amber 🟠 hides under the tree ferns!','Skreee! Stomp stomp stomp!'];
+  'Skreee! Look for 🦴 fossils on the ground!','Skreee! The long-necks are big softies!','Skreee! Amber 🟠 hides under the tree ferns!','Skreee! Stomp stomp stomp!','Skreee! Watch out for terror birds — they\'re fast!','Skreee! Terror birds give up if you run far enough!'];
 const PIRATE_SAYS=['Squawk! Arrr, matey!','Squawk! Three map pieces find the gold!','Squawk! X marks the spot!','Squawk! The captain\'s chest is on the old ship!',
   'Squawk! Shiver me timbers!','Squawk! Crabs love fish!','Squawk! Pieces of eight! Pieces of eight!'];
 const PARROT_SAYS=['Squawk! Pretty bird!','Squawk! Three keys open the temple!','Squawk! Keys hide in treasure chests!','Squawk! Monkeys love bananas!',
@@ -853,6 +868,7 @@ function templeModal(){
   openModal('<h2>🏛️ The Old Temple</h2><p>You put the 3 keys in the door… <b>CLUNK!</b> It slowly rumbles open!</p><div class="btns"><button class="btn" data-a="open">Go inside!</button></div>',{open:()=>{closeModal();doAct('openTemple',{})}});
 }
 function feedCritter(cr){
+  if(cr.kind==='terror'){floatAt(cr.x,cr.y-50,'SKRAW!');toast('🦤 Terror birds are much too fierce to make friends with — RUN!',2600);return}
   if(cr.kind==='ptero'){cr.happy=2;floatAt(cr.x,cr.y-54,'🎵');toast('🦅 '+DINO_SAYS[Math.random()*DINO_SAYS.length|0],2800);return}
   if(cr.kind==='rex'){
     if(cr.calm>30){cr.happy=.6;toast('🦖 Zzz… The T-Rex is having a big, full-tummy nap');return}
@@ -896,7 +912,7 @@ function drawCritterRaw(c,cr,t){
   if(cr.kind==='parrot'){const up=24+Math.sin(cr.walk*.3)*3;ell(c,cr.x,cr.y,6,2,'rgba(0,0,0,.12)');const fq={...q,y:cr.y-up,walk:0};drawPet(c,{k:'parrot',v:cr.id||0},fq,t);
     const fl=Math.sin(cr.walk)*5;poly(c,'#27ae60',cr.x-2,cr.y-up-9,cr.x-9,cr.y-up-12-fl,cr.x-3,cr.y-up-5);return}
   if(cr.kind==='monkey'){drawMonkey(c,cr,t);return}
-  if(cr.kind==='rex'||cr.kind==='longneck'||cr.kind==='trike'||cr.kind==='ptero'){drawDino(c,cr,t);return}
+  if(cr.kind==='rex'||cr.kind==='longneck'||cr.kind==='trike'||cr.kind==='ptero'||cr.kind==='terror'){drawDino(c,cr,t);return}
   if(cr.kind==='ghost'){const a=.78+.17*Math.sin(t*1.5+cr.x*.01),x=cr.x+(cr.happy>0?Math.sin(cr.happy*12)*3:0),y=cr.y-14+Math.sin(cr.walk)*4;c.globalAlpha=a;
     ell(c,cr.x,cr.y,9,3,'rgba(0,0,0,.15)');c.fillStyle='#f4f2ff';c.beginPath();c.arc(x,y-10,10,Math.PI,0);c.lineTo(x+10,y+6);
     for(let k=0;k<4;k++)c.lineTo(x+10-(k+.5)*5,y+(k%2?6:2)+Math.sin(t*6+k)*1.5);c.lineTo(x-10,y+6);c.closePath();c.fill();
@@ -938,6 +954,16 @@ function drawDino(c,cr,t){
     ell(c,x+10*s,y-43,2.3,2.3,'#fff');ell(c,x+10.6*s,y-43,1.1,1.1,'#222');
     for(let k=0;k<4;k++)poly(c,dk,x-(2+k*5)*s,y-34+k*3,x-(4+k*5)*s,y-39+k*3,x-(6+k*5)*s,y-33+k*3);
     if(zz){c.font='12px sans-serif';c.textAlign='center';c.fillText('💤',x+10*s,y-56)}return}
+  if(cr.kind==='terror'){const st=cr.walk?Math.sin(cr.walk*1.4)*4:0,col='#5e4a3a',dk='#3f3126',ch=cr.chase>0;
+    ell(c,x,cr.y,12,3.5,'rgba(0,0,0,.2)');c.strokeStyle='#d9a23a';c.lineWidth=2.4;c.lineCap='round';
+    for(const k of[-1,1]){const lx=x+k*3;c.beginPath();c.moveTo(lx,y-20);c.lineTo(lx+st*k*s,y-9);c.lineTo(lx+st*k*s*1.5+3*s,y);c.stroke()}
+    poly(c,dk,x-8*s,y-26,x-20*s,y-30,x-18*s,y-22,x-8*s,y-18);ell(c,x,y-24,11,8,col);ell(c,x+2*s,y-21,6,4,'#8a7058');
+    c.strokeStyle=col;c.lineWidth=6;c.beginPath();c.moveTo(x+6*s,y-28);c.lineTo(x+9*s,y-38+(ch?3:0));c.stroke();
+    const hx=x+11*s,hy=y-41+(ch?4:0);ell(c,hx,hy,6,5.5,col);poly(c,dk,hx-4*s,hy-4,hx-11*s,hy-9,hx-6*s,hy-1);
+    poly(c,'#e8a33a',hx+3*s,hy-4,hx+16*s,hy-2,hx+17*s,hy+3,hx+14*s,hy+1,hx+3*s,hy+3);
+    ell(c,hx+1*s,hy-2,2,2,ch?'#ff4a2a':'#ffd23f');ell(c,hx+1.4*s,hy-2,.9,.9,'#222');
+    if(ch){c.font='bold 12px sans-serif';c.textAlign='center';c.fillStyle='#e8401a';c.fillText('!',hx,hy-12)}
+    if(cr.calm>6){c.font='10px sans-serif';c.textAlign='center';c.fillText('💢',hx,hy-12)}return}
   if(cr.kind==='longneck'){const st=cr.walk?Math.sin(cr.walk*.6)*2:0,col='#7aa6c9',dk='#5d88ab',sw=Math.sin(t*1.2+cr.x)*3;
     ell(c,x,cr.y,26,6,'rgba(0,0,0,.2)');
     for(const dx of[-14,-7,7,14])rect(c,x+dx*s-3.5,y-16+(dx<0?st:-st),7,16,dk,3);
