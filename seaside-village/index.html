@@ -142,10 +142,11 @@ const BUILD={
   station:{n:'Train Station',cost:200,w:2,h:1,tall:30,d:'Put tracks next to it (it can go on water too) — build 2 stations and a train starts running!'},
   balloon:{n:'Balloon Port',cost:800,w:2,h:2,tall:70,one:1,d:'Fly a hot air balloon over your island — and drop presents on villagers\' houses!'},
   kitchen:{n:'Kitchen',cost:500,w:2,h:2,d:'Cook yummy dishes from your crops — villagers pay extra for them!'},
+  mailbox:{n:'Mailbox',cost:100,w:1,h:1,tall:22,one:1,d:'Villagers send you letters and presents — and you can write back!'},
   hospital:{n:'Hospital',cost:300,w:2,h:2,d:'Sells 🩹 band-aids for hurt villagers'},
   lighthouse:{n:'Lighthouse',cost:2500,w:2,h:2,tall:80,d:'Shows the whole island — go inside and decorate it!'},
 };
-const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','wood','hut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','kitchen','hospital','track','station','balloon','lighthouse'];
+const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','wood','hut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','mailbox','kitchen','hospital','track','station','balloon','lighthouse'];
 let guestMode=false,guestSel='carrot'; // guestMode: you're on a friend's island
 let visit=null,hostPos=null; // visit: the villager house you're in (null: Your House)
 let fly=null; // flying the hot air balloon
@@ -591,6 +592,7 @@ function useObj(o,act){
     case'coop':case'barn':case'hive':case'pond':case'pigpen':case'greenhouse':doAct('collect',{id:o.id});break;
     case'bakery':case'creamery':doAct('make',{id:o.id});break;
     case'kitchen':kitchenModal();break;
+    case'mailbox':mailModal();break;
     case'campfire':toast('🔥 Toasty warm!');break;
     case'picnic':toast('🧺 What a nice spot for lunch');break;
     case'statue':toast('🗿 The great captain of Seaside Village!');break;
@@ -981,6 +983,68 @@ function drawPot(c,P,t){
   ell(c,X,Y,11,3.5,'rgba(0,0,0,.25)');ell(c,X,Y-6,11,9,'#2a2a32');ell(c,X,Y-13,10,3.5,'#3a3a44');
   for(const[a,b]of[[-5,-15],[0,-17],[5,-15],[-2,-13],[3,-13]])ell(c,X+a,Y+b,3,2,'#ffd23f');
   if(Math.sin(t*4)>.6){c.fillStyle='#fff';c.fillRect(X+4,Y-24,2,6);c.fillRect(X+2,Y-22,6,2)}
+}
+// ── Mail: villagers send letters (and little presents) every morning; you can write back ──
+const MAIL_MSGS=['Thank you for being so kind! 💛','Want to be best friends? 🤝','Have a wonderful day! ☀️','I made you something! 🎁'];
+const unread=()=>(S.mail||[]).filter(m=>!m.read).length;
+const LETTERS=[n=>`Dear friend,\nI saw a shooting star last night and wished for more sunny days on our island! ⭐\nYour pal, ${n}`,
+  n=>`Hi neighbor!\nI baked too many cookies, so I'm sending you a little something. Enjoy! 🍪\nLove, ${n}`,
+  n=>`Hello!\nThanks for making the island so nice. I love living here! 🏝️\nFrom ${n}`,
+  n=>`Dear friend,\nDid you know the fish bite more after it rains? Shh, it's a secret! 🎣\n— ${n}`,
+  n=>`Hi!\nI found this while digging in my garden. I think you should have it!\nCheers, ${n}`,
+  n=>`Hey there!\nI'm practicing my dance moves for the next festival. Come and dance with me! 💃\n${n}`,
+  n=>`Dear friend,\nMy pet keeps chasing butterflies all day. So silly! 🦋\nHugs, ${n}`,
+  n=>`Hello!\nWatch out for sneaky critters on the other islands! Stay safe! 🛡️\nYour friend, ${n}`];
+const REPLY=['Thank you so much for your letter — it made me smile all day! 😊','Yes! Let\'s be best friends forever! 🤝💛','You\'re the best neighbor anyone could ask for! 🌟','I read your letter three times! Here\'s a little something back. 🎁'];
+function genMail(){
+  if(!S.villagers.length)return false;const mail=S.mail||(S.mail=[]),before=mail.length;let id=(S.mailNext=S.mailNext||1);
+  const pick=a=>a[Math.random()*a.length|0],small=()=>Math.random()<.5?{coins:20+(Math.random()*5|0)*10}:{k:pick(['carrot','tomato','corn','egg','flower','shell','apple','mushroom']),n:1+(Math.random()*3|0)};
+  // replies to the letters you sent
+  for(const o of(S.outbox||[]).filter(o=>o.day<S.day)){const g=o.k?{coins:Math.round(ITEMS[o.k].sell*1.5)+20}:Math.random()<.5?small():null;
+    mail.push({id:id++,from:o.to,day:S.day,text:`Dear friend,\n${REPLY[o.msg||0]}${o.k?`\nThanks for the ${ITEMS[o.k].e} ${ITEMS[o.k].n}!`:''}\nLove, ${o.to}`,gift:g})}
+  S.outbox=(S.outbox||[]).filter(o=>o.day>=S.day);
+  // and some new letters
+  const n=Math.random()<.35?0:1+(Math.random()<.4?1:0);
+  for(let k=0;k<n;k++){const v=pick(S.villagers);mail.push({id:id++,from:v.name,day:S.day,text:pick(LETTERS)(v.name),gift:Math.random()<.6?small():null})}
+  S.mailNext=id;while(mail.length>30){const j=mail.findIndex(m=>m.read&&(!m.gift||m.took));if(j<0)break;mail.splice(j,1)}
+  return mail.length>before;
+}
+const esc2=s=>String(s).replace(/[<>&"]/g,'');
+const giftTxt=g=>g.coins?`🪙${g.coins}`:`${g.n>1?g.n+' ':''}${ITEMS[g.k].e} ${ITEMS[g.k].n}`;
+function mailModal(){
+  const mail=(S.mail||[]).slice().reverse();let h=`<h2>📮 Your Mailbox</h2>`;
+  if(!mail.length)h+='<p>No letters yet. Villagers send mail in the morning — check back tomorrow! ✉️</p>';
+  for(const m of mail)h+=`<div class="irow"><span class="ie">${m.read?'📭':'✉️'}</span><span class="in">${m.read?'':'<b>'}From ${esc2(m.from)}${m.read?'':'</b>'}<br><span class="ip">Day ${m.day}${m.gift&&!m.took?' · 🎁 a present inside!':''}</span></span><button class="btn${m.read?' gray':''}" data-a="open" data-v="${m.id}">Open</button></div>`;
+  h+=`<div class="btns"><button class="btn blue" data-a="write">✍️ Write a letter</button><button class="btn gray" data-a="close">Close</button></div>`;
+  openModal(h,{open:id=>letterModal(+id),write:writeModal});
+}
+function letterModal(id){
+  const m=(S.mail||[]).find(m=>m.id===id);if(!m)return mailModal();doAct('mailRead',{id});
+  const body=esc2(m.text).split('\n').join('<br>');
+  openModal(`<h2>✉️ A letter from ${esc2(m.from)}</h2><div style="background:#fffaf0;border:2px solid #e8d8b0;border-radius:12px;padding:14px;font-style:italic;line-height:1.5;text-align:left;margin:8px 0">${body}</div>
+    ${m.gift?`<p style="text-align:center">🎁 ${m.took?'You took the present: ':'There\'s a present inside: '}<b>${giftTxt(m.gift)}</b></p>`:''}
+    <div class="btns">${m.gift&&!m.took?'<button class="btn" data-a="take">🎁 Take the present</button>':''}<button class="btn gray" data-a="toss">🗑️ Throw away</button><button class="btn gray" data-a="back">Back</button></div>`,
+    {take:()=>{doAct('mailTake',{id});toast(`🎁 You got ${giftTxt(m.gift)}!`);setTimeout(()=>letterModal(id),guestMode?300:0)},toss:()=>{if(m.gift&&!m.took){toast('Take the present out first! 🎁');return}doAct('mailToss',{id});setTimeout(mailModal,guestMode?300:0)},back:mailModal});
+}
+function writeModal(){
+  const sent=new Set((S.outbox||[]).map(o=>o.to));let h='<h2>✍️ Write a letter</h2><p>Who would you like to write to? They\'ll write back tomorrow!</p>';
+  if(!S.villagers.length)h+='<p>Nobody lives on the island yet — build a 🏠 House!</p>';
+  for(const v of S.villagers)h+=`<div class="irow"><span class="ie" style="width:26px;height:26px;border-radius:50%;background:${v.shirt};display:inline-block"></span><span class="in">${esc2(v.name)}${sent.has(v.name)?'<br><span class="ip">Letter sent — waiting for a reply</span>':''}</span><button class="btn" data-a="to" data-v="${esc2(v.name)}" ${sent.has(v.name)?'disabled':''}>Write</button></div>`;
+  h+='<div class="btns"><button class="btn gray" data-a="back">Back</button></div>';
+  openModal(h,{to:n=>writeMsg(n),back:mailModal});
+}
+function writeMsg(to){
+  let h=`<h2>✍️ Dear ${esc2(to)}…</h2><p>What should your letter say?</p>`;
+  MAIL_MSGS.forEach((t,i)=>h+=`<div class="irow"><span class="in">“${t}”</span><button class="btn" data-a="msg" data-v="${i}">Pick</button></div>`);
+  openModal(h+'<div class="btns"><button class="btn gray" data-a="back">Back</button></div>',{msg:i=>writeGift(to,+i),back:writeModal});
+}
+function writeGift(to,msg){
+  const ks=Object.keys(S.inv).filter(k=>S.inv[k]>0&&!ITEMS[k].keep);
+  let h=`<h2>🎁 Add a present?</h2><p>Put something from your bag in the letter. ${esc2(to)} will send something nice back!</p>`;
+  for(const k of ks)h+=`<div class="irow"><span class="ie">${ITEMS[k].e}</span><span class="in">${ITEMS[k].n} ×${S.inv[k]}</span><button class="btn" data-a="gift" data-v="${k}">Add</button></div>`;
+  h+='<div class="btns"><button class="btn blue" data-a="none">Send without a present</button><button class="btn gray" data-a="back">Back</button></div>';
+  const send=k=>{closeModal();doAct('mailSend',{to,msg,k});toast(`📮 Your letter to ${esc2(to)} is in the mail! ${k?ITEMS[k].e+' ':''}Look for a reply tomorrow`,3000)};
+  openModal(h,{gift:k=>send(k),none:()=>send(null),back:()=>writeMsg(to)});
 }
 // the fish smoker (fishing huts only): smoked fish sell for 30% more
 function smokerModal(){
@@ -1388,6 +1452,7 @@ function newDay(quiet){
   for(const v of S.villagers)if(!(v.req&&v.req.hurt))v.req=Math.random()<.65?makeRequest():null; // a hurt villager still needs band-aids
   for(const p of pets())if(p.fed<S.day-1)p.hearts=Math.max(0,p.hearts-1); // nobody fed it yesterday
   if(S.villagers.length&&Math.random()<.6)S.home.drop={name:S.villagers[Math.random()*S.villagers.length|0].name,at:now()+30000+Math.random()*150000}; // someone drops by today
+  if(count('mailbox')&&!guestMode&&genMail()&&!quiet)setTimeout(()=>toast('📮 You\'ve got mail! Check your mailbox',3000),10500);
   dirty();if(!quiet&&isFestDay())setTimeout(()=>toast('🎪 It\'s Festival Day! Everyone is partying at the village square 🎉',3600),3200);
   if(!quiet&&weather()!=='sun'||!quiet&&rainbowDay())setTimeout(()=>toast(weather()==='storm'?'⛈️ A big storm is coming today — villagers will hide inside when it hits! The rain makes crops grow 2× faster':weather()==='rain'?(curKind==='ice'?'❄️ It\'s snowing! Crops grow 2× faster today':'🌧️ It\'s raining! Your crops grow 2× faster today'):'🌈 A rainbow! Find the pot of gold at the end of it!',3600),6800);
   if(!quiet)toast(`☀️ Good morning! Day ${S.day}${S.villagers.some(v=>v.req)?' — some villagers need help ❗':''}`,3000);
@@ -1619,6 +1684,12 @@ const ACT={
   cook({k}){const R=RECIPES2[k];if(!R||!count('kitchen')||!canCook(k))return;for(const it in R.need){S.inv[it]-=R.need[it];if(!S.inv[it])delete S.inv[it]}give(k,1);tally('cook');dirty();refreshTray()},
   potGold(){if(!potAt())return;S.potDay=S.day;S.coins+=150;give('gem',1);tally('rainbow');dirty();refreshTray();for(let k=0;k<50;k++)confetti.push({x:player.x,y:player.y-30,vx:(Math.random()-.5)*240,vy:-120-Math.random()*200,c:['#e74c3c','#ffd23f','#2ecc71','#3498db','#9b59b6'][k%5],t:0});
     toast('🌈 The pot of gold at the end of the rainbow! 🪙150 and a 💎 gem!',3200)},
+  mailRead({id}){const m=(S.mail||[]).find(m=>m.id===id);if(m&&!m.read){m.read=1;dirty()}},
+  mailTake({id}){const m=(S.mail||[]).find(m=>m.id===id);if(!m||!m.gift||m.took)return;m.took=1;m.read=1;if(m.gift.coins)S.coins+=m.gift.coins;else if(ITEMS[m.gift.k])give(m.gift.k,m.gift.n||1);dirty();refreshTray()},
+  mailToss({id}){S.mail=(S.mail||[]).filter(m=>m.id!==id||m.gift&&!m.took);dirty()},
+  mailSend({to,msg,k}){const v=S.villagers.find(v=>v.name===to);if(!v||!count('mailbox'))return;const out=S.outbox||(S.outbox=[]);if(out.some(o=>o.to===to))return;
+    if(k){if(!S.inv[k]||ITEMS[k].keep)return;S.inv[k]--;if(!S.inv[k])delete S.inv[k]}
+    out.push({to,msg:MAIL_MSGS[msg]?msg:0,k:k||null,day:S.day});tally('mail');dirty();refreshTray()},
   smoke(){const n=S.inv.fish||0;if(!n)return;delete S.inv.fish;give('smokedfish',n);tally('smoke');dirty();refreshTray()},
   present({id}){const o=byId(id);if(!o||o.t!=='house'||presented(id))return;const p=S.presents&&S.presents.day===S.day?S.presents:(S.presents={day:S.day,ids:[]});p.ids.push(id);
     const v=S.villagers.find(v=>v.house===id);S.coins+=15;tally('present');dirty();refreshTray();toast(`🎁 ${v?v.name:'Someone'} loved the present! They tossed up 🪙15 to say thank you`,2800)},
@@ -2090,6 +2161,10 @@ function drawObjIn(c,o,t,icon){
     for(const wx of[X+9,X+45]){rect(c,wx,Y+28,10,10,win,2);c.fillStyle='#fff';c.fillRect(wx+4.5,Y+28,1,10)}
     rect(c,X+24,Y+40,16,22,'#bfe6ff',2);c.fillStyle='#fff';c.fillRect(X+31.5,Y+40,1,22);
     rect(c,X+21,Y-4,22,20,'#fff',4);rect(c,X+29,Y-1,6,14,'#e63946',1);rect(c,X+25,Y+3,14,6,'#e63946',1);break}
+  case'mailbox':{const un=!icon&&unread()>0;rect(c,X+14,Y+2,4,26,'#7a4f2a',1);ell(c,X+16,Y+28,7,2.5,'rgba(0,0,0,.18)');
+    rect(c,X+5,Y-14,22,16,'#3b6fc4',6);rect(c,X+5,Y-6,22,8,'#2f5ba8',2);rect(c,X+9,Y-9,14,2,'#1d3d78',1);
+    rect(c,X+26,un?Y-24:Y-12,2.5,un?12:10,'#7a4f2a');rect(c,X+26,un?Y-24:Y-6,8,5,'#e74c3c',1);
+    if(un){const g=(Math.sin(t*3)+1)/2;bubble(c,X+16,Y-28+g*3,'✉️')}break}
   case'kitchen':shop(c,X,Y,'#fff6ea','#2e8b57','#e8a33a','🍳',icon,t);ell(c,X+20,Y+50,7,3,'#3a3f4a');rect(c,X+13,Y+44,14,6,'#5a5f6a',2);break;
   case'bakery':shop(c,X,Y,'#fbe7c6','#b5651d','#e74c3c','🥖',icon,t);
     for(let k=0;k<3;k++)ell(c,X+14+k*5,Y+49,3,2,'#d99a4e');break;
