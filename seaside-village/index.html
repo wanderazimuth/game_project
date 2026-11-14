@@ -858,7 +858,7 @@ function patientsModal(){
 // a villager pecked by a terror bird needs band-aids
 function hurtVillager(vw,cr){
   const Hk=HUNT[cr&&cr.kind]||HUNT.terror,v=vw.v;v.hurt=1;v.req={k:'bandaid',n:1+(Math.random()*2|0),reward:50,hurt:1,by:cr?cr.kind:'terror'};vw.path=[];vw.wait=3;vw.say='Ouch! 🤕';vw.talkT=3;
-  floatAt(vw.x,vw.y-50,Hk.hit);toast(`${Hk.e} A ${Hk.name} ${Hk.verb} ${v.name}! They need 🩹 band-aids${count('hospital')?' from the 🏥 Hospital':' — build a 🏥 Hospital to get some'}`,3200);dirty();
+  floatAt(vw.x,vw.y-50,Hk.hit);toast(`${Hk.e} A ${Hk.name} ${Hk.verb} ${v.name}! They need 🩹 band-aids${count('hospital')?' from the 🏥 Hospital':' — build a 🏥 Hospital to get some'}`,3200);dirty();refreshTray();
 }
 // the hunters: terror birds (Dino and Volcano Island) and polar bears (Ice Island) chase you and your villagers
 const HUNT={terror:{name:'terror bird',e:'🦤',cry:'SKRAAAW!',hit:'PECK!',verb:'pecked',got:'CHOMP!',spd:3.6,vspd:3.2,see:6},
@@ -1543,6 +1543,7 @@ function refreshTray(){
   if(inside){inTray(chip);return}
   if(mode==='play'){
     chip(`<span class="e">🎒</span>Bag<span class="p">${invTotal()} things</span>`,false,false,bagModal);
+    {const n=S.villagers.filter(v=>v.hurt).length;if(n||count('hospital'))chip(`<span class="e">📋</span>Patients<span class="p">${n?n+' hurt':'nobody'}</span>`,false,false,patientsModal)}
     {const ks=Object.keys(JOBS).filter(k=>count(k)),left=ks.filter(k=>(S.worked||{})[k]!==S.day).length;
       if(ks.length)chip(`<span class="e">💼</span>Work<span class="p">${left?left+' job'+(left>1?'s':'')+' today':'Done today'}</span>`,false,!left,workModal)}
     const l=document.createElement('span');l.className='lbl';l.textContent='SEEDS';tray.appendChild(l);
