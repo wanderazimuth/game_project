@@ -134,7 +134,7 @@ const BUILD={
 const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','lighthouse'];
 let guestMode=false,guestSel='carrot'; // guestMode: you're on a friend's island
 let visit=null,hostPos=null; // visit: the villager house you're in (null: Your House)
-let inCab=false,inLight=0,inCave=false; // inCab: inside the cabin (where a friend who joins your island stays); inLight: the lighthouse you're in
+let inCab=false,inLight=0,inCave=false,caveLv=1; // caveLv: 1 the cave, 2 the deep cave (down through its pool) // inCab: inside the cabin (where a friend who joins your island stays); inLight: the lighthouse you're in
 let inside=false,outPos=null,itool='color',inG=null,inLifted=null,sleepFade=0; // inside: in Your House
 let net=null,friend=null,actor=null; // actor: the friend, while the host does something for them
 const mySeed=()=>guestMode?guestSel:S.sel;
@@ -1234,8 +1234,8 @@ const ACT={
   homeWall({i,cab,lh}){const H=homeOf(cab,lh);if(H&&WALLPAPERS[i]){H.wall=i;dirty()}},
   homeFloor({i,cab,lh}){const H=homeOf(cab,lh);if(H&&FLOORS[i]){H.floor=i;dirty()}},
   // the lighthouse keeper: a new villager moves into the lighthouse (only once, ever)
-  caveMine({id}){const cv=caveState(),f=CAVE_ITEMS.find(f=>f.id===id);if(!f||f.k!=='crystal'||cv.mined.includes(id))return;
-    cv.mined.push(id);give('gem',1);floatAt((f.x+.5)*T,f.y*T-10,'+1 💎');tally('mine');dirty()},
+  caveMine({id}){const cv=caveState(),f=CAVE_ITEMS.concat(CAVE_DEEP).find(f=>f.id===id);if(!f||f.k!=='crystal'&&f.k!=='bigcrystal'||cv.mined.includes(id))return;
+    const n=f.k==='bigcrystal'?2:1;cv.mined.push(id);give('gem',n);floatAt((f.x+.5)*T,f.y*T-10,`+${n} 💎`);tally('mine');dirty()},
   caveChest(){const cv=caveState();if(cv.chest)return;cv.chest=1;S.coins+=500;give('gem',3);dirty();refreshTray()},
   lightKeeper({lh}){const o=byId(lh);if(!o||o.t!=='lighthouse'||S.keeper||S.villagers.some(v=>v.house===o.id))return;
     const v=newVillager(o.id);S.keeper=1;spawnVillager(v);dirty();refreshTray();toast(`🗼 ${v.name} moved into the lighthouse as the keeper!`,3200)},
@@ -1891,13 +1891,15 @@ const FURN={
   cavepool:{n:'Pool',cost:0,w:2,h:2,hide:1,e:'💧',say:'💧 A glowing pool, deep under the island'},
   stalagmite:{n:'Stalagmite',cost:0,w:1,h:1,tall:28,hide:1,e:'🪨',say:'🪨 A big pointy rock — it grew drip by drip!'},
   cavechest:{n:'Old Chest',cost:0,w:1,h:1,tall:4,hide:1,e:'🧰',say:'cavechest'},
+  bigcrystal:{n:'Rainbow Crystal',cost:0,w:1,h:1,tall:34,hide:1,e:'💎',say:'crystal'},
+  glowshroom:{n:'Glow Mushrooms',cost:0,w:1,h:1,tall:16,hide:1,e:'🍄',say:'🍄 Glowing mushrooms — they light up the deep cave'},
 };
 const WALLPAPERS=[['Cream','#fbf1dc',0],['Mint','#cdeedd',1],['Sky','#cfe6ff',0],['Pink','#ffd9e6',1],['Lavender','#e4d9ff',0],['Sunny','#fff1a8',1],['Wood','#c8935a',2],['Starry','#2c3a6b',3]];
 const FLOORS=[['Wood','#c18a55',0],['Light wood','#e2bf8c',0],['Checker','#f4f4f4',1],['Blue carpet','#6d9de0',2],['Pink carpet','#f2a7c3',2],['Stone','#b9b4ad',3]];
 const roomCache=new Map();
 function room(){return inCave?caveRoom():inCab?cabinRoom():inLight?lightRoom(inLight)||S.home:visit?visitRoom(visit):S.home}
 function roomPets(){return inCave||inCab||inLight?[]:visit?room().pets:pets()}
-function roomKey(){return inside?inCave?'cave':inCab?'cab':inLight?'L'+inLight:visit||'me':0}
+function roomKey(){return inside?inCave?'cave'+caveLv:inCab?'cab':inLight?'L'+inLight:visit||'me':0}
 // The cabin: whoever stays in it (the friend who joins your island) decorates it, just like Your House
 function cabinRoom(){return S.cabin||(S.cabin={wall:2,floor:1,next:3,items:[{id:1,k:'bed',x:0,y:0,c:1},{id:2,k:'window',x:4,y:-2,c:0}]})}
 // The lighthouse: you decorate it too (its room lives on the lighthouse itself)
@@ -2015,7 +2017,7 @@ function wanderIn(q,speed,dt){
 const furnBox=f=>{const F=FURN[f.k];return{x:f.x,y:f.y,w:F.w,h:F.h}};
 // what stands on a floor tile (rugs don't count: you walk on them)
 function furnAt(x,y,ignore){return room().items.find(f=>{const F=FURN[f.k];return f!==ignore&&!F.wall&&!F.walk&&x>=f.x&&x<f.x+F.w&&y>=f.y&&y<f.y+F.h})}
-function inWalkable(x,y){if(x===DOOR_X&&y===RH)return true;return x>=0&&y>=0&&x<RW&&y<RH&&!furnAt(x,y)}
+function inWalkable(x,y){if(x===DOOR_X&&y===RH)return!(inCave&&caveLv===2);return x>=0&&y>=0&&x<RW&&y<RH&&!furnAt(x,y)}
 const pWalk=()=>inside?inWalkable:walkable;
 function furnWhy(k,x,y,ignore,list=room().items){
   const F=FURN[k],others=list.filter(f=>f!==ignore);
@@ -2049,15 +2051,28 @@ function placeCave(){
 // inside: crystals that grow back every day, and an old chest
 const CAVE_ITEMS=[{id:1,k:'crystal',x:1,y:1},{id:2,k:'crystal',x:8,y:0},{id:3,k:'crystal',x:2,y:4},{id:4,k:'crystal',x:7,y:5},{id:5,k:'crystal',x:5,y:0},
   {id:6,k:'cavepool',x:4,y:2},{id:7,k:'stalagmite',x:0,y:3},{id:8,k:'stalagmite',x:9,y:2},{id:9,k:'cavechest',x:9,y:5}];
+// the deep cave: big rainbow crystals (2 gems each, they grow back every day) and glowing mushrooms
+const CAVE_DEEP=[{id:21,k:'cavepool',x:4,y:1},{id:22,k:'bigcrystal',x:1,y:0},{id:23,k:'bigcrystal',x:8,y:1},{id:24,k:'bigcrystal',x:1,y:5},{id:25,k:'bigcrystal',x:8,y:5},
+  {id:26,k:'glowshroom',x:3,y:5},{id:27,k:'glowshroom',x:6,y:5},{id:28,k:'glowshroom',x:0,y:2},{id:29,k:'stalagmite',x:9,y:3}];
+const CAVE_ARRIVE={1:{x:5,y:4},2:{x:5,y:3}}; // where you come up / down, next to the pool
 function caveState(){const cv=S.cave||(S.cave={day:S.day,mined:[],chest:0});if(cv.day!==S.day){cv.day=S.day;cv.mined=[]}return cv}
-function caveRoom(){const cv=caveState();return{wall:0,floor:0,items:CAVE_ITEMS.filter(f=>!cv.mined.includes(f.id)&&!(f.k==='cavechest'&&cv.chest))}}
+function caveRoom(){const cv=caveState();return{wall:0,floor:0,items:(caveLv===2?CAVE_DEEP:CAVE_ITEMS).filter(f=>!cv.mined.includes(f.id)&&!(f.k==='cavechest'&&cv.chest))}}
+// swim down into the deep cave, or back up
+function caveSwim(lv){
+  caveLv=lv;const a=CAVE_ARRIVE[lv];player.x=a.x*T+16;player.y=a.y*T+22;player.dir='down';player.path=[];player.target=null;player.steer=null;
+  unstick(player,inWalkable);cam.x=player.x;cam.y=player.y;sleepFade=1.2;refreshTray();
+  if(lv===2){const cv=caveState(),left=CAVE_DEEP.filter(f=>f.k==='bigcrystal'&&!cv.mined.includes(f.id)).length;
+    toast(left?'🌊 You swam down into the deep cave! Big rainbow crystals — 2 gems each!':'🌊 The deep cave — the big crystals grow back tomorrow',3200)}
+  else toast('🌊 You swam back up',2000);
+}
 function enterCave(){
   if(!CAVE_AT)return;enterHouse(null,false,0,true);
   const cv=caveState(),left=CAVE_ITEMS.filter(f=>f.k==='crystal'&&!cv.mined.includes(f.id)).length;
-  toast(left?`🕳️ A glowing cave! Tap the crystals to mine 💎 gems`:'🕳️ The crystals are all mined — they grow back tomorrow',3000);
+  toast(left?`🕳️ A glowing cave! Tap the crystals to mine 💎 gems — and the pool goes deeper…`:'🕳️ The crystals are all mined — they grow back tomorrow. The pool goes deeper…',3200);
 }
 function useCave(f){
-  if(f.k==='crystal'){doAct('caveMine',{id:f.id});return true}
+  if(f.k==='crystal'||f.k==='bigcrystal'){doAct('caveMine',{id:f.id});return true}
+  if(f.k==='cavepool'){caveSwim(caveLv===1?2:1);return true}
   if(f.k==='cavechest'){
     if(caveState().chest){toast('🧰 The old chest is empty now');return true}
     doAct('caveChest',{});
@@ -2075,20 +2090,21 @@ function drawCaveMouth(c,t){
   for(const[dx,col]of[[-34,'#b980ff'],[30,'#5fb8ff']]){const cx=X+w/2+dx,cy=Y+2*T-4;poly(c,col,cx-6,cy,cx-3,cy-14,cx,cy);poly(c,col,cx-1,cy,cx+3,cy-20,cx+7,cy);poly(c,'rgba(255,255,255,.5)',cx+1,cy-3,cx+3,cy-17,cx+4,cy-3)}
 }
 function drawCaveRoom(c){
-  const RWp=RW*T,RHp=RH*T;
-  rect(c,0,0,RWp,RHp,'#3a3f4a');
+  const RWp=RW*T,RHp=RH*T,deep=caveLv===2;
+  rect(c,0,0,RWp,RHp,deep?'#262c48':'#3a3f4a');
   for(let k=0;k<70;k++){const h=hash(k,11),h2=hash(k,23);ell(c,h*RWp,h2*RHp,3+h*5,2+h2*3,k%3?'rgba(0,0,0,.18)':'rgba(255,255,255,.06)')}
-  for(let k=0;k<8;k++){const h=hash(k,31),h2=hash(k,37);ell(c,h*RWp,h2*RHp,14+h*10,6+h2*4,'rgba(80,200,140,.12)')}
-  rect(c,0,-2*T,RWp,2*T,'#2a2f3a');
-  for(let k=0;k<14;k++){const x=k*RWp/14+hash(k,3)*14,l=12+hash(k,5)*26;poly(c,'#353b47',x-7,-2*T,x+7,-2*T,x,-2*T+l)}
-  for(let k=0;k<10;k++){const x=hash(k,41)*RWp,y=-2*T+18+hash(k,43)*36;ell(c,x,y,1.6,1.6,`rgba(160,255,220,${.5+.4*Math.sin(Date.now()/600+k)})`)}
+  for(let k=0;k<8;k++){const h=hash(k,31),h2=hash(k,37);ell(c,h*RWp,h2*RHp,14+h*10,6+h2*4,deep?'rgba(90,150,255,.14)':'rgba(80,200,140,.12)')}
+  rect(c,0,-2*T,RWp,2*T,deep?'#181d33':'#2a2f3a');
+  for(let k=0;k<14;k++){const x=k*RWp/14+hash(k,3)*14,l=12+hash(k,5)*26;poly(c,deep?'#21274a':'#353b47',x-7,-2*T,x+7,-2*T,x,-2*T+l)}
+  for(let k=0;k<(deep?30:10);k++){const x=hash(k,41)*RWp,y=-2*T+18+hash(k,43)*36;ell(c,x,y,1.6,1.6,deep?`rgba(150,200,255,${.5+.4*Math.sin(Date.now()/600+k)})`:`rgba(160,255,220,${.5+.4*Math.sin(Date.now()/600+k)})`)}
   rect(c,0,-5,RWp,5,'rgba(0,0,0,.25)');
   c.fillStyle='#1f232b';c.fillRect(-12,-2*T-12,12,RHp+2*T+24);c.fillRect(RWp,-2*T-12,12,RHp+2*T+24);c.fillRect(-12,-2*T-12,RWp+24,12);
+  if(deep){c.fillRect(-12,RHp,RWp+24,12);return} // no way out down here but the pool
   c.fillRect(-12,RHp,DOOR_X*T+12,12);c.fillRect((DOOR_X+1)*T,RHp,RWp-(DOOR_X+1)*T+12,12);
   rect(c,DOOR_X*T+2,RHp,T-4,T-6,'#3a3f4a');rect(c,DOOR_X*T+4,RHp+4,T-8,T-14,'#7fe0c0',4);
 }
 function enterHouse(id,cab,lh,cave){
-  inCave=!!cave;visit=id||null;inCab=!!cab;inLight=lh||0;inside=true;outPos={x:player.x,y:player.y};player.x=DOOR_X*T+16;player.y=(RH-1)*T+22;player.dir='up';
+  inCave=!!cave;caveLv=1;visit=id||null;inCab=!!cab;inLight=lh||0;inside=true;outPos={x:player.x,y:player.y};player.x=DOOR_X*T+16;player.y=(RH-1)*T+22;player.dir='up';
   player.path=[];player.target=null;player.steer=null;unstick(player,inWalkable);itool='color';
   hostPos=null;const vw=hostVw();
   if(vw)hostPos=spotIn();
@@ -2164,7 +2180,8 @@ function chestModal(id,cab,lh){
 }
 function inTray(chip){
   if(mode==='play'){
-    chip('<span class="e">🚪</span>Go outside',false,false,exitHouse);
+    if(inCave&&caveLv===2)chip('<span class="e">🌊</span>Swim up',false,false,()=>caveSwim(1));
+    else chip('<span class="e">🚪</span>Go outside',false,false,exitHouse);
     chip(`<span class="e">🎒</span>Bag<span class="p">${invTotal()} things</span>`,false,false,bagModal);
     if(!visit&&!inCab&&!inCave)chip(`<span class="e">📨</span>Invite<span class="p">${guestsIn(hereKey()).length?guestsIn(hereKey()).length+' here':'a villager'}</span>`,false,false,inviteModal);
     return}
@@ -2226,6 +2243,12 @@ function drawFurnIn(c,f,t,icon){
     const col=['#b980ff','#5fb8ff','#3fd6c6','#ff7fc8'][f.id%4];ell(c,X+16,Y+28,12,4,'rgba(0,0,0,.25)');
     poly(c,col,X+4,Y+28,X+8,Y+8,X+13,Y+28);poly(c,col,X+11,Y+28,X+16,Y-14,X+22,Y+28);poly(c,col,X+20,Y+28,X+25,Y+4,X+29,Y+28);
     poly(c,'rgba(255,255,255,.5)',X+15,Y+24,X+16,Y-8,X+18,Y+24);if(Math.sin(t*3+f.id*2)>.8){c.fillStyle='#fff';c.fillRect(X+16,Y-20,2,7);c.fillRect(X+13.5,Y-17.5,7,2)}break}
+  case'bigcrystal':{const g=.2+.12*Math.sin(t*2+f.id);c.fillStyle=`rgba(255,255,255,${g})`;c.beginPath();c.arc(X+16,Y+2,28,0,Math.PI*2);c.fill();
+    ell(c,X+16,Y+28,14,4,'rgba(0,0,0,.3)');const rb=['#ff6b8b','#ffd23f','#5cbf54','#3d9be0','#b980ff'],sh=t*.8+f.id;
+    [[X+1,Y+28,X+6,Y+2,X+11,Y+28],[X+9,Y+28,X+16,Y-26,X+23,Y+28],[X+21,Y+28,X+27,Y-4,X+31,Y+28]].forEach((q,k)=>poly(c,rb[Math.floor(sh+k)%5],...q));
+    poly(c,'rgba(255,255,255,.55)',X+14,Y+24,X+16,Y-18,X+18,Y+24);if(Math.sin(t*3+f.id)>.75){c.fillStyle='#fff';c.fillRect(X+16,Y-34,2,8);c.fillRect(X+13,Y-31,8,2)}break}
+  case'glowshroom':{const g=.25+.15*Math.sin(t*2.2+f.id);c.fillStyle=`rgba(120,255,220,${g})`;c.beginPath();c.arc(X+16,Y+12,18,0,Math.PI*2);c.fill();
+    for(const[dx,h,r,col]of[[-7,10,6,'#3fd6c6'],[5,16,8,'#5fb8ff'],[9,6,4,'#b980ff']]){rect(c,X+16+dx-1.5,Y+28-h,3,h,'#e9f2ea',1);c.fillStyle=col;c.beginPath();c.ellipse(X+16+dx,Y+28-h,r,r*.7,0,Math.PI,0);c.fill()}break}
   case'cavepool':rect(c,X+2,Y+4,60,56,'#2a8a94',24);rect(c,X+7,Y+9,50,46,'#4fd0d0',20);
     for(let k=0;k<3;k++){const a=(t*.6+k/3)%1;c.strokeStyle=`rgba(255,255,255,${.5*(1-a)})`;c.lineWidth=1.5;c.beginPath();c.ellipse(X+32,Y+32,6+a*18,3+a*9,0,0,Math.PI*2);c.stroke()}break;
   case'stalagmite':ell(c,X+16,Y+28,11,4,'rgba(0,0,0,.25)');poly(c,'#5a606c',X+5,Y+28,X+16,Y-26,X+27,Y+28);poly(c,'#6e7582',X+12,Y+28,X+16,Y-20,X+20,Y+28);break;
