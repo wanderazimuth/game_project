@@ -414,7 +414,15 @@ const player={x:S.px,y:S.py,dir:'down',walk:0,path:[],target:null,act:null,steer
 let villagers=[],animals=[];
 // Bedtime: villagers walk home at night and sleep until morning. The lighthouse keeper stays up keeping the light shining.
 const bedtime=()=>nightness()>.5;
-function sleepy(vw){const h=byId(vw.v.house);return bedtime()&&!(h&&h.t==='lighthouse')}
+// ── Weather: every day is sunny, rainy or stormy (snowy on Ice Island); a rainbow comes out after the rain ──
+function weatherOf(d){if(curKind==='volcano'||curKind==='falls'||d<2)return'sun';const q=Math.sin(d*12.9898+(curSeed%9973)*.78233)*43758.5453,h=q-Math.floor(q);return h<.6?'sun':h<.88?'rain':'storm'}
+const weather=()=>weatherOf(S.day);
+const tod=()=>((now()-S.t0)%DAY_MS)/DAY_MS;
+const raining=()=>weather()!=='sun';
+const stormNow=()=>weather()==='storm'&&tod()>.15&&tod()<.45; // the thunderstorm itself is in the middle of the day
+const rainbowDay=()=>weather()==='sun'&&weatherOf(S.day-1)!=='sun'&&curKind!=='volcano';
+const WX_ICON=()=>{const w=weather(),snow=curKind==='ice';return w==='storm'?(snow?'🌨️':'⛈️'):w==='rain'?(snow?'❄️':'🌧️'):rainbowDay()?'🌈':'☀️'};
+function sleepy(vw){const h=byId(vw.v.house);return(bedtime()||stormNow())&&!(h&&h.t==='lighthouse')} // home to bed — or inside out of the storm
 const asleepIn=o=>villagers.find(v=>v.v.house===o.id&&v.asleep);
 function spawnVillager(v){
   const h=S.objs.find(o=>o.id===v.house);if(!h)return;
@@ -480,6 +488,7 @@ function pickAt(wx,wy){
   for(const sc of scorps)if(!sc.hide&&Math.abs(wx-sc.x)<17&&Math.abs(wy-sc.y+6)<15)return{k:'scorp',sc};
   for(const cr of critters){if(cr.hide||cr.gone)continue;const big=cr.kind==='bear'||cr.kind==='rex'||cr.kind==='trike'||cr.kind==='terror'||cr.kind==='moa',tall=cr.kind==='longneck'?76:cr.kind==='rex'?50:cr.kind==='terror'?44:cr.kind==='moa'?44:0,up=cr.zz&&cr.kind==='parrot'?6:cr.kind==='parrot'||cr.kind==='bat'?24:cr.kind==='ptero'?(cr.zz?8:34):cr.kind==='ghost'?14:0;if(Math.abs(wx-cr.x)<(cr.kind==='longneck'?30:big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(tall||(big?32:24)))return{k:'critter',cr}}
   for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
+  {const P=potAt();if(P&&Math.abs(wx-(P.x*T+16))<16&&wy>P.y*T-10&&wy<P.y*T+T)return{k:'pot',x:P.x,y:P.y}}
   if(festNow()){const fs=festSpot();for(const st of FEST_STALLS){const X=(fs.x+st.dx)*T,Y=(fs.y+st.dy)*T;if(wx>X-14&&wx<X+T+14&&wy>Y-46&&wy<Y+T)return{k:'fest',st}}}
   const tx=Math.floor(wx/T),ty=Math.floor(wy/T);
   for(let d=0;d<4;d++){
@@ -564,6 +573,7 @@ function arrive(tg){
     case'galleon':enterGalleon();break;
     case'mill':ghostModal();break;
     case'nest':nestModal();break;
+    case'pot':doAct('potGold',{});break;
     case'fest':festStall(tg.st);break;
     case'xspot':digModal();break;
     case'feat':{const kind=feat[tg.i];if(kind>=VOLC)break;if(kind)act(kind===ROCK?800:700,kind===ROCK?'mine':'chop',()=>doAct('feat',{i:tg.i}));break}
@@ -591,7 +601,7 @@ function useObj(o,act){
       act(1400,'fish',()=>doAct('fish',{id:o.id}));break}
     case'myhouse':enterHouse();break;
     case'cabin':enterCabin();break;
-    case'house':{const v=villagers.find(v=>v.v.house===o.id);if(v&&isGuest(v.v.name))toast(`🏠 ${v.v.name} isn't home — they're visiting ${guestOf(v.v.name).to?placeOf(guestOf(v.v.name).to).toLowerCase():'your house'}!`);else if(v&&v.inHosp)toast(`🏥 ${v.v.name} isn't home — they're at the hospital! Bring them 🩹 band-aids`,2800);else if(v&&v.asleep)toast(`💤 Shh… ${v.v.name} is fast asleep. Come back in the morning!`,2800);else if(v)enterHouse(o.id);else toast('🏠 An empty house — nobody lives here yet');break}
+    case'house':{const v=villagers.find(v=>v.v.house===o.id);if(v&&isGuest(v.v.name))toast(`🏠 ${v.v.name} isn't home — they're visiting ${guestOf(v.v.name).to?placeOf(guestOf(v.v.name).to).toLowerCase():'your house'}!`);else if(v&&v.inHosp)toast(`🏥 ${v.v.name} isn't home — they're at the hospital! Bring them 🩹 band-aids`,2800);else if(v&&v.asleep)toast(bedtime()?`💤 Shh… ${v.v.name} is fast asleep. Come back in the morning!`:`☔ ${v.v.name} is hiding inside from the storm — come back when it's over!`,2800);else if(v)enterHouse(o.id);else toast('🏠 An empty house — nobody lives here yet');break}
     case'hospital':enterHouse(o.id);break;
     case'balloon':balloonModal();break;
     case'station':stationModal(o);break;
@@ -933,6 +943,44 @@ function kitchenModal(){
   openModal(h,{cook:k=>{if(!canCook(k))return;closeModal();const o=S.objs.find(o=>o.t==='kitchen');
     for(let i=0;i<5;i++)setTimeout(()=>floats.push({x:o?(o.x+1)*T:player.x,y:o?o.y*T:player.y-40,txt:['💨','🔥','✨'][i%3],t:0}),i*160);
     player.act={end:now()+1300,kind:'pick',fn:()=>{doAct('cook',{k});toast(`🍳 You cooked ${ITEMS[k].e} ${ITEMS[k].n}! Yum!`,2400);setTimeout(kitchenModal,guestMode?400:150)}}}});
+}
+// rain: crops grow twice as fast (the island's owner moves every crop along)
+let rainAcc=0,flash=0,boomT=8;
+function weatherUpdate(dt){
+  if(raining()&&!guestMode&&(rainAcc+=dt)>=1){const ms=rainAcc*1000;rainAcc=0;let any=0;
+    for(const o of S.objs)if(o.c&&cropProgress(o)<1){o.c.at-=ms;any=1}if(any)dirty()}
+  flash=Math.max(0,flash-dt*2.5);
+  if(stormNow()&&!inside&&(boomT-=dt)<=0){boomT=5+Math.random()*9;flash=1;setTimeout(()=>{if(!inside)floatAt(cam.x+(Math.random()-.5)*200,cam.y-120,'⚡ BOOM!')},300)}
+}
+function drawWeather(t){
+  if(inside)return;const w=weather(),snow=curKind==='ice',storm=stormNow();
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  if(w!=='sun'){ctx.fillStyle=`rgba(40,55,80,${storm?.28:.14})`;ctx.fillRect(0,0,cssW,cssH);
+    const n=storm?160:90;
+    if(snow){ctx.fillStyle='rgba(255,255,255,.9)';for(let k=0;k<n;k++){const sp=.6+(k%5)/4,x=((k*71.3+t*30*sp+Math.sin(t*1.3+k)*14)%cssW+cssW)%cssW,y=(k*47.9+t*60*sp)%cssH;ctx.beginPath();ctx.arc(x,y,1.2+(k%3)*.8,0,Math.PI*2);ctx.fill()}}
+    else{ctx.strokeStyle='rgba(190,215,255,.55)';ctx.lineWidth=1.3;ctx.beginPath();
+      for(let k=0;k<n;k++){const sp=.8+(k%4)/3,x=((k*97.3-t*90*sp)%cssW+cssW)%cssW,y=(k*61.7+t*520*sp)%(cssH+40)-20;ctx.moveTo(x,y);ctx.lineTo(x-4,y+14)}ctx.stroke()}}
+  if(rainbowDay()&&nightness()<.3){const cx=cssW*.5,cy=cssH*.42,R=Math.min(cssW,cssH)*.62,a=.22*(1-nightness()*3);
+    ['#e74c3c','#f39c12','#f1c40f','#2ecc71','#3498db','#9b59b6'].forEach((col,k)=>{ctx.strokeStyle=col;ctx.globalAlpha=a;ctx.lineWidth=9;ctx.beginPath();ctx.arc(cx,cy,R-k*9,Math.PI*1.08,Math.PI*1.92);ctx.stroke()});ctx.globalAlpha=1}
+  if(flash>0){ctx.fillStyle=`rgba(255,255,240,${flash*.6})`;ctx.fillRect(0,0,cssW,cssH)}
+  const z=zoom(),s=z*dpr;ctx.setTransform(s,0,0,s,(cssW/2-cam.x*z)*dpr,(cssH/2-cam.y*z)*dpr);
+}
+// the pot of gold at the end of the rainbow: somewhere on the island, once per rainbow day
+let potCache=null;
+function potAt(){
+  if(!rainbowDay()||S.potDay===S.day||inside)return null;
+  if(potCache&&potCache.day===S.day&&potCache.seed===curSeed)return potCache.p;
+  let p=null;for(let k=0;k<400&&!p;k++){const x=2+(hash(S.day*13+k,curSeed%991)*(W-4)|0),y=2+(hash(k*7+S.day,(curSeed%887)+5)*(H-4)|0),i=y*W+x;
+    if(ter[i]===GRASS&&walkable(x,y)&&!objAt(i)&&Math.hypot(x-SPAWN.x,y-SPAWN.y)>6)p={x,y}}
+  potCache={day:S.day,seed:curSeed,p};return p;
+}
+function drawPot(c,P,t){
+  const X=P.x*T+16,Y=P.y*T+24,g=(Math.sin(t*3)+1)/2;
+  c.fillStyle=`rgba(255,230,120,${.25+.2*g})`;c.beginPath();c.arc(X,Y-8,20,0,Math.PI*2);c.fill();
+  ['#e74c3c','#f1c40f','#2ecc71','#3498db','#9b59b6'].forEach((col,k)=>{c.strokeStyle=col;c.globalAlpha=.5;c.lineWidth=3;c.beginPath();c.moveTo(X-6+k*3,Y-12);c.lineTo(X-30+k*3,Y-70);c.stroke()});c.globalAlpha=1;
+  ell(c,X,Y,11,3.5,'rgba(0,0,0,.25)');ell(c,X,Y-6,11,9,'#2a2a32');ell(c,X,Y-13,10,3.5,'#3a3a44');
+  for(const[a,b]of[[-5,-15],[0,-17],[5,-15],[-2,-13],[3,-13]])ell(c,X+a,Y+b,3,2,'#ffd23f');
+  if(Math.sin(t*4)>.6){c.fillStyle='#fff';c.fillRect(X+4,Y-24,2,6);c.fillRect(X+2,Y-22,6,2)}
 }
 // the fish smoker (fishing huts only): smoked fish sell for 30% more
 function smokerModal(){
@@ -1341,6 +1389,7 @@ function newDay(quiet){
   for(const p of pets())if(p.fed<S.day-1)p.hearts=Math.max(0,p.hearts-1); // nobody fed it yesterday
   if(S.villagers.length&&Math.random()<.6)S.home.drop={name:S.villagers[Math.random()*S.villagers.length|0].name,at:now()+30000+Math.random()*150000}; // someone drops by today
   dirty();if(!quiet&&isFestDay())setTimeout(()=>toast('🎪 It\'s Festival Day! Everyone is partying at the village square 🎉',3600),3200);
+  if(!quiet&&weather()!=='sun'||!quiet&&rainbowDay())setTimeout(()=>toast(weather()==='storm'?'⛈️ A big storm is coming today — villagers will hide inside when it hits! The rain makes crops grow 2× faster':weather()==='rain'?(curKind==='ice'?'❄️ It\'s snowing! Crops grow 2× faster today':'🌧️ It\'s raining! Your crops grow 2× faster today'):'🌈 A rainbow! Find the pot of gold at the end of it!',3600),6800);
   if(!quiet)toast(`☀️ Good morning! Day ${S.day}${S.villagers.some(v=>v.req)?' — some villagers need help ❗':''}`,3000);
 }
 if(S.day!==dayNow())newDay(true);else if(S.fg)loadForage();else genForage();
@@ -1568,6 +1617,8 @@ const ACT={
     S.inv[r.k]-=r.n;if(!S.inv[r.k])delete S.inv[r.k];S.coins+=r.reward;S.stats.helped++;tally('help');v.req=null;if(r.hurt)v.hurt=0;dirty();refreshTray();
     const vw=villagers.find(w=>w.v===v);if(vw)floatAt(vw.x,vw.y-44,`+🪙${r.reward}`);toast(r.hurt?`🩹 ${v.name}: “All better! Thank you so much!”`:`💛 ${v.name}: “Thank you so much!”`)},
   cook({k}){const R=RECIPES2[k];if(!R||!count('kitchen')||!canCook(k))return;for(const it in R.need){S.inv[it]-=R.need[it];if(!S.inv[it])delete S.inv[it]}give(k,1);tally('cook');dirty();refreshTray()},
+  potGold(){if(!potAt())return;S.potDay=S.day;S.coins+=150;give('gem',1);tally('rainbow');dirty();refreshTray();for(let k=0;k<50;k++)confetti.push({x:player.x,y:player.y-30,vx:(Math.random()-.5)*240,vy:-120-Math.random()*200,c:['#e74c3c','#ffd23f','#2ecc71','#3498db','#9b59b6'][k%5],t:0});
+    toast('🌈 The pot of gold at the end of the rainbow! 🪙150 and a 💎 gem!',3200)},
   smoke(){const n=S.inv.fish||0;if(!n)return;delete S.inv.fish;give('smokedfish',n);tally('smoke');dirty();refreshTray()},
   present({id}){const o=byId(id);if(!o||o.t!=='house'||presented(id))return;const p=S.presents&&S.presents.day===S.day?S.presents:(S.presents={day:S.day,ids:[]});p.ids.push(id);
     const v=S.villagers.find(v=>v.house===id);S.coins+=15;tally('present');dirty();refreshTray();toast(`🎁 ${v?v.name:'Someone'} loved the present! They tossed up 🪙15 to say thank you`,2800)},
@@ -1799,7 +1850,7 @@ function update(dt){
   const pt=tileOf(player),pk=pt.y*W+pt.x;
   if(inside){if(pt.x===DOOR_X&&pt.y===RH&&!player.path.length)exitHouse();else petsWander(dt)}
   else if(pk!==lastTile){lastTile=pk;reveal(pt.x,pt.y,4.6)}
-  trainUpdate(dt);ambUpdate(dt);festUpdate(dt);
+  trainUpdate(dt);ambUpdate(dt);festUpdate(dt);weatherUpdate(dt);
   // Villagers wander near home
   for(const v of villagers){
     v.talkT=Math.max(0,v.talkT-dt);
@@ -1818,11 +1869,11 @@ function update(dt){
         v.hospTry=0;v.noAmb=0;hv.hosp=H.id;v.inHosp=H.id;patientAt.delete(hv.name);dirty();continue}}
     if(v.asleep){if(sleepy(v)){v.wake=0;continue}
       if(!v.wake)v.wake=.1+Math.random()*6; // everyone gets up at their own time
-      if((v.wake-=dt)>0)continue;v.asleep=0;v.wake=0;v.x=v.door.x;v.y=v.door.y;v.path=[];v.wait=1;v.dir='down';v.say=['Good morning! ☀️','*yawn* 🥱','What a lovely sleep!'][Math.random()*3|0];v.talkT=3;continue}
+      if((v.wake-=dt)>0)continue;v.asleep=0;v.wake=0;v.x=v.door.x;v.y=v.door.y;v.path=[];v.wait=1;v.dir='down';v.say=tod()>.3&&tod()<.68?['The storm is over! 🌤️','Phew, that was loud! ⚡','Is it safe now? 🙂'][Math.random()*3|0]:['Good morning! ☀️','*yawn* 🥱','What a lovely sleep!'][Math.random()*3|0];v.talkT=3;continue}
     if(sleepy(v)&&!isGuest(v.v.name)){ // off to bed
       if(followPath(v,T*1.8,dt))continue;
       const d=tileOf(v.door),t=tileOf(v);
-      if(!v.homing&&(t.x!==d.x||t.y!==d.y)){v.homing=1;const r=findPath(t.x,t.y,(x,y)=>x===d.x&&y===d.y,null);if(r&&r.path.length){v.path=r.path;if(Math.random()<.5){v.say='Time for bed! 😴';v.talkT=2.5}continue}}
+      if(!v.homing&&(t.x!==d.x||t.y!==d.y)){v.homing=1;const r=findPath(t.x,t.y,(x,y)=>x===d.x&&y===d.y,null);if(r&&r.path.length){v.path=r.path;if(Math.random()<.5){v.say=bedtime()?'Time for bed! 😴':'Eek, a storm! Run home! ⛈️';v.talkT=2.5}continue}}
       v.homing=0;v.asleep=1;v.walk=0;v.path=[];continue}
     v.homing=0;
     if(followPath(v,T*1.8,dt))continue;v.walk=0;
@@ -1860,7 +1911,7 @@ function update(dt){
   if(!inside){cam.x=Math.max(0,Math.min(W*T,cam.x));cam.y=Math.max(0,Math.min(H*T,cam.y))}
   if((goalT-=dt)<=0){goalT=.4;checkGoals()}
   if(S.coins!==lastCoins){lastCoins=S.coins;document.getElementById('hCoins').textContent=`🪙 ${S.coins}`;refreshPoor()}
-  document.getElementById('hDay').textContent=`${nightness()>.3?'🌙':'☀️'} ${S.day}`;
+  document.getElementById('hDay').textContent=`${nightness()>.3?'🌙':WX_ICON()} ${S.day}`;
   document.getElementById('hExp').textContent=`🧭 ${explored()}%`;
   if(saveDirty&&(saveT-=dt)<=0){saveT=2;saveNow()}
   if(net)netTick(dt);
@@ -2055,12 +2106,12 @@ function drawObjIn(c,o,t,icon){
   case'hive':rect(c,X+8,Y+24,3,7,'#6b4a2a');rect(c,X+21,Y+24,3,7,'#6b4a2a');rect(c,X+6,Y+17,20,8,'#e7a925',3);rect(c,X+7,Y+10,18,8,'#f2c43d',3);rect(c,X+8,Y+4,16,7,'#f6d35b',3);
     ell(c,X+16,Y+21,3,2,'#5a3b10');if(!icon)for(let k=0;k<3;k++){const a=t*2+k*2.1;ell(c,X+16+Math.cos(a)*13,Y+8+Math.sin(a*1.7)*7,2,1.6,'#222');ell(c,X+16+Math.cos(a)*13,Y+7+Math.sin(a*1.7)*7,1.6,1,'rgba(255,255,255,.8)')}break;
   case'bin':rect(c,X+3,Y+11,26,18,'#a0682f',3);rect(c,X+3,Y+18,26,3,'#7b4b20');rect(c,X+1,Y+6,30,7,'#7b4b20',3);ell(c,X+16,Y+24,4,3,'#ffd24a');break;
-  case'house':if(curKind==='ice'){igloo(c,o,t,icon,night);if(!icon&&asleepIn(o))bubble(c,X+32,Y-2,'💤');break}{const roof=ROOFS[o.id%ROOFS.length],wall=WALLS[o.id%WALLS.length];
+  case'house':if(curKind==='ice'){igloo(c,o,t,icon,night);if(!icon&&asleepIn(o))bubble(c,X+32,Y-2,bedtime()?'💤':'☔');break}{const roof=ROOFS[o.id%ROOFS.length],wall=WALLS[o.id%WALLS.length];
     rect(c,X+44,Y+4,8,16,'#8b5a3c');rect(c,X+6,Y+26,52,36,wall,3);rect(c,X+6,Y+56,52,6,'rgba(0,0,0,.08)');
     poly(c,roof,X+1,Y+30,X+32,Y+2,X+63,Y+30);poly(c,'rgba(0,0,0,.15)',X+1,Y+30,X+63,Y+30,X+60,Y+27,X+4,Y+27);
     const win=night>.2?'#ffe27a':'#9fd8ff';
     for(const wx of[X+12,X+42]){rect(c,wx,Y+36,11,11,win,2);c.fillStyle='#fff';c.fillRect(wx+5,Y+36,1.5,11);c.fillRect(wx,Y+41,11,1.5)}
-    rect(c,X+26,Y+42,12,20,'#8b5a3c',3);ell(c,X+35,Y+53,1.4,1.4,'#ffd24a');if(!icon&&asleepIn(o))bubble(c,X+32,Y+2,'💤');break}
+    rect(c,X+26,Y+42,12,20,'#8b5a3c',3);ell(c,X+35,Y+53,1.4,1.4,'#ffd24a');if(!icon&&asleepIn(o))bubble(c,X+32,Y+2,bedtime()?'💤':'☔');break}
   case'myhouse':if(curKind==='ice')igloo(c,o,t,icon,night);else{rect(c,X+68,Y-16,10,24,'#9a5b3c',2);rect(c,X+6,Y+18,84,44,'#fff6e6',4);rect(c,X+6,Y+56,84,6,'rgba(0,0,0,.08)');
     poly(c,'#3d7fc4',X,Y+24,X+48,Y-22,X+96,Y+24);poly(c,'#2f66a3',X,Y+24,X+96,Y+24,X+92,Y+20,X+4,Y+20);
     for(let k=0;k<7;k++)ell(c,X+6+k*14,Y+24,7,4,'#2f66a3');
@@ -2318,6 +2369,7 @@ function draw(t){
   if(NEST_AT)list.push([(NEST_AT.y+3)*T,()=>drawNest(ctx,t)]);
   if(X_AT)list.push([X_AT.y*T+2,()=>drawXSpot(ctx,t)]);
   if(amb)list.push([amb.y,()=>drawAmb(ctx,amb,t)]);
+  {const P=potAt();if(P)list.push([P.y*T+20,()=>drawPot(ctx,P,t)])}
   if(festNow())drawFest(list,t);
   if(train)drawTrainList(list,t);
   if(VOLCANO){list.push([(VOLCANO.y+3)*T,()=>drawVolcano(ctx,t)]);
@@ -2375,6 +2427,7 @@ function draw(t){
   if(curKind==='falls')drawMotes(t);
   if(curKind==='autumn')drawLeaves(t);
   if(curKind==='haunted')drawSpooky(t);
+  drawWeather(t);
   if(VOLCANO){const left=ERUPT_MS-now()%ERUPT_MS;if(left<3000){ctx.setTransform(dpr,0,0,dpr,0,0);ctx.font='bold 34px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.lineWidth=5;ctx.strokeStyle='rgba(60,10,0,.8)';const txt=`🌋 ${Math.ceil(left/1000)}`;ctx.strokeText(txt,cssW/2,128);ctx.fillStyle='#ffd23f';ctx.fillText(txt,cssW/2,128)}}
   drawSleep();
