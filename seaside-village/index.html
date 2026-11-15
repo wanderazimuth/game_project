@@ -198,7 +198,7 @@ function noise(rng,cell){
     const a=g[iy*gw+ix],b=g[iy*gw+ix+1],c=g[(iy+1)*gw+ix],d=g[(iy+1)*gw+ix+1];
     return a+(b-a)*tx+(c-a)*ty+(a-b-c+d)*tx*ty}}
 const hash=(x,y)=>(((x*73856093)^(y*19349663))>>>0)%1000/1000;
-const WATER=0,SAND=1,GRASS=2,ICE=3,TREE=1,PALM=2,ROCK=3,VOLC=4,FALL=5,TEMPLE=6,CAVE=7,GALLEON=8,MILL=9,XSPOT=10,NEST=11,PYRAMID=12,HSPRING=13,SLIDE=14,LANTERN=15; // GALLEON, XSPOT: Pirate Island; MILL: Autumn Island
+const WATER=0,SAND=1,GRASS=2,ICE=3,TREE=1,PALM=2,ROCK=3,VOLC=4,FALL=5,TEMPLE=6,CAVE=7,GALLEON=8,MILL=9,XSPOT=10,NEST=11,PYRAMID=12,HSPRING=13,SLIDE=14,LANTERN=15,DUNGEON=16; // GALLEON, XSPOT: Pirate Island; MILL: Autumn Island
  // CAVE: the cave hill, Under the Waterfall
  // ICE: a frozen lake (ground); VOLC, FALL, TEMPLE: the volcano, waterfall cliff and temple (features you can't chop)
 const ter=new Uint8Array(W*H),feat=new Uint8Array(W*H),depth=new Uint8Array(W*H);
@@ -207,7 +207,7 @@ let SPAWN,SHIP,chests=[],landTotal=0;
 const inMap=(x,y)=>x>=0&&y>=0&&x<W&&y<H;
 const N4=[[1,0],[-1,0],[0,1],[0,-1]],N8=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
 const HOME_SEED=20261108;
-let curSeed=HOME_SEED,curKind='',VOLCANO=null,FALLS=null,TEMPLE_AT=null,CAVE_AT=null,GAL_AT=null,MILL_AT=null,X_AT=null,NEST_AT=null,PYR_AT=null,LAGOON=null,SPRINGS=[],SLIDE_AT=null,POND=null,LANTERNS=[],DEN=null; // FALLS, TEMPLE_AT: on Jungle Island // VOLCANO: the volcano's middle tile, on Volcano Island
+let curSeed=HOME_SEED,curKind='',VOLCANO=null,FALLS=null,TEMPLE_AT=null,CAVE_AT=null,GAL_AT=null,MILL_AT=null,X_AT=null,NEST_AT=null,PYR_AT=null,LAGOON=null,SPRINGS=[],SLIDE_AT=null,POND=null,LANTERNS=[],DEN=null,DUN_AT=null; // FALLS, TEMPLE_AT: on Jungle Island // VOLCANO: the volcano's middle tile, on Volcano Island
 // the land tile farthest from the sea, near the middle and away from the beach where you land
 function inlandMiddle(){
   const far=new Int16Array(W*H).fill(-1),q=[];for(let i=0;i<W*H;i++)if(ter[i]===WATER){far[i]=0;q.push(i)}
@@ -216,7 +216,7 @@ function inlandMiddle(){
   return best;
 }
 function genIsland(seed=HOME_SEED,kind=''){
-  feat.fill(0);chestAt.fill(-1);chests=[];landTotal=0;curSeed=seed;curKind=kind;VOLCANO=null;FALLS=null;TEMPLE_AT=null;CAVE_AT=null;GAL_AT=null;MILL_AT=null;X_AT=null;NEST_AT=null;PYR_AT=null;LAGOON=null;SPRINGS=[];SLIDE_AT=null;POND=null;LANTERNS=[];DEN=null;
+  feat.fill(0);chestAt.fill(-1);chests=[];landTotal=0;curSeed=seed;curKind=kind;VOLCANO=null;FALLS=null;TEMPLE_AT=null;CAVE_AT=null;GAL_AT=null;MILL_AT=null;X_AT=null;NEST_AT=null;PYR_AT=null;LAGOON=null;SPRINGS=[];SLIDE_AT=null;POND=null;LANTERNS=[];DEN=null;DUN_AT=null;
   // each new island gets its own size, lakes and forests; the home island keeps the ones it always had
   const v=seed===HOME_SEED?null:rngFrom(seed^0x5bd1e995);
   const P=kind==='dino'?{rx:.43,ry:.42,lake:.8,forest:.55,trees:.62,palms:.3,lone:.05,rocks:.05,sandRocks:.015}:kind==='haunted'?{rx:.43,ry:.42,lake:.8,forest:.55,trees:.5,palms:0,lone:.05,rocks:.07,sandRocks:.02}:kind==='pirate'?{rx:.43,ry:.42,lake:2,forest:.62,trees:.6,palms:.4,lone:.04,rocks:.03,sandRocks:.01}:kind==='autumn'?{rx:.43,ry:.42,lake:.78,forest:.5,trees:.75,palms:0,lone:.06,rocks:.04,sandRocks:.01}:kind==='falls'?{rx:.44,ry:.44,lake:.8,forest:.5,trees:.55,palms:0,lone:.04,rocks:.06,sandRocks:.03}:kind==='jungle'?{rx:.43,ry:.42,lake:2,forest:.45,trees:.78,palms:.22,lone:.06,rocks:.03,sandRocks:.01}:kind==='ice'?{rx:.42,ry:.41,lake:.6,forest:.55,trees:.55,palms:0,lone:.02,rocks:.06,sandRocks:.02}:kind==='volcano'?{rx:.42,ry:.42,lake:2,forest:2,trees:0,palms:0,lone:0,rocks:.22,sandRocks:.12}:kind==='lagoon'?{rx:.44,ry:.43,lake:2,forest:.6,trees:.55,palms:.45,lone:.04,rocks:.03,sandRocks:.01}:kind==='blossom'?{rx:.43,ry:.42,lake:.8,forest:.5,trees:.7,palms:0,lone:.06,rocks:.04,sandRocks:.01}:kind==='desert'?{rx:.44,ry:.43,lake:2,forest:.66,trees:.35,palms:.06,lone:.025,rocks:.035,sandRocks:.02}:v?{rx:.36+v()*.12,ry:.34+v()*.12,lake:.66+v()*.14,forest:.52+v()*.16,trees:.5+v()*.35,palms:.06+v()*.08,rocks:.04+v()*.04}
@@ -290,6 +290,12 @@ function genIsland(seed=HOME_SEED,kind=''){
       for(let i=-3;i<=3&&!door;i++)if(seen[(y+4)*W+x+i])door=true;for(let j=-1;j<=3&&!door;j++)if(seen[(y+j)*W+x-4]||seen[(y+j)*W+x+4])door=true;
       if(!door)continue;const d=Math.min(Math.hypot(x-SPAWN.x,y-SPAWN.y),TEMPLE_AT?Math.hypot(x-TEMPLE_AT.x-1,y-TEMPLE_AT.y-1)*1.4:99);if(d>dd){dd=d;db=y*W+x}}
     if(db>=0){DEN={x:db%W,y:db/W|0};for(let j=-1;j<=3;j++)for(let i=-3;i<=3;i++){const k=(DEN.y+j)*W+DEN.x+i;if(feat[k]&&feat[k]<VOLC)feat[k]=0}}
+    // the way down into the Jungle Dungeon: an old stone stairway, somewhere you can walk to
+    let ub=-1,ud=-1;
+    for(let y=3;y<H-4;y++)for(let x=3;x<W-4;x++){const i=y*W+x;if(ter[i]!==GRASS||feat[i]>=VOLC||!N4.some(([a,b])=>seen[(y+b)*W+x+a]))continue;
+      if(Math.hypot(x-cx,y-cy)<6||DEN&&Math.hypot(x-DEN.x,y-DEN.y)<10||TEMPLE_AT&&Math.hypot(x-TEMPLE_AT.x-1,y-TEMPLE_AT.y-1)<8)continue;
+      const d=Math.hypot(x-SPAWN.x,y-SPAWN.y);if(d<12)continue;const sc=-Math.abs(d-20)+hash(x,y)*3;if(sc>ud){ud=sc;ub=i}}
+    if(ub>=0){DUN_AT={x:ub%W,y:ub/W|0};feat[ub]=DUNGEON;for(const[a,b]of N8){const k=ub+b*W+a;if(feat[k]&&feat[k]<VOLC)feat[k]=0}}
   }
   // Pirate Island: a pirate galleon wrecked on a far beach, and an ❌ where the gold is buried
   if(kind==='pirate'){
@@ -385,7 +391,7 @@ function load(){
 S=load();S.seed=S.seed||curSeed;S.kind=S.kind||curKind;
 for(const k in S.inv)if(!ITEMS[k])delete S.inv[k]; // things that aren't in the game any more
 placeCave();featOrig=feat.slice();
-for(const i of S.cut)feat[i]=0;
+for(const i of S.cut)if(feat[i]<VOLC)feat[i]=0;
 // Wood: floors you lay on the water, and then build on just like grass
 const wood=new Uint8Array(W*H);let woodSig='';
 function applyWood(){const w=S.wood||[],sig=w.join(',');if(sig===woodSig)return false;woodSig=sig;wood.fill(0);for(const i of w)if(ter[i]===WATER)wood[i]=1;return true}
@@ -581,6 +587,7 @@ function pickAt(wx,wy){
     if(feat[i]===PYRAMID)return{k:'pyramid'};
     if(feat[i]===HSPRING)return{k:'spring',i};
     if(feat[i]===LANTERN)return{k:'lantern',i};
+    if(feat[i]===DUNGEON)return{k:'dungeon',i};
     if(feat[i]===SLIDE)return{k:'slide'};
     if(feat[i]===XSPOT)return{k:'xspot'};
     if(feat[i]&&(d===0||d===1&&feat[i]!==ROCK))return{k:'feat',i,x,y};
@@ -658,6 +665,7 @@ function arrive(tg){
     case'captive':{const cr=tg.v.grab;if(!tg.v.cage||!cr)break;if(sandSees(cr,player)){cr.seenT=2.5;sandSpotted(cr)}else sandFree(cr,true);break}
     case'spring':doAct('soak',{i:tg.i});break;
     case'lantern':doAct('lantern',{i:tg.i});break;
+    case'dungeon':dunModal();break;
     case'slide':slideRide();break;
     case'pot':doAct('potGold',{});break;
     case'fest':festStall(tg.st);break;
@@ -1080,7 +1088,7 @@ function critterUpdate(dt){
     if(cr.kind==='swamp'&&cr.walk>0&&(cr.mudT=(cr.mudT||0)-dt)<=0){cr.mudT=.6;const mt=tileOf(cr);if(inMap(mt.x,mt.y)&&ter[mt.y*W+mt.x]!==WATER&&!muds.some(m=>m.x===mt.x&&m.y===mt.y))muds.push({x:mt.x,y:mt.y,t:0})}
     if(cr.kind==='fire'&&(cr.walk>0)&&(cr.fireT=(cr.fireT||0)-dt)<=0){cr.fireT=.45;const ft=tileOf(cr);if(inMap(ft.x,ft.y)&&ter[ft.y*W+ft.x]!==WATER)flames.push({x:ft.x,y:ft.y,t:0})}
     if(cr.rage>0)cr.rage-=dt;
-    if(HUNT[cr.kind]&&!cr.calm&&!tame(cr)&&!fly&&!player.stun&&!player.slide&&!(train&&train.rider)&&(cr.chase>0||d<T*HUNT[cr.kind].see*(cr.rage>0?1.6:1))){ // RUN! It's a terror bird (or a polar bear)!
+    if(HUNT[cr.kind]&&!cr.calm&&!tame(cr)&&!fly&&!work&&!player.stun&&!player.slide&&!(train&&train.rider)&&(cr.chase>0||d<T*HUNT[cr.kind].see*(cr.rage>0?1.6:1))){ // RUN! It's a terror bird (or a polar bear)!
       const Hk=HUNT[cr.kind];
       if(!cr.chase){cr.chase=.01;floatAt(cr.x,cr.y-50,Hk.cry);toast(`${Hk.e} A ${Hk.name} spotted you — RUN!`,2200)}
       cr.chase+=dt;if(d>T*10||cr.chase>6){cr.chase=0;cr.calm=5;continue} // it gives up
@@ -2206,7 +2214,7 @@ function sailTo(id,hello){
 }
 // set everything up for the island in ns (its land is already made by genIsland)
 function enterIsland(ns){
-  S=ns;S.seed=curSeed;S.kind=curKind;bombs=[];lavaDrops=[];train=null;amb=null;placeCave();featOrig=feat.slice();for(const i of S.cut)feat[i]=0;woodSig='-';applyWood();drawTerrain();
+  S=ns;S.seed=curSeed;S.kind=curKind;bombs=[];lavaDrops=[];train=null;amb=null;placeCave();featOrig=feat.slice();for(const i of S.cut)if(feat[i]<VOLC)feat[i]=0;woodSig='-';applyWood();drawTerrain();
   landRev=0;for(let i=0;i<W*H;i++){rev[i]=S.rev[i]==='1'?1:0;fogImg.data[i*4+3]=rev[i]?0:255;if(rev[i]&&ter[i]!==WATER)landRev++}fogX.putImageData(fogImg,0,0);
   rebuildOcc();roomCache.clear();petAt.clear();guestAt.clear();spawnScorps();
   if(S.day!==dayNow())newDay(true);else if(S.fg)loadForage();else genForage();
@@ -2597,6 +2605,7 @@ const ACT={
   buyBandaid({n}){n=Math.max(1,Math.min(10,n|0));if(!count('hospital')||S.coins<BANDAID*n)return;S.coins-=BANDAID*n;give('bandaid',n);dirty();refreshTray()},
   place({t,x,y}){if(BUILD[t])doPlace(t,x,y)},
   steal({k,n,coins}){if(coins){S.coins-=Math.min(coins,S.coins)}else if(S.inv[k]){S.inv[k]-=Math.min(n,S.inv[k]);if(!S.inv[k])delete S.inv[k];refreshTray()}dirty()},
+  dungeon({gems}){if(S.dunDay===S.day)return;S.dunDay=S.day;S.coins+=200;gems=Math.max(0,Math.min(6,Math.floor(+gems)||0));if(gems)give('gem',gems);if(!S.dunWon){S.dunWon=1;give('idol',1)}dirty();refreshTray()},
   fireworks(){if(S.coins<25)return;S.coins-=25;dirty()},
   giveBack({k,n,coins}){if(coins)S.coins+=coins;else if(ITEMS[k])give(k,n);dirty()},
   lavaPick(){give('lavarock',1);tally('collect:lavarock')},
@@ -2805,7 +2814,7 @@ function useNearest(){
   for(const[x,y]of[[t.x+d[0],t.y+d[1]],[t.x,t.y],...N8.map(([a,b])=>[t.x+a,t.y+b])]){
     if(!inMap(x,y))continue;const i=y*W+x;
     const v=villagers.find(v=>{const vt=tileOf(v);return vt.x===x&&vt.y===y});
-    let tg=v?{k:'vill',v}:objAt(i)&&objAt(i).t!=='path'?{k:'obj',o:objAt(i)}:inShip(x,y)?{k:'ship'}:chestHere(i)?{k:'chest',c:chestAt[i]}:feat[i]===CAVE?{k:'cave'}:feat[i]===GALLEON?{k:'galleon'}:feat[i]===MILL?{k:'mill'}:feat[i]===NEST?{k:'nest'}:feat[i]===PYRAMID?{k:'pyramid'}:feat[i]===HSPRING?{k:'spring',i}:feat[i]===LANTERN?{k:'lantern',i}:feat[i]===SLIDE?{k:'slide'}:feat[i]===XSPOT?{k:'xspot'}:feat[i]?{k:'feat',i,x,y}:fireAt(x,y)?null:forageAt.has(i)?{k:'forage',i}:null;
+    let tg=v?{k:'vill',v}:objAt(i)&&objAt(i).t!=='path'?{k:'obj',o:objAt(i)}:inShip(x,y)?{k:'ship'}:chestHere(i)?{k:'chest',c:chestAt[i]}:feat[i]===CAVE?{k:'cave'}:feat[i]===GALLEON?{k:'galleon'}:feat[i]===MILL?{k:'mill'}:feat[i]===NEST?{k:'nest'}:feat[i]===PYRAMID?{k:'pyramid'}:feat[i]===HSPRING?{k:'spring',i}:feat[i]===LANTERN?{k:'lantern',i}:feat[i]===DUNGEON?{k:'dungeon',i}:feat[i]===SLIDE?{k:'slide'}:feat[i]===XSPOT?{k:'xspot'}:feat[i]?{k:'feat',i,x,y}:fireAt(x,y)?null:forageAt.has(i)?{k:'forage',i}:null;
     if(tg){arrive(tg);return}
   }
 }
@@ -3524,6 +3533,7 @@ function draw(t){
   if(DEN)list.push([DEN.y*T+30,()=>drawDen(ctx,t)]);
   for(const p of SPRINGS)list.push([p.y*T+4,()=>drawSpring(ctx,p,t)]);
   for(const p of LANTERNS)list.push([(p.y+1)*T-4,()=>drawLantern(ctx,p,t)]);
+  if(DUN_AT)list.push([(DUN_AT.y+1)*T-4,()=>drawDunDoor(ctx,t)]);
   if(SLIDE_AT)list.push([(SLIDE_AT.y+2)*T,()=>drawSlide(ctx,t)]);
   if(X_AT)list.push([X_AT.y*T+2,()=>drawXSpot(ctx,t)]);
   if(amb)list.push([amb.y,()=>drawAmb(ctx,amb,t)]);
@@ -4756,7 +4766,7 @@ function applySnap(m){
   const first=!guestMode,old=S;
   clockOff=m.now-Date.now();S=m.s;
   if((S.seed||HOME_SEED)!==curSeed){genIsland(S.seed||HOME_SEED,S.kind||'');placeCave();featOrig=feat.slice();woodSig='-';applyWood();drawTerrain();roomCache.clear()}
-  feat.set(featOrig);for(const i of S.cut)feat[i]=0;
+  feat.set(featOrig);for(const i of S.cut)if(feat[i]<VOLC)feat[i]=0;
   if(applyWood())drawTerrain();
   landRev=0;
   for(let i=0;i<W*H;i++){const r=S.rev[i]==='1'||!first&&rev[i]?1:0;rev[i]=r;fogImg.data[i*4+3]=r?0:255;if(r&&ter[i]!==WATER)landRev++}
@@ -4857,7 +4867,7 @@ function endWork(){
   openModal(`<h2>🎉 Great work!</h2><p style="font-size:44px;text-align:center">${w.job.icon}</p><p>You were a great ${w.job.n.toLowerCase()} today and earned <b>🪙${w.earned}</b>!</p><div class="btns"><button class="btn" data-a="close">Yay!</button></div>`);
 }
 workEl.addEventListener('pointerdown',e=>{
-  e.preventDefault();if(work&&work.sky){skyTap(e);return}if(!work||work.t<.3)return;
+  e.preventDefault();if(work&&work.dun){dunTap(e);return}if(work&&work.sky){skyTap(e);return}if(!work||work.t<.3)return;
   let best=null,bd=50;for(const g of work.targets){if(g.hit)continue;const d=Math.hypot(g.x-e.clientX,g.y-e.clientY);if(d<bd){bd=d;best=g}}
   if(!best)return;best.hit=.001;const v=best.star?STAR_PAY:WORK_PAY;work.earned+=v;work.fx.push({x:best.x,y:best.y-36,txt:'+🪙'+v,life:1});
 });
@@ -4890,6 +4900,158 @@ function workFrame(dt){
   if(w.t>=w.dur&&!w.targets.some(g=>g.hit))endWork();
 }
 
+// ── The Jungle Dungeon: three rooms of traps under Jungle Island — grab the golden idol and escape! ──
+// # wall  . floor  S start  E stairs out  ^ spikes  ~ pit  % crumbly floor  K key  D locked door  * gem  R/L dart shooters  I the idol
+const DUN_LEVELS=[
+  {n:'1 · The Spike Hall',m:['#####E#####','#..^^^^^..#','#*.^^^^^.*#','#..^^^^^..#','####...####','#....*....#','#.^.^.^.^.#','#..^.^.^..#','#....S....#','###########']},
+  {n:'2 · The Dart Room',m:['###########','#*..E....*#','#####D#####','R.........L','#.~~~.~~~.#','#....*....#','R.........L','#.%%%%%%%.#','#K..~~~...#','#.........#','#....S....#','###########']},
+  {n:'3 · The Idol Chamber',m:['#####I#####','#.........#','###.###.###','#*..^..^..#','#.#######.#','#.%%%%%...#','#.###.#####','R....*....L','#.~~.~~~~.#','#....S....#','#####E#####']}];
+function dunModal(){
+  const won=S.dunDay===S.day;
+  openModal(`<h2>🕳️ The Jungle Dungeon</h2><p style="font-size:40px;text-align:center">🗿⚠️🕸️</p><p>Deep under the jungle: spikes, darts, crumbly floors and bottomless pits… and a golden idol in the last room. Grab it and <b>escape</b>!</p>
+    <p>${won?'You already escaped today — go again just for fun!':`🏆 Escape to win <b>🪙200</b> and every 💎 gem you grab${S.dunWon?'':' — plus a 🗿 Golden Idol the first time'}!`}</p><p>❤️❤️❤️ You have 3 hearts. Move with the arrow buttons (or arrow keys).</p>
+    <div class="btns"><button class="btn gray" data-a="close">Not now</button><button class="btn" data-a="go">⚔️ Go in!</button></div>`,{go:()=>{closeModal();startDungeon()}});
+}
+function startDungeon(){
+  if(work)return;player.path=[];player.target=null;player.act=null;player.steer=null;
+  work={dun:1,t:0,hearts:3,gems:0,fx:[],held:null,kdir:null,shake:0};dunLevel(0);workEl.style.display='block';
+}
+function dunLevel(n){
+  const w=work,L=DUN_LEVELS[n];w.lv=n;w.map=L.m.map(r=>r.split(''));w.rows=w.map.length;w.cols=w.map[0].length;
+  for(let y=0;y<w.rows;y++)for(let x=0;x<w.cols;x++)if(w.map[y][x]==='S'){w.px=w.tx=x;w.py=w.ty=y;w.map[y][x]='.'}
+  w.safe={x:w.px,y:w.py};w.key=0;w.idol=0;w.boulder=null;w.darts=[];w.crumb={};w.shots={};w.inv=1;w.banner=2.2;w.dir='up';w.walk=0;w.moving=0;w.held=null;w.kdir=null; // let go of the arrows: a new room starts standing still
+}
+const dunAt=(w,x,y)=>(w.map[y]&&w.map[y][x])||'#';
+const spikeUp=(w,x,y)=>((w.t*.8+x*.32+y*.12)%2.2)<.9;
+const spikeWarn=(w,x,y)=>{const p=(w.t*.8+x*.32+y*.12)%2.2;return p>1.9};
+function dunOpen(w,x,y){const c=dunAt(w,x,y);
+  if(c==='#'||c==='R'||c==='L')return false;
+  if(c==='D'&&!w.key){dunSay(w,'🔒 Find the 🗝️ key first!');return false}
+  if(c==='E'&&w.lv===2&&!w.idol){dunSay(w,'🗿 Grab the golden idol first!');return false}
+  return true}
+function dunSay(w,txt){if(w.fx.some(f=>f.txt===txt))return;w.fx.push({txt,x:w.px,y:w.py-.6,life:1.6,big:1})}
+function dunHurt(w,why){if(w.inv>0||w.over)return;w.hearts--;w.inv=1.4;w.shake=.35;w.fx.push({txt:why||'OUCH! 💔',x:w.px,y:w.py-.5,life:1.2});if(w.hearts<=0)w.over={win:0,t:0}}
+function dunFall(w){if(w.over)return;w.hearts--;w.inv=1.4;w.shake=.4;w.fx.push({txt:'AAAAH! 💔',x:w.px,y:w.py-.5,life:1.2});w.px=w.tx=w.safe.x;w.py=w.ty=w.safe.y;w.moving=0;if(w.hearts<=0)w.over={win:0,t:0}}
+function dunArrive(w){
+  const x=w.px,y=w.py,c=dunAt(w,x,y);
+  if(c==='*'){w.gems++;w.map[y][x]='.';w.fx.push({txt:'+💎',x,y:y-.4,life:1})}
+  else if(c==='K'){w.key=1;w.map[y][x]='.';w.fx.push({txt:'🗝️ Got the key!',x,y:y-.4,life:1.4})}
+  else if(c==='D'){w.map[y][x]='.';w.fx.push({txt:'🔓 Creeeak…',x,y:y-.4,life:1.2})}
+  else if(c==='I'){w.idol=1;w.map[y][x]='.';w.shake=1.2;w.boulder={x:5,y:1,a:0,wait:1.4,path:[],rp:0};w.fx.push({txt:'🗿 RUMBLE RUMBLE… RUN!!',x:5,y:2,life:2.4,big:1})}
+  else if(c==='E'){if(w.lv<2){dunLevel(w.lv+1)}else{w.over={win:1,t:0};w.fx.push({txt:'🎉 YOU ESCAPED!',x,y:y-.6,life:3,big:1})}return}
+  else if(c==='~'){dunFall(w);return}
+  if(c==='.'||c==='*'||c==='K'||c==='D'||c==='I')w.safe={x,y};
+}
+function dunFrame(dt){
+  const W2=innerWidth,H2=innerHeight,d=Math.min(2,devicePixelRatio||1);
+  if(wcv.width!==Math.round(W2*d)||wcv.height!==Math.round(H2*d)){wcv.width=Math.round(W2*d);wcv.height=Math.round(H2*d)}
+  const w=work;w.t+=dt;w.inv=Math.max(0,w.inv-dt);w.banner-=dt;w.shake=Math.max(0,w.shake-dt);
+  if(w.over){w.over.t+=dt;if(w.over.t>(w.over.win?2:1.6)){endDungeon(w);return}}
+  else{
+    // moving, one tile at a time
+    const want=w.held||w.kdir;
+    if(!w.moving&&want){const[dx,dy]={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]}[want];w.dir=want;if(dunOpen(w,w.px+dx,w.py+dy)){w.tx=w.px+dx;w.ty=w.py+dy;w.moving=1;w.fx0=[w.px,w.py]}}
+    if(w.moving){w.mt=(w.mt||0)+dt*4.6;w.walk+=dt*10;const[ox,oy]=w.fx0;const a=Math.min(1,w.mt);w.ax=ox+(w.tx-ox)*a;w.ay=oy+(w.ty-oy)*a;
+      if(a>=1){w.mt=0;w.moving=0;w.px=w.tx;w.py=w.ty;w.ax=w.px;w.ay=w.py;dunArrive(w)}}
+    else{w.ax=w.px;w.ay=w.py;w.walk=0}
+    if(w.over){}else{
+    const cx=Math.round(w.ax),cy=Math.round(w.ay),here=dunAt(w,cx,cy);
+    // spikes
+    if(here==='^'&&spikeUp(w,cx,cy))dunHurt(w,'SPIKES! 💔');
+    // crumbly floor: it gives way a moment after you step on it, then grows back
+    if(here==='%'&&!w.crumb[cx+','+cy])w.crumb[cx+','+cy]={t:0,hole:0};
+    for(const k in w.crumb){const c=w.crumb[k];if(!c.hole){c.t+=dt;if(c.t>.75)c.hole=3}else if((c.hole-=dt)<=0)delete w.crumb[k]}
+    {const c=w.crumb[cx+','+cy];if(c&&c.hole&&here==='%'&&!w.moving)dunFall(w)}
+    // dart shooters
+    for(let y=0;y<w.rows;y++)for(const x of[0,w.cols-1]){const c=dunAt(w,x,y);if(c!=='R'&&c!=='L')continue;const per=2.3,n=Math.floor((w.t+y*.83)/per),k=x+','+y;
+      if(w.shots[k]===undefined)w.shots[k]=n;else if(n>w.shots[k]){w.shots[k]=n;w.darts.push({x:x+(c==='R'?.6:-.6),y,v:c==='R'?6:-6,sx:x})}}
+    for(const a of w.darts){a.x+=a.v*dt;if(Math.abs(a.y-w.ay)<.5&&Math.abs(a.x-w.ax)<.45){a.dead=1;dunHurt(w,'DART! 💔')}const rx=Math.round(a.x),c=dunAt(w,rx,a.y);if(rx!==a.sx&&(c==='#'||c==='R'||c==='L'))a.dead=1;if(a.x<-.5||a.x>w.cols)a.dead=1}
+    w.darts=w.darts.filter(a=>!a.dead);
+    // the giant boulder (after you grab the idol)
+    const B=w.boulder;
+    if(B){if(B.wait>0)B.wait-=dt;else{
+      if((B.rp-=dt)<=0){B.rp=.3;const sx=Math.round(B.x),sy=Math.round(B.y),q=[[sx,sy]],prev={[sx+','+sy]:null};let f=null;
+        for(let h=0;h<q.length&&!f;h++){const[x,y]=q[h];if(x===cx&&y===cy){f=[x,y];break}for(const[a,b]of[[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+a,ny=y+b,c=dunAt(w,nx,ny),k=nx+','+ny;if(c==='#'||c==='R'||c==='L'||k in prev)continue;prev[k]=[x,y];q.push([nx,ny])}}
+        B.path=[];if(f){let p=f;while(p&&prev[p[0]+','+p[1]]){B.path.unshift(p);p=prev[p[0]+','+p[1]]}}}
+      if(B.path.length){const[gx,gy]=B.path[0],ddx=gx-B.x,ddy=gy-B.y,dd=Math.hypot(ddx,ddy),st=2.7*dt;B.a+=st*2*(ddx<0?-1:1);if(dd<=st){B.x=gx;B.y=gy;B.path.shift()}else{B.x+=ddx/dd*st;B.y+=ddy/dd*st}}
+      if(Math.hypot(B.x-w.ax,B.y-w.ay)<.75&&!w.inv){dunHurt(w,'SQUASH! 💔');B.x=5;B.y=1;B.wait=1.6;B.path=[]}}}
+    }
+  }
+  for(const f of w.fx){f.life-=dt;f.y-=.6*dt}w.fx=w.fx.filter(f=>f.life>0);
+  // ── draw ──
+  const c=wx;c.setTransform(d,0,0,d,0,0);c.fillStyle='#120e0a';c.fillRect(0,0,W2,H2);
+  const ts=dunTs(w,W2,H2),ox=Math.round((W2-w.cols*ts)/2)+(w.shake?(Math.random()-.5)*8:0),oy=96+(w.shake?(Math.random()-.5)*6:0);
+  const X=x=>ox+x*ts,Y=y=>oy+y*ts,t=w.t;
+  c.textAlign='center';c.textBaseline='middle';
+  const emo=(e,x,y,sz)=>{c.font=`${sz|0}px sans-serif`;c.fillStyle='#000';c.fillText(e,x,y)};
+  for(let y=0;y<w.rows;y++)for(let x=0;x<w.cols;x++){const ch=w.map[y][x],px=X(x),py=Y(y),hsh=hash(x+w.lv*13,y);
+    if(ch==='#'||ch==='R'||ch==='L'){c.fillStyle='#4a5a3e';c.fillRect(px,py,ts,ts);c.fillStyle='#5f7350';c.fillRect(px,py,ts,ts*.22);c.fillStyle='rgba(0,0,0,.18)';c.fillRect(px,py+ts*.55,ts,1.5);c.fillRect(px+ts*(hsh>.5?.3:.65),py+ts*.22,1.5,ts*.33);
+      if(hsh>.7){c.strokeStyle='#3f8a35';c.lineWidth=2;c.beginPath();c.moveTo(px+ts*.3,py+ts*.2);c.quadraticCurveTo(px+ts*.1,py+ts*.6,px+ts*.35,py+ts*.95);c.stroke()}
+      if(ch!=='#'){ell(c,px+ts/2,py+ts*.55,ts*.32,ts*.32,'#8a8070');ell(c,px+ts*.38,py+ts*.48,ts*.06,ts*.06,'#222');ell(c,px+ts*.62,py+ts*.48,ts*.06,ts*.06,'#222');ell(c,px+(ch==='R'?ts*.8:ts*.2),py+ts*.66,ts*.08,ts*.08,'#111')}
+      continue}
+    const cr=w.crumb[x+','+y],hole=ch==='~'||cr&&cr.hole;
+    if(hole){c.fillStyle='#050403';c.fillRect(px,py,ts,ts);c.fillStyle='rgba(120,90,60,.25)';c.fillRect(px,py,ts,ts*.12);continue}
+    const sh=cr&&!cr.hole?(Math.random()-.5)*3:0;
+    c.fillStyle=ch==='%'?'#a8956a':(x+y)%2?'#8c7a58':'#857352';c.fillRect(px+sh,py,ts,ts);c.strokeStyle='rgba(0,0,0,.12)';c.lineWidth=1;c.strokeRect(px+.5+sh,py+.5,ts-1,ts-1);
+    if(ch==='%'){c.strokeStyle='rgba(60,40,20,.55)';c.lineWidth=1.3;c.beginPath();c.moveTo(px+ts*.2+sh,py+ts*.3);c.lineTo(px+ts*.45+sh,py+ts*.5);c.lineTo(px+ts*.4+sh,py+ts*.8);c.moveTo(px+ts*.45+sh,py+ts*.5);c.lineTo(px+ts*.8+sh,py+ts*.45);c.stroke()}
+    if(ch==='^'){const up=spikeUp(w,x,y),warn=spikeWarn(w,x,y);
+      for(const[a,b]of[[.25,.3],[.7,.35],[.45,.72]]){if(up)poly(c,'#d8dde3',px+ts*(a-.12),py+ts*(b+.15),px+ts*(a+.12),py+ts*(b+.15),px+ts*a,py+ts*(b-.2));else if(warn)poly(c,'#b8bec6',px+ts*(a-.08),py+ts*(b+.15),px+ts*(a+.08),py+ts*(b+.15),px+ts*a,py+ts*(b+.02));else ell(c,px+ts*a,py+ts*(b+.1),ts*.07,ts*.04,'#3a3026')}}
+    else if(ch==='K')emo('🗝️',px+ts/2,py+ts/2+Math.sin(t*3)*2,ts*.62);
+    else if(ch==='*')emo('💎',px+ts/2,py+ts/2+Math.sin(t*3+x)*2,ts*.6);
+    else if(ch==='I'){rect(c,px+ts*.2,py+ts*.62,ts*.6,ts*.3,'#c9a23a',3);emo('🗿',px+ts/2,py+ts*.38+Math.sin(t*2)*1.5,ts*.7);c.fillStyle=`rgba(255,220,90,${.2+.15*Math.sin(t*4)})`;c.beginPath();c.arc(px+ts/2,py+ts*.45,ts*.55,0,Math.PI*2);c.fill()}
+    else if(ch==='D'){rect(c,px+ts*.08,py+ts*.05,ts*.84,ts*.9,w.key?'#7a4a24':'#5f3818',3);c.fillStyle='rgba(0,0,0,.25)';c.fillRect(px+ts*.48,py+ts*.05,ts*.04,ts*.9);if(!w.key)emo('🔒',px+ts/2,py+ts/2,ts*.5)}
+    else if(ch==='E'){c.fillStyle='#2a2018';c.fillRect(px,py,ts,ts);for(let k=0;k<4;k++){c.fillStyle=`rgba(200,170,120,${.5-k*.1})`;c.fillRect(px+ts*.1,py+ts*(.15+k*.2),ts*.8,ts*.08)}
+      if(w.lv===2&&!w.idol){c.strokeStyle='#888';c.lineWidth=3;for(let k=1;k<5;k++){c.beginPath();c.moveTo(px+ts*k/5,py);c.lineTo(px+ts*k/5,py+ts);c.stroke()}}else emo(w.lv<2?'⬇️':'🚪',px+ts/2,py+ts/2,ts*.45)}
+  }
+  for(const a of w.darts){c.strokeStyle='#6b4a2a';c.lineWidth=3;c.beginPath();c.moveTo(X(a.x+.5)-a.v*2.5,Y(a.y+.5));c.lineTo(X(a.x+.5),Y(a.y+.5));c.stroke();poly(c,'#ccc',X(a.x+.5)+Math.sign(a.v)*6,Y(a.y+.5),X(a.x+.5),Y(a.y+.5)-3,X(a.x+.5),Y(a.y+.5)+3)}
+  // you
+  const blink=w.inv>0&&Math.floor(w.t*12)%2;
+  if(!blink){c.save();c.translate(X(w.ax+.5),Y(w.ay+.9));c.scale(ts/40,ts/40);drawPerson(c,0,0,PLAYER_LOOK,w.dir,w.walk,null,t);if(w.idol){c.font='18px sans-serif';c.fillText('🗿',14,-40)}c.restore()}
+  const B=w.boulder;if(B){const bx=X(B.x+.5),by=Y(B.y+.5),r=ts*.48;if(B.wait>0){c.globalAlpha=Math.min(1,1.4-B.wait)}
+    ell(c,bx,by+r*.7,r,r*.3,'rgba(0,0,0,.35)');ell(c,bx,by,r,r,'#8d8578');c.save();c.translate(bx,by);c.rotate(B.a);c.strokeStyle='#5f594f';c.lineWidth=2;c.beginPath();c.moveTo(-r*.6,-r*.2);c.lineTo(r*.1,r*.3);c.lineTo(r*.5,-r*.4);c.moveTo(-r*.2,r*.6);c.lineTo(0,r*.1);c.stroke();c.restore();ell(c,bx-r*.3,by-r*.35,r*.25,r*.15,'rgba(255,255,255,.2)');c.globalAlpha=1}
+  // torchlight around you
+  {const gx=X(w.ax+.5),gy=Y(w.ay+.5),g=c.createRadialGradient(gx,gy,ts*1.5,gx,gy,ts*6);g.addColorStop(0,'rgba(10,6,2,0)');g.addColorStop(1,'rgba(10,6,2,.62)');c.fillStyle=g;c.fillRect(ox,oy,w.cols*ts,w.rows*ts)}
+  const txt=(s2,x,y,size,col='#fff')=>{c.font=`bold ${size}px system-ui,sans-serif`;c.lineWidth=5;c.strokeStyle='rgba(20,12,4,.8)';c.strokeText(s2,x,y);c.fillStyle=col;c.fillText(s2,x,y)};
+  for(const f of w.fx){c.globalAlpha=Math.min(1,f.life*2);txt(f.txt,Math.max(90,Math.min(W2-90,X(f.x+.5))),Y(f.y+.3),f.big?18:16,'#ffe9a0')}c.globalAlpha=1;
+  // top bar
+  txt('🕳️ Jungle Dungeon',W2/2,26,18);txt(DUN_LEVELS[w.lv].n,W2/2,52,15,'#ffd98a');
+  txt('❤️'.repeat(Math.max(0,w.hearts))+'🖤'.repeat(3-Math.max(0,w.hearts)),70,78,15);txt(`💎 ${w.gems}${w.key?'  🗝️':''}${w.idol?'  🗿':''}`,W2-70,78,15);
+  rect(c,W2-46,10,36,32,'rgba(0,0,0,.45)',8);txt('✖',W2-28,27,18);
+  if(w.banner>0&&!w.over){c.globalAlpha=Math.min(1,w.banner);txt(DUN_LEVELS[w.lv].n,W2/2,oy+w.rows*ts/2,Math.min(30,W2/12),'#ffe066');c.globalAlpha=1}
+  if(w.over){c.fillStyle=`rgba(0,0,0,${Math.min(.55,w.over.t)})`;c.fillRect(0,0,W2,H2);txt(w.over.win?'🎉 YOU ESCAPED! 🎉':'💔 The traps got you!',W2/2,H2/2-20,Math.min(30,W2/12),w.over.win?'#ffe066':'#ff9a8a')}
+  // the arrow buttons
+  const pc=dunPad(W2,H2);for(const b of pc){const on=(w.held||w.kdir)===b.d;rect(c,b.x-28,b.y-28,56,56,on?'rgba(255,224,102,.85)':'rgba(255,255,255,.18)',14);txt({up:'▲',down:'▼',left:'◀',right:'▶'}[b.d],b.x,b.y+1,24,on?'#5a3a00':'#fff')}
+}
+const dunTs=(w,W2,H2)=>Math.max(14,Math.floor(Math.min((W2-16)/w.cols,(H2-340)/w.rows))); // leave room for the arrow buttons
+function dunPad(W2,H2){const cx=W2/2,cy=H2-96;return[{d:'up',x:cx,y:cy-60},{d:'down',x:cx,y:cy+60},{d:'left',x:cx-64,y:cy},{d:'right',x:cx+64,y:cy}]}
+function dunTap(e){
+  const w=work,W2=innerWidth,H2=innerHeight,x=e.clientX,y=e.clientY;
+  if(x>W2-56&&y<50){w.over=w.over||{win:0,t:9,quit:1};return}
+  let best=null,bd=46;for(const b of dunPad(W2,H2)){const dd=Math.hypot(b.x-x,b.y-y);if(dd<bd){bd=dd;best=b.d}}
+  if(!best){const ts=dunTs(w,W2,H2),ox=(W2-w.cols*ts)/2,oy=96,dx=x-(ox+(w.ax+.5)*ts),dy=y-(oy+(w.ay+.5)*ts);
+    if(Math.hypot(dx,dy)>ts*.4)best=Math.abs(dx)>Math.abs(dy)?(dx<0?'left':'right'):(dy<0?'up':'down')}
+  w.held=best;w.pid=e.pointerId;
+}
+const dunRelease=e=>{if(work&&work.dun&&(e.pointerId===work.pid||e.type==='pointercancel'))work.held=null};
+workEl.addEventListener('pointerup',dunRelease);workEl.addEventListener('pointercancel',dunRelease);
+addEventListener('keydown',e=>{if(!work||!work.dun)return;const d={arrowup:'up',arrowdown:'down',arrowleft:'left',arrowright:'right',w:'up',s:'down',a:'left',d:'right'}[e.key.toLowerCase()];
+  if(e.key==='Escape'){work.over=work.over||{win:0,t:9,quit:1}}if(d){work.kdir=d;e.preventDefault();e.stopPropagation()}},true);
+addEventListener('keyup',e=>{if(!work||!work.dun)return;const d={arrowup:'up',arrowdown:'down',arrowleft:'left',arrowright:'right',w:'up',s:'down',a:'left',d:'right'}[e.key.toLowerCase()];if(d&&work.kdir===d)work.kdir=null},true);
+function endDungeon(w){
+  work=null;workEl.style.display='none';
+  if(w.over&&w.over.quit){toast('🕳️ You climbed back out of the dungeon');return}
+  if(!w.over||!w.over.win){openModal(`<h2>💔 The traps got you!</h2><p style="font-size:44px;text-align:center">🕳️😵</p><p>You stumbled back out of the dungeon. Watch the spikes go up and down, dodge the darts, and don't stand on crumbly floor too long!</p><div class="btns"><button class="btn gray" data-a="close">Phew</button><button class="btn" data-a="again">⚔️ Try again</button></div>`,{again:()=>{closeModal();startDungeon()}});return}
+  const fresh=S.dunDay!==S.day,first=!S.dunWon;doAct('dungeon',{gems:w.gems});setTimeout(refreshTray,guestMode?300:0);
+  openModal(`<h2>🎉 You escaped the Jungle Dungeon!</h2><p style="font-size:44px;text-align:center">🗿🏃💨</p><p>${fresh?`You won <b>🪙200</b>${w.gems?` and <b>${w.gems} 💎 gem${w.gems>1?'s':''}</b>`:''}${first?' — and the 🗿 <b>Golden Idol</b> is yours to keep!':'!'}`:'What an adventure! (You already won today\'s prize — come back tomorrow for more.)'}</p><div class="btns"><button class="btn" data-a="close">WOOHOO!</button></div>`);
+}
+function drawDunDoor(c,t){
+  const X=DUN_AT.x*T+16,Y=DUN_AT.y*T+26;
+  ell(c,X,Y,18,6,'rgba(0,0,0,.25)');rect(c,X-16,Y-30,32,30,'#6f7a62',4);rect(c,X-11,Y-24,22,24,'#1a140e',3);
+  for(let k=0;k<3;k++){c.fillStyle=`rgba(150,130,100,${.5-k*.13})`;c.fillRect(X-9,Y-6-k*6,18,2.5)}
+  rect(c,X-18,Y-34,36,7,'#5a6650',3);c.strokeStyle='#3f8a35';c.lineWidth=2;c.beginPath();c.moveTo(X-14,Y-32);c.quadraticCurveTo(X-20,Y-18,X-13,Y-6);c.moveTo(X+12,Y-32);c.quadraticCurveTo(X+19,Y-20,X+14,Y-10);c.stroke();
+  for(const sx of[-21,21]){rect(c,X+sx-1.5,Y-22,3,12,'#6b4a2a',1);const f=Math.sin(t*14+sx)*1.5;ell(c,X+sx,Y-25,3.4,5+f,'#ff8a1f');ell(c,X+sx,Y-24,1.8,3,'#ffe066')}
+  const g=(Math.sin(t*3)+1)/2;bubble(c,X,Y-50+g*3,'🕳️');
+}
 // ── Start ────────────────────────────────────────────────────────────────────
 S.villagers.forEach(spawnVillager);spawnAnimals();spawnScorps();
 reveal(Math.floor(player.x/T),Math.floor(player.y/T),6);
@@ -4904,7 +5066,7 @@ let last=performance.now();
 function frame(ms){
   const dt=Math.max(0,Math.min(.05,(ms-last)/1000));last=ms;
   if(cv.clientWidth!==cssW||cv.clientHeight!==cssH)resize();
-  update(dt);draw(ms/1000);if(work)(work.sky?skyFrame:workFrame)(dt);requestAnimationFrame(frame);
+  update(dt);draw(ms/1000);if(work)(work.sky?skyFrame:work.dun?dunFrame:workFrame)(dt);requestAnimationFrame(frame);
 }
 addEventListener('visibilitychange',()=>{if(document.hidden)saveNow();else checkForUpdate()});
 addEventListener('pagehide',saveNow);
