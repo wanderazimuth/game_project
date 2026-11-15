@@ -97,7 +97,7 @@ const ITEMS={...CROPS,
   egg:{n:'Egg',e:'🥚',sell:25},bread:{n:'Bread',e:'🍞',sell:60},cheese:{n:'Cheese',e:'🧀',sell:160},truffle:{n:'Truffle',e:'🌰',sell:90},lavarock:{n:'Lava Rock',e:'🌋',sell:35},icecrystal:{n:'Ice Crystal',e:'🧊',sell:50},banana:{n:'Banana',e:'🍌',sell:15},idol:{n:'Golden Idol',e:'🗿',sell:500},templekey:{n:'Temple Key',e:'🗝️',sell:0,keep:1},scarab:{n:'Scarab Key',e:'🪲',sell:0,keep:1},pharaoh:{n:'Pharaoh Mask',e:'🎭',sell:600},cactusfruit:{n:'Cactus Fruit',e:'🌵',sell:35},milk:{n:'Milk',e:'🥛',sell:60},honey:{n:'Honey',e:'🍯',sell:80},
   fish:{n:'Fish',e:'🐟',sell:30},smokedfish:{n:'Smoked Fish',e:'🍢',sell:39},wood:{n:'Wood',e:'🪵',sell:3},moss:{n:'Moss',e:'🌿',sell:3},stone:{n:'Stone',e:'🪨',sell:4},
   gem:{n:'Gem',e:'💎',sell:50},shell:{n:'Seashell',e:'🐚',sell:8},mushroom:{n:'Mushroom',e:'🍄',sell:12},
-  flower:{n:'Wildflower',e:'🌼',sell:5},coconut:{n:'Coconut',e:'🥥',sell:15},pearl:{n:'Pearl',e:'🦪',sell:60},springegg:{n:'Hot Spring Egg',e:'♨️',sell:45},mappiece:{n:'Map Piece',e:'🗺️',sell:0,keep:1},
+  flower:{n:'Wildflower',e:'🌼',sell:5},coconut:{n:'Coconut',e:'🥥',sell:15},pearl:{n:'Pearl',e:'🦪',sell:60},ring:{n:'Wedding Ring',e:'💍',sell:0,keep:1},springegg:{n:'Hot Spring Egg',e:'♨️',sell:45},mappiece:{n:'Map Piece',e:'🗺️',sell:0,keep:1},
   apple:{n:'Apple',e:'🍎',sell:10},acorn:{n:'Acorn',e:'🌰',sell:5},candy:{n:'Spooky Candy',e:'🍬',sell:20},bdaycake:{n:'Birthday Cake',e:'🎂',sell:40},
   soup:{n:'Veggie Soup',e:'🥣',sell:50,dish:1},salad:{n:'Garden Salad',e:'🥗',sell:150,dish:1},pie:{n:'Pumpkin Pie',e:'🥧',sell:340,dish:1},breakfast:{n:'Big Breakfast',e:'🍳',sell:200,dish:1},
   pizza:{n:'Pizza',e:'🍕',sell:430,dish:1},friedfish:{n:'Fried Fish',e:'🍤',sell:110,dish:1},honeycake:{n:'Honey Cake',e:'🍰',sell:0,dish:1},stew:{n:'Mushroom Stew',e:'🍲',sell:145,dish:1},smoothie:{n:'Tropical Smoothie',e:'🍹',sell:130,dish:1},ribbon:{n:'Festival Ribbon',e:'🎀',sell:100},cottoncandy:{n:'Cotton Candy',e:'🍭',sell:10},bandaid:{n:'Band-aid',e:'🩹',sell:5},feather:{n:'Moa Feather',e:'🪶',sell:30},
@@ -624,6 +624,7 @@ function arrive(tg){
     case'obj':useObj(tg.o,act);break;
     case'furn':useFurn(tg.f);break;
     case'pet':if(roomPets().includes(tg.p))usePet(tg.p);break;
+    case'kid':if(kidsHere().includes(tg.kd))talkKid(tg.kd);break;
     case'host':if(speakers().some(([v])=>v===tg.vw))talk(tg.vw);break;
     case'staff':if(staff().includes(tg.st))talkStaff(tg.st);break;
   }
@@ -1892,8 +1893,40 @@ function makeRequest(){
   const k=pool[Math.random()*pool.length|0],n=Math.max(1,Math.min(8,Math.round(70/ITEMS[k].sell)));
   return{k,n,reward:Math.round(ITEMS[k].sell*n*1.6+15)};
 }
-function talk(vw){
+// ── Getting married, and having kids ──
+const SPOUSE_LINES=['I love you! 💕','Want to go on a picnic? 🧺','Our family is the best! 🏡','You\'re my favorite person! 💖','Let\'s watch the sunset together 🌅'];
+const KID_LINES=['I love you! 💕','Can we go to the zoo? 🦁','Look, I can do a cartwheel! 🤸','Tell me a story! 📖','I\'m hungry! 🍪','Can I have a puppy? 🐶','Hide and seek! 🙈','I drew you a picture! 🖍️'];
+const KID_NAMES=['Sunny','Pip','Coco','Milo','Lulu','Finn','Rosie','Ziggy','Bea','Otto','Poppy','Max','Tilly','Kai','Juno','Bubbles'];
+const inMyHouse=()=>inside&&!visit&&!inCab&&!inLight&&!inCave;
+function proposeModal(vw){
+  const v=vw.v;openModal(`<h2>💍 ${esc2(v.name)}</h2><p>You have a 💍 Wedding Ring. Do you want to ask <b>${esc2(v.name)}</b> to marry you?</p>
+    <div class="btns"><button class="btn" data-a="yes">💍 Give the ring</button><button class="btn gray" data-a="chat">💬 Just chat</button></div>`,{yes:()=>{closeModal();doAct('marry',{name:v.name})},chat:()=>{closeModal();talk(vw,1)}});
+}
+let babyAsk=0,kidAt=new Map();
+function checkBaby(){
+  if(guestMode||!S.spouse||!inMyHouse()||babyAsk||busy())return;
+  const kids=S.kids||[],bed=S.home.items.find(f=>f.k==='childbed'&&!kids.some(k=>k.bed===f.id));if(!bed)return;
+  babyAsk=1;const used=kids.map(k=>k.name),pick=()=>{const f=KID_NAMES.filter(n=>!used.includes(n));return f[Math.random()*f.length|0]||'Baby'};
+  const ask=nm=>openModal(`<h2>👶 A baby!</h2><p style="font-size:44px;text-align:center">👶💕</p><p>You and <b>${esc2(S.spouse)}</b> have a new baby! The little one is snuggled in the 🧸 Child Bed. What will you name them?</p>
+    <input id="codeIn" maxlength="14" autocomplete="off" style="letter-spacing:0;font-size:20px;width:220px" value="${nm}">
+    <div class="btns"><button class="btn gray" data-a="dice">🎲 Another name</button><button class="btn" data-a="ok">💕 That's the name!</button></div>`,
+    {dice:()=>ask(pick()),ok:()=>{const n=cleanName(document.getElementById('codeIn').value).slice(0,14)||pick();closeModal();babyAsk=0;doAct('baby',{name:n,bed:bed.id})}},true);
+  ask(pick());
+}
+function kidPos(k){let q=kidAt.get(k.name);if(!q){q=spotIn();q.wait=Math.random()*2;kidAt.set(k.name,q)}return q}
+function kidsHere(){return inMyHouse()?(S.kids||[]):[]}
+function kidsWander(dt){for(const k of kidsHere()){const q=kidPos(k);q.talkT=Math.max(0,(q.talkT||0)-dt);if(bedtime())continue;wanderIn(q,T*1.5,dt);
+  if((q.chat=(q.chat??3+Math.random()*6)-dt)<=0){q.chat=8+Math.random()*8;q.say=KID_LINES[Math.random()*KID_LINES.length|0];q.talkT=2.5}}}
+function drawKid(c,k,t){
+  const bed=S.home.items.find(f=>f.id===k.bed),q=kidPos(k);
+  if(bedtime()&&bed){const X=bed.x*T,Y=bed.y*T;ell(c,X+16,Y+12,6,5.5,k.look.skin);c.fillStyle=k.look.hair;c.beginPath();c.ellipse(X+16,Y+9.5,6.4,4.2,0,Math.PI,0);c.fill();
+    c.fillStyle='#222';c.fillRect(X+13.5,Y+12.5,2,1);c.fillRect(X+17,Y+12.5,2,1);zzz(c,X+10,Y-4,t);return}
+  c.save();c.translate(q.x,q.y);c.scale(.72,.72);c.translate(-q.x,-q.y);drawPerson(c,q.x,q.y,k.look,q.dir,q.walk,null,t);c.restore();
+}
+function talkKid(k){const q=kidPos(k);q.path=[];q.wait=3;q.dir='down';q.say=Math.random()<.3&&S.spouse?`${S.spouse} is the best! 💕`:KID_LINES[Math.random()*KID_LINES.length|0];q.talkT=3;q.chat=8;floatAt(q.x,q.y-34,'💕')}
+function talk(vw,chat){
   const v=vw.v;vw.wait=Math.max(vw.wait,2);vw.dir='down';
+  if(!chat&&S.inv.ring&&!S.spouse&&!v.hurt&&!isGuest(v.name)){proposeModal(vw);return}
   if(isBday(v)&&!(S.bdayGift&&S.bdayGift[v.name]===S.day)&&!v.hurt){bdayModal(vw);return}
   if(v.req&&v.req.hurt&&count('hospital')){const r=v.req,by=HUNT[r.by]||HUNT.terror;
     openModal(`<h2>${v.name}</h2><p>“Ouch! A ${by.name} ${by.verb} me! 🤕 The doctors need <b>${r.n} 🩹 band-aid${r.n>1?'s':''}</b> to patch me up.”</p><p>Give band-aids to a 👩‍⚕️ <b>doctor</b> at the hospital — they'll do the rest! (Doctors have <b>${S.docAid||0}</b> 🩹)</p>
@@ -1902,7 +1935,8 @@ function talk(vw){
     openModal(`<h2>${v.name}</h2><p>“${r.hurt?`Ouch! A ${(HUNT[r.by]||HUNT.terror).name} ${(HUNT[r.by]||HUNT.terror).verb} me! 🤕 `:''}Could you bring me <b>${r.n} ${ITEMS[r.k].e} ${ITEMS[r.k].n}</b>? I'll give you <b>🪙${r.reward}</b>!”</p><p style="font-size:13px">You have ${have}.</p>
       <div class="btns"><button class="btn" data-a="give" ${have<r.n?'disabled':''}>Give ${r.n} ${ITEMS[r.k].e}</button><button class="btn gray" data-a="close">Okay!</button></div>`,
       {give:()=>{closeModal();doAct('give',{name:v.name})}});
-  }else if(isBday(v)){vw.say=['Best birthday ever! 🎂','Thanks for the present! 🎁','Come to my party! 🎉'][Math.random()*3|0];vw.talkT=3.5}
+  }else if(v.name===S.spouse&&Math.random()<.6){vw.say=SPOUSE_LINES[Math.random()*SPOUSE_LINES.length|0];vw.talkT=3.5;floatAt(vw.x,vw.y-48,'💕')}
+  else if(isBday(v)){vw.say=['Best birthday ever! 🎂','Thanks for the present! 🎁','Come to my party! 🎉'][Math.random()*3|0];vw.talkT=3.5}
   else if(Math.random()<.3){const d=nextBday(v);vw.say=d-S.day<=3?`My birthday is in ${d-S.day} day${d-S.day>1?'s':''}! I love ${ITEMS[favOf(v.name)].e}!`:`My birthday is on day ${d}! 🎂`;vw.talkT=3.5}
   else{vw.say=LINES[Math.random()*LINES.length|0];vw.talkT=3.5}
 }
@@ -2155,7 +2189,10 @@ const ACT={
     S.inv[R.from]-=n*R.need;if(!S.inv[R.from])delete S.inv[R.from];give(R.to,n);tally('make:'+R.to,n);
     floatAt(o.x*T+BUILD[o.t].w*T/2,o.y*T,`+${n} ${P.e}`);toast(`${R.done} ${n} ${P.n}! ${P.n} sells for 🪙${priceOf(R.to)}`,2600)},
   fish({id}){const o=byId(id);if(!o||o.t!=='dock')return;if(!produced(o)){toast('🎣 Your friend got that fish first!');return}
-    o.last=now();give('fish',1);tally('fish');floatAt(o.x*T+16,o.y*T,'+1 🐟')},
+    o.last=now();
+    if(!S.spouse&&!S.inv.ring&&Math.random()<.2){give('ring',1);dirty();refreshTray();floatAt(o.x*T+16,o.y*T,'+💍');
+      openModal('<h2>💍 Something sparkly!</h2><p style="font-size:44px;text-align:center">🎣💍✨</p><p>You reeled in… a <b>Wedding Ring</b>! Someone must have dropped it in the water.</p><p>💕 Give it to a villager to ask them to marry you!</p><div class="btns"><button class="btn" data-a="close">Ooh!</button></div>');return}
+    give('fish',1);tally('fish');floatAt(o.x*T+16,o.y*T,'+1 🐟')},
   ship({keys,bin}){const b=byId(bin);let got=0;
     for(const k of keys||[]){if(!S.inv[k]||!ITEMS[k]||ITEMS[k].keep)continue;got+=priceOf(k)*S.inv[k];S.stats.shipped+=S.inv[k];delete S.inv[k]}
     if(!got)return;S.coins+=got;tally('earn',got);dirty();if(b)floatAt(b.x*T+16,b.y*T-4,`+🪙${got}`);refreshTray()},
@@ -2215,6 +2252,13 @@ const ACT={
   giveBack({k,n,coins}){if(coins)S.coins+=coins;else if(ITEMS[k])give(k,n);dirty()},
   lavaPick(){give('lavarock',1);tally('collect:lavarock')},
   trade({from,to,coins}){if(!S.inv[from])return;S.inv[from]--;if(!S.inv[from])delete S.inv[from];if(to)give(to,1);if(coins)S.coins+=coins;refreshTray();dirty()},
+  marry({name}){const v=S.villagers.find(v=>v.name===name);if(!v||S.spouse||!S.inv.ring||v.hurt)return;S.inv.ring--;if(!S.inv.ring)delete S.inv.ring;S.spouse=name;dirty();refreshTray();
+    const vw=villagers.find(w=>w.v===v);if(vw){vw.say='YES! Yes, I will! 💕';vw.talkT=4;for(let k=0;k<60;k++)confetti.push({x:vw.x,y:vw.y-30,vx:(Math.random()-.5)*260,vy:-100-Math.random()*220,c:['#ff6b8b','#fff','#ffd23f','#ffb3c6'][k%4],t:0});for(let k=0;k<5;k++)setTimeout(()=>floatAt(vw.x+(k-2)*12,vw.y-50,'❤️'),k*150)}
+    openModal(`<h2>💒 ${esc2(name)} said YES!</h2><p style="font-size:44px;text-align:center">💍💕🎉</p><p>You and <b>${esc2(name)}</b> are married! Everyone on the island is cheering!</p><p>👶 Put a <b>🧸 Child Bed</b> in your house (🎨 Decorate) and you can have kids!</p><div class="btns"><button class="btn" data-a="close">Yay! 💕</button></div>`)},
+  baby({name,bed}){const n=cleanName(name).slice(0,14);if(!S.spouse||!n)return;const kids=S.kids||(S.kids=[]);if(kids.some(k=>k.bed===bed||k.name===n)||!S.home.items.some(f=>f.id===bed&&f.k==='childbed'))return;
+    const sp=S.villagers.find(v=>v.name===S.spouse)||PLAYER_LOOK,pick=a=>a[Math.random()*a.length|0];
+    kids.push({name:n,bed,look:{shirt:pick(['#ff6b8b','#ffd23f','#5fd6e0','#9b59b6','#7cc35d','#ff8c42']),skin:pick([sp.skin||PLAYER_LOOK.skin,PLAYER_LOOK.skin]),hair:sp.hair||'#5a3a20'}});dirty();
+    toast(`👶 Welcome to the family, ${n}! 💕`,3000)},
   soak({i}){if(feat[i]!==HSPRING)return;const Sk=S.soaked&&S.soaked.day===S.day?S.soaked:(S.soaked={day:S.day,k:[]});player.frozen=0;
     if(Sk.k.includes(i)){toast('♨️ Ahh… so warm and relaxing 😌');return}Sk.k.push(i);give('springegg',1);dirty();refreshTray();floatAt((i%W)*T+16,(i/W|0)*T-10,'+1 ♨️');
     toast('♨️ Ahh… so warm! You cooked a ♨️ Hot Spring Egg in the steamy water!',2800)},
@@ -3143,6 +3187,7 @@ const RW=10,RH=7,DOOR_X=5;
 const FCOLS=['#e74c3c','#3498db','#2ecc71','#9b59b6','#f39c12','#e84393','#1abc9c','#f4f1e8'];
 const FURN={
   bed:{n:'Bed',cost:40,w:2,h:2,col:1,e:'🛏️',say:'sleep'},
+  childbed:{n:'Child Bed',cost:120,w:1,h:2,col:1,e:'🧸',say:'🧸 A cozy little bed — if you\'re married, a child can sleep here!'},
   sofa:{n:'Sofa',cost:50,w:2,h:1,tall:14,col:1,e:'🛋️',say:'Ahh, comfy!'},
   table:{n:'Table',cost:25,w:2,h:1,e:'🍽️',say:'Time for a snack!'},
   chair:{n:'Chair',cost:10,w:1,h:1,tall:12,e:'🪑',say:'A nice place to sit'},
@@ -3722,6 +3767,7 @@ function enterHouse(id,cab,lh,cave){
   else if(vw&&isBday(vw.v)){vw.say='Welcome to my birthday party! 🎂';vw.talkT=3.5;if(!(S.bdayCake&&S.bdayCake[vw.v.name]===S.day)){doAct('bdayCake',{name:vw.v.name});setTimeout(()=>toast(`🎂 ${vw.v.name} gave you a slice of birthday cake!`,2800),300)}else toast(`🎉 You're at ${vw.v.name}'s birthday party!`,2400)}
   else if(vw){vw.say='Welcome to my home!';vw.talkT=3;toast(`🏠 You're visiting ${vw.v.name}`,2400)}
   else if(inCab)toast(guestMode?'🛖 Your cabin! Tap 🎨 Decorate to make it your own':net&&net.joined?'🛖 Your friend\'s cabin':'🛖 The guest cabin — a friend who joins your island (👥) stays here and decorates it',3200);
+  else if((S.kids||[]).length)toast(`🏠 Welcome home! ${S.kids.map(k=>esc2(k.name)).join(' and ')} ${S.kids.length>1?'are':'is'} so happy to see you! 💕`,2800);
   else toast('🏠 Welcome home! Tap 🎨 Decorate to add furniture',2800);
 }
 function hostVw(){const h=visit||inLight;return h?villagers.find(v=>v.v.house===h&&!isGuest(v.v.name)):null}
@@ -3749,6 +3795,8 @@ function tapInside(wx,wy){
     const r=findPath(pt.x,pt.y,(x,y)=>Math.abs(x-b.x)<=1&&Math.abs(y-b.y)<=1,null,inWalkable);player.path=r?r.path:[];player.target={k:'staff',st};return}
   for(const[vw,q]of speakers())if(Math.abs(wx-q.x)<13&&wy<q.y+5&&wy>q.y-42){const b=tileOf(q);q.wait=Math.max(q.wait,4);q.path=[];q.line=null;
     const r=findPath(pt.x,pt.y,(x,y)=>Math.abs(x-b.x)<=1&&Math.abs(y-b.y)<=1,null,inWalkable);player.path=r?r.path:[];player.target={k:'host',vw};return}
+  if(!bedtime())for(const k of kidsHere()){const q=kidPos(k);if(Math.abs(wx-q.x)<11&&wy<q.y+5&&wy>q.y-32){const b=tileOf(q);q.wait=Math.max(q.wait,4);q.path=[];
+    const r=findPath(pt.x,pt.y,(x,y)=>Math.abs(x-b.x)<=1&&Math.abs(y-b.y)<=1,null,inWalkable);player.path=r?r.path:[];player.target={k:'kid',kd:k};return}}
   if(p){const b=tileOf(petPos(p));
     const r=findPath(pt.x,pt.y,(x,y)=>Math.abs(x-b.x)<=1&&Math.abs(y-b.y)<=1,null,inWalkable);
     player.path=r?r.path:[];player.target={k:'pet',p};return}
@@ -3925,6 +3973,9 @@ function drawFurnIn(c,f,t,icon){
     rect(c,X+8,Y-20,18,10,'#f5d6a8',2);c.font='9px '+EMOJI_FONT;c.textAlign='center';c.textBaseline='middle';c.fillText('🩹',X+17,Y-15);
     ell(c,X+50,Y-13,5,3.5,'#e8b830');ell(c,X+50,Y-17,1.6,1.6,'#e8b830');break;
   case'redcross':rect(c,X+4,Y+10,24,26,'#fff',4);rect(c,X+13,Y+13,6,20,'#e63946',1);rect(c,X+6,Y+20,20,6,'#e63946',1);break;
+  case'childbed':rect(c,X+2,Y-6,28,12,'#d9a066',5);rect(c,X+2,Y+2,28,60,'#b07b45',5);rect(c,X+5,Y+4,22,54,'#fff',4);rect(c,X+8,Y+7,16,10,'#eef0ff',4);
+    rect(c,X+5,Y+24,22,34,col,4);rect(c,X+5,Y+24,22,5,shade,3);for(let k=0;k<3;k++)ell(c,X+10+k*6,Y+40+(k%2)*8,1.8,1.8,'rgba(255,255,255,.6)');
+    ell(c,X+26,Y+20,4.5,4.5,'#b5793f');ell(c,X+23,Y+16.5,1.8,1.8,'#b5793f');ell(c,X+29,Y+16.5,1.8,1.8,'#b5793f');ell(c,X+26,Y+21,2,1.6,'#e8c08a');break;
   case'bed':rect(c,X+2,Y-8,60,16,'#a8743f',6);rect(c,X+2,Y+2,60,60,'#8a5a2c',6);rect(c,X+6,Y+4,52,54,'#fff',5);rect(c,X+12,Y+7,40,12,'#eef0ff',5);
     rect(c,X+6,Y+24,52,34,col,5);rect(c,X+6,Y+24,52,6,shade,3);break;
   case'sofa':rect(c,X+4,Y-14,56,22,col,7);rect(c,X+4,Y-14,56,22,shade,7);rect(c,X+2,Y+2,60,22,col,6);rect(c,X,Y-6,11,30,col,5);rect(c,X+53,Y-6,11,30,col,5);
@@ -4007,6 +4058,7 @@ function petsWander(dt){
   if(hostPos)wanderIn(hostPos,T*1.3,dt);
   staffUpdate(dt);
   if(!visit&&!inCab&&!inCave)visitorsWander(dt);
+  kidsWander(dt);checkBaby();
   for(const p of roomPets()){const q=petPos(p);q.happy=Math.max(0,q.happy-dt);
     if(q.happy>0||petAsleep(p)){q.walk=0;q.path=[];continue}
     wanderIn(q,T*PETS[p.k].speed,dt);
@@ -4164,10 +4216,13 @@ function drawInside(t){
   const here=speakers();
   for(const[vw,q]of here)list.push([q.y,()=>{if(q.bed)drawPatient(ctx,vw,q,t);else drawPerson(ctx,q.x,q.y,{shirt:vw.v.shirt,skin:vw.v.skin,hair:vw.v.hair},q.dir,q.walk,null,t);if(vw.v.req&&!vw.talkT)bubble(ctx,q.x,q.y-(q.bed?70:40),vw.v.req.hurt?'🩹':'❗')}]);
   for(const p of roomPets()){const q=petPos(p);list.push([q.y,()=>{drawPet(ctx,p,q,t);if(hungry(p))bubble(ctx,q.x,q.y-24,ITEMS[PETS[p.k].food].e);else if(petAsleep(p))zzz(ctx,q.x,q.y-24,t)}])}
+  for(const k of kidsHere()){const bed=S.home.items.find(f=>f.id===k.bed);list.push([bedtime()&&bed?(bed.y+2)*T-1:kidPos(k).y,()=>drawKid(ctx,k,t)])}
   for(const st of staff())list.push([st.q.y,()=>drawPerson(ctx,st.q.x,st.q.y,st.look,st.q.dir,st.q.walk,null,t)]);
   list.push([player.y,()=>drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,null,t)]);
   if(friend&&friend.in===roomKey())list.push([friend.y,()=>drawPerson(ctx,friend.x,friend.y,guestMode?PLAYER_LOOK:FRIEND_LOOK,friend.dir,friend.walk,null,t)]);
   list.sort((a,b)=>a[0]-b[0]);for(const d of list)d[1]();
+  if(!bedtime())for(const k of kidsHere()){const q=kidPos(k);if(!(q.talkT>0&&q.say))continue;ctx.font='bold 12px system-ui,sans-serif';const w=ctx.measureText(q.say).width+16,x=Math.max(w/2-8,Math.min(RW*T-w/2+8,q.x)),y=q.y+12;
+    rect(ctx,x-w/2,y-70,w,24,'rgba(255,255,255,.96)',10);poly(ctx,'rgba(255,255,255,.96)',q.x-5,y-46,q.x+5,y-46,q.x,y-40);ctx.fillStyle='#4a3410';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(q.say,x,y-58)}
   for(const st of staff())if(st.talkT>0&&st.say){ctx.font='bold 12px system-ui,sans-serif';const w=ctx.measureText(st.say).width+16,q=st.q,x=Math.max(w/2-8,Math.min(RW*T-w/2+8,q.x)),y=q.y;
     rect(ctx,x-w/2,y-70,w,24,'rgba(255,255,255,.96)',10);poly(ctx,'rgba(255,255,255,.96)',q.x-5,y-46,q.x+5,y-46,q.x,y-40);
     ctx.fillStyle='#4a3410';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(st.say,x,y-58)}
