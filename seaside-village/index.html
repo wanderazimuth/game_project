@@ -110,6 +110,7 @@ const BUILD={
   fence:{n:'Fence',cost:3,w:1,h:1,paint:1,tall:8,d:'Keeps animals in'},
   hedge:{n:'Hedge',cost:4,w:1,h:1,paint:1,tall:6,d:'A leafy wall — animals can\'t get past'},
   wood:{n:'Wood',cost:3,w:1,h:1,flat:1,paint:1,d:'Only goes on water — then build anything on it, just like grass! (drag to lay lots)'},
+  fisherhut:{n:'Fisher\'s Hut',cost:450,w:2,h:2,d:'A little hut that only goes on 🪵 wood — a villager who loves fishing moves in!'},
   hut:{n:'Fishing Hut',cost:400,w:2,h:2,d:'A cozy hut that only goes on 🪵 wood — go inside and decorate it, like Your House!'},
   bridge:{n:'Bridge',cost:15,w:1,h:1,on:'water',walk:1,flat:1,paint:1,d:'Walk across the water — drag to build a long one'},
   tree:{n:'Tree',cost:0,w:1,h:1,tall:40,d:'Plant a tree'},
@@ -153,7 +154,7 @@ const BUILD={
   hospital:{n:'Hospital',cost:300,w:2,h:2,d:'Sells 🩹 band-aids for hurt villagers'},
   lighthouse:{n:'Lighthouse',cost:2500,w:2,h:2,tall:80,d:'Shows the whole island — go inside and decorate it!'},
 };
-const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','wood','hut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','mailbox','museum','school','library','observatory','zoo','exhibit','cinema','kitchen','hospital','track','station','balloon','lighthouse'];
+const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','wood','hut','fisherhut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','mailbox','museum','school','library','observatory','zoo','exhibit','cinema','kitchen','hospital','track','station','balloon','lighthouse'];
 let guestMode=false,guestSel='carrot'; // guestMode: you're on a friend's island
 let visit=null,hostPos=null; // visit: the villager house you're in (null: Your House)
 let fly=null; // flying the hot air balloon
@@ -1955,6 +1956,7 @@ function talk(vw,chat){
   }else if(v.name===S.spouse&&Math.random()<.6){vw.say=SPOUSE_LINES[Math.random()*SPOUSE_LINES.length|0];vw.talkT=3.5;floatAt(vw.x,vw.y-48,'💕')}
   else if(isBday(v)){vw.say=['Best birthday ever! 🎂','Thanks for the present! 🎁','Come to my party! 🎉'][Math.random()*3|0];vw.talkT=3.5}
   else if(Math.random()<.3){const d=nextBday(v);vw.say=d-S.day<=3?`My birthday is in ${d-S.day} day${d-S.day>1?'s':''}! I love ${ITEMS[favOf(v.name)].e}!`:`My birthday is on day ${d}! 🎂`;vw.talkT=3.5}
+  else if(byId(v.house)&&byId(v.house).fish&&Math.random()<.5){vw.say=['I caught a fish THIS big! 🐟','The fish are biting today! 🎣','Nothing beats a quiet day of fishing 🌊','My hut floats right on the water! 🛖'][Math.random()*4|0];vw.talkT=3.5}
   else{vw.say=LINES[Math.random()*LINES.length|0];vw.talkT=3.5}
 }
 
@@ -2112,7 +2114,7 @@ function canPlace(t,x,y){
     if(!inMap(X,Y)||!rev[k])return'Explore there first';
     if(objAt(k)&&!(t==='track'&&objAt(k).t==='bridge')||feat[k]||chestHere(k)||inShip(X,Y))return'Something is in the way'; // tracks can go on top of a bridge
     if(b.one&&S.objs.some(o=>o.t===t&&o!==ignoreObj))return`You can only have one ${b.n}`;
-    if(t==='hut'){if(!wood[k])return'Fishing huts only go on 🪵 wood';continue}
+    if(t==='hut'||t==='fisherhut'){if(!wood[k])return'Fishing huts only go on 🪵 wood';continue}
     if(b.on==='shore'&&curKind==='volcano')return'No fish in lava!';
     if(b.on==='shore'){if(ter[k]!==WATER||wood[k]||!N4.some(([a,c])=>inMap(X+a,Y+c)&&(ter[(Y+c)*W+X+a]!==WATER||wood[(Y+c)*W+X+a])))return'Docks go in the water, next to the beach (or some 🪵 wood)'}
     else if(b.on==='water'){if(ter[k]!==WATER||wood[k])return'Bridges go over water'}
@@ -2134,10 +2136,10 @@ function doPlace(t,x,y){
   S.coins-=b.cost;tally('build:'+t);
   if(t==='wood'){(S.wood||(S.wood=[])).push(y*W+x);applyWood();drawTerrain();takeForage(y*W+x);dirty();refreshTray();return true}
   if(t==='track'){const br=objAt(y*W+x);if(br&&br.t==='bridge'){S.objs=S.objs.filter(q=>q!==br);rebuildOcc()}} // the track takes over the bridge
-  const o={id:S.nextId++,t,x,y};if(PRODUCE[t])o.last=now();
+  const o={id:S.nextId++,t:t==='fisherhut'?'house':t,x,y};if(PRODUCE[t])o.last=now();if(t==='fisherhut')o.fish=1; // a fisher's hut is a villager's house that sits on wood
   S.objs.push(o);rebuildOcc();
   for(let j=0;j<b.h;j++)for(let i=0;i<b.w;i++)takeForage((y+j)*W+x+i);
-  if(t==='house'){const v=newVillager(o.id);spawnVillager(v);toast(`🏠 ${v.name} moved in to the village!`,3000)}
+  if(t==='house'||t==='fisherhut'){const v=newVillager(o.id);spawnVillager(v);toast(t==='fisherhut'?`🎣 ${v.name} moved into the fisher's hut!`:`🏠 ${v.name} moved in to the village!`,3000)}
   if(ANIMAL_HOMES[t])spawnAnimals();
   if(t==='lighthouse'){revealAll();toast('🗼 The lighthouse shows the whole island!',3000)}
   if(b.cost)floatAt((x+b.w/2)*T,y*T,`-🪙${b.cost}`);
@@ -2724,6 +2726,15 @@ const bubble=plain(bubbleRaw);
 function bubbleRaw(c,x,y,txt){rect(c,x-13,y-26,26,24,'rgba(255,255,255,.95)',8);poly(c,'rgba(255,255,255,.95)',x-4,y-3,x+4,y-3,x,y+3);
   c.font=`15px ${EMOJI_FONT}`;c.textAlign='center';c.textBaseline='middle';c.fillText(txt,x,y-13)}
 const ROOFS=['#d9534f','#4a8fd9','#4fae5c','#9b59b6','#f0ad4e','#e8739a'],WALLS=['#fff4dc','#ffe9c7','#f3f0ff','#e8f7ff'];
+function hutArt(c,X,Y,t,icon,night){const win=night>.2?'#ffe27a':'#9fd8ff';
+    for(const px of[X+6,X+56])rect(c,px-2,Y+56,5,8,'#5a3418',1);
+    rect(c,X+4,Y+24,56,36,'#9c6a3c',3);c.fillStyle='rgba(0,0,0,.14)';for(let k=0;k<5;k++)c.fillRect(X+4,Y+30+k*7,56,1.5);
+    poly(c,'#6b8e9e',X-2,Y+28,X+32,Y+2,X+66,Y+28);poly(c,'rgba(0,0,0,.15)',X-2,Y+28,X+66,Y+28,X+63,Y+25,X+1,Y+25);
+    rect(c,X+26,Y+38,13,22,'#5a3418',3);ell(c,X+36,Y+50,1.3,1.3,'#ffd24a');rect(c,X+9,Y+34,12,11,win,2);c.fillStyle='#5a3418';c.fillRect(X+14.5,Y+34,1.5,11);
+    c.strokeStyle='rgba(240,230,200,.8)';c.lineWidth=.8;for(let k=0;k<4;k++){c.beginPath();c.moveTo(X+43+k*4,Y+32);c.lineTo(X+43+k*4,Y+50);c.stroke();c.beginPath();c.moveTo(X+43,Y+33+k*5);c.lineTo(X+56,Y+33+k*5);c.stroke()}
+    c.strokeStyle='#7a4f2a';c.lineWidth=2;c.beginPath();c.moveTo(X+60,Y+52);c.lineTo(X+76,Y+18);c.stroke();c.strokeStyle='rgba(255,255,255,.7)';c.lineWidth=1;c.beginPath();c.moveTo(X+76,Y+18);c.lineTo(X+78,Y+62);c.stroke();
+    ell(c,X+78,Y+62+(icon?0:Math.sin(t*3)),2,2,'#e74c3c');rect(c,X+20,Y+8,24,10,'#fff',3);c.font='8px '+EMOJI_FONT;c.textAlign='center';c.textBaseline='middle';c.fillText('🎣🐟',X+32,Y+13);
+}
 function drawObj(c,o,t,icon){styled(c,themeFor(),()=>drawObjIn(c,o,t,icon))}
 function drawObjIn(c,o,t,icon){
   const X=o.x*T,Y=o.y*T,night=icon?0:nightness();
@@ -2859,7 +2870,9 @@ function drawObjIn(c,o,t,icon){
   case'hive':rect(c,X+8,Y+24,3,7,'#6b4a2a');rect(c,X+21,Y+24,3,7,'#6b4a2a');rect(c,X+6,Y+17,20,8,'#e7a925',3);rect(c,X+7,Y+10,18,8,'#f2c43d',3);rect(c,X+8,Y+4,16,7,'#f6d35b',3);
     ell(c,X+16,Y+21,3,2,'#5a3b10');if(!icon)for(let k=0;k<3;k++){const a=t*2+k*2.1;ell(c,X+16+Math.cos(a)*13,Y+8+Math.sin(a*1.7)*7,2,1.6,'#222');ell(c,X+16+Math.cos(a)*13,Y+7+Math.sin(a*1.7)*7,1.6,1,'rgba(255,255,255,.8)')}break;
   case'bin':rect(c,X+3,Y+11,26,18,'#a0682f',3);rect(c,X+3,Y+18,26,3,'#7b4b20');rect(c,X+1,Y+6,30,7,'#7b4b20',3);ell(c,X+16,Y+24,4,3,'#ffd24a');break;
-  case'house':if(curKind==='ice'){igloo(c,o,t,icon,night);if(!icon&&asleepIn(o))bubble(c,X+32,Y-2,bedtime()?'💤':'☔');break}{const roof=ROOFS[o.id%ROOFS.length],wall=WALLS[o.id%WALLS.length];
+  case'fisherhut':hutArt(c,X,Y,t,icon,night);break;
+  case'house':if(o.fish){hutArt(c,X,Y,t,icon,night);if(!icon&&asleepIn(o))bubble(c,X+32,Y+2,bedtime()?'💤':'☔');else if(!icon){const bv=S.villagers.find(v=>v.house===o.id);if(bv&&isBday(bv))balloons(c,X+60,Y+40,t)}break}
+  if(curKind==='ice'){igloo(c,o,t,icon,night);if(!icon&&asleepIn(o))bubble(c,X+32,Y-2,bedtime()?'💤':'☔');break}{const roof=ROOFS[o.id%ROOFS.length],wall=WALLS[o.id%WALLS.length];
     rect(c,X+44,Y+4,8,16,'#8b5a3c');rect(c,X+6,Y+26,52,36,wall,3);rect(c,X+6,Y+56,52,6,'rgba(0,0,0,.08)');
     poly(c,roof,X+1,Y+30,X+32,Y+2,X+63,Y+30);poly(c,'rgba(0,0,0,.15)',X+1,Y+30,X+63,Y+30,X+60,Y+27,X+4,Y+27);
     const win=night>.2?'#ffe27a':'#9fd8ff';
@@ -2894,14 +2907,7 @@ function drawObjIn(c,o,t,icon){
     for(let k=0;k<6;k++)ell(c,X+10+k*9,Y+12,4,4,['#ff8a1f','#e8402f','#f7d23b','#4fae3b','#ff3b5c','#f0841e'][k]);break;
   case'fountain':ell(c,X+32,Y+42,29,18,'#a7adb8');ell(c,X+32,Y+40,23,13,'#6cc3f0');rect(c,X+28,Y+16,8,24,'#a7adb8');ell(c,X+32,Y+16,11,4,'#bfc5cf');
     if(!icon){c.fillStyle='rgba(220,245,255,.9)';for(let k=0;k<10;k++){const a=(t*1.4+k/10)%1,s=k%2?1:-1;ell(c,X+32+s*a*18,Y+12-Math.sin(a*Math.PI)*16+a*26,1.6,1.6,'rgba(220,245,255,.9)')}}break;
-  case'hut':{const win=night>.2?'#ffe27a':'#9fd8ff';
-    for(const px of[X+6,X+56])rect(c,px-2,Y+56,5,8,'#5a3418',1);
-    rect(c,X+4,Y+24,56,36,'#9c6a3c',3);c.fillStyle='rgba(0,0,0,.14)';for(let k=0;k<5;k++)c.fillRect(X+4,Y+30+k*7,56,1.5);
-    poly(c,'#6b8e9e',X-2,Y+28,X+32,Y+2,X+66,Y+28);poly(c,'rgba(0,0,0,.15)',X-2,Y+28,X+66,Y+28,X+63,Y+25,X+1,Y+25);
-    rect(c,X+26,Y+38,13,22,'#5a3418',3);ell(c,X+36,Y+50,1.3,1.3,'#ffd24a');rect(c,X+9,Y+34,12,11,win,2);c.fillStyle='#5a3418';c.fillRect(X+14.5,Y+34,1.5,11);
-    c.strokeStyle='rgba(240,230,200,.8)';c.lineWidth=.8;for(let k=0;k<4;k++){c.beginPath();c.moveTo(X+43+k*4,Y+32);c.lineTo(X+43+k*4,Y+50);c.stroke();c.beginPath();c.moveTo(X+43,Y+33+k*5);c.lineTo(X+56,Y+33+k*5);c.stroke()}
-    c.strokeStyle='#7a4f2a';c.lineWidth=2;c.beginPath();c.moveTo(X+60,Y+52);c.lineTo(X+76,Y+18);c.stroke();c.strokeStyle='rgba(255,255,255,.7)';c.lineWidth=1;c.beginPath();c.moveTo(X+76,Y+18);c.lineTo(X+78,Y+62);c.stroke();
-    ell(c,X+78,Y+62+(icon?0:Math.sin(t*3)),2,2,'#e74c3c');rect(c,X+20,Y+8,24,10,'#fff',3);c.font='8px '+EMOJI_FONT;c.textAlign='center';c.textBaseline='middle';c.fillText('🎣🐟',X+32,Y+13);
+  case'hut':{hutArt(c,X,Y,t,icon,night);
     if(!icon&&o.id&&guestsIn(o.id).length)bubble(c,X+50,Y-4,'👋');break}
   case'lighthouse':rect(c,X+6,Y+40,52,22,'#a7adb8',4);
     for(let k=0;k<6;k++){const y0=Y+44-k*16,y1=y0-16,w0=18-k*1.2,w1=18-(k+1)*1.2;poly(c,k%2?'#fff':'#d63c3c',X+32-w0,y0,X+32+w0,y0,X+32+w1,y1,X+32-w1,y1)}
