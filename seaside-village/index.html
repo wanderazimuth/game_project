@@ -98,7 +98,7 @@ const ITEMS={...CROPS,
   fish:{n:'Fish',e:'🐟',sell:30},smokedfish:{n:'Smoked Fish',e:'🍢',sell:39},wood:{n:'Wood',e:'🪵',sell:3},moss:{n:'Moss',e:'🌿',sell:3},stone:{n:'Stone',e:'🪨',sell:4},
   gem:{n:'Gem',e:'💎',sell:50},shell:{n:'Seashell',e:'🐚',sell:8},mushroom:{n:'Mushroom',e:'🍄',sell:12},
   flower:{n:'Wildflower',e:'🌼',sell:5},coconut:{n:'Coconut',e:'🥥',sell:15},pearl:{n:'Pearl',e:'🦪',sell:60},mappiece:{n:'Map Piece',e:'🗺️',sell:0,keep:1},
-  apple:{n:'Apple',e:'🍎',sell:10},acorn:{n:'Acorn',e:'🌰',sell:5},candy:{n:'Spooky Candy',e:'🍬',sell:20},
+  apple:{n:'Apple',e:'🍎',sell:10},acorn:{n:'Acorn',e:'🌰',sell:5},candy:{n:'Spooky Candy',e:'🍬',sell:20},bdaycake:{n:'Birthday Cake',e:'🎂',sell:40},
   soup:{n:'Veggie Soup',e:'🥣',sell:50,dish:1},salad:{n:'Garden Salad',e:'🥗',sell:150,dish:1},pie:{n:'Pumpkin Pie',e:'🥧',sell:340,dish:1},breakfast:{n:'Big Breakfast',e:'🍳',sell:200,dish:1},
   pizza:{n:'Pizza',e:'🍕',sell:430,dish:1},friedfish:{n:'Fried Fish',e:'🍤',sell:110,dish:1},honeycake:{n:'Honey Cake',e:'🍰',sell:0,dish:1},stew:{n:'Mushroom Stew',e:'🍲',sell:145,dish:1},smoothie:{n:'Tropical Smoothie',e:'🍹',sell:130,dish:1},ribbon:{n:'Festival Ribbon',e:'🎀',sell:100},cottoncandy:{n:'Cotton Candy',e:'🍭',sell:10},bandaid:{n:'Band-aid',e:'🩹',sell:5},feather:{n:'Moa Feather',e:'🪶',sell:30},
   fossil:{n:'Fossil',e:'🦴',sell:40},amber:{n:'Amber',e:'🟠',sell:80}};
@@ -315,6 +315,7 @@ function load(){
   return freshState();
 }
 S=load();S.seed=S.seed||curSeed;S.kind=S.kind||curKind;
+for(const k in S.inv)if(!ITEMS[k])delete S.inv[k]; // things that aren't in the game any more
 placeCave();featOrig=feat.slice();
 for(const i of S.cut)feat[i]=0;
 // Wood: floors you lay on the water, and then build on just like grass
@@ -1048,7 +1049,7 @@ function writeMsg(to){
   openModal(h+'<div class="btns"><button class="btn gray" data-a="back">Back</button></div>',{msg:i=>writeGift(to,+i),back:writeModal});
 }
 function writeGift(to,msg){
-  const ks=Object.keys(S.inv).filter(k=>S.inv[k]>0&&!ITEMS[k].keep);
+  const ks=Object.keys(S.inv).filter(k=>S.inv[k]>0&&ITEMS[k]&&!ITEMS[k].keep);
   let h=`<h2>🎁 Add a present?</h2><p>Put something from your bag in the letter. ${esc2(to)} will send something nice back!</p>`;
   for(const k of ks)h+=`<div class="irow"><span class="ie">${ITEMS[k].e}</span><span class="in">${ITEMS[k].n} ×${S.inv[k]}</span><button class="btn" data-a="gift" data-v="${k}">Add</button></div>`;
   h+='<div class="btns"><button class="btn blue" data-a="none">Send without a present</button><button class="btn gray" data-a="back">Back</button></div>';
@@ -1091,6 +1092,33 @@ function drawSkeleton(c,X,Y,n,t){
   if(n>=5)line(5,cx+28,base-38,cx+46,base-62,cx+58,base-84);                            // long neck
   if(n>=6){c.fillStyle=bone;c.beginPath();c.ellipse(cx+66,base-88,11,7,.3,0,Math.PI*2);c.fill();c.fillStyle='#3a3020';c.beginPath();c.arc(cx+67,base-90,2.2,0,Math.PI*2);c.fill();
     c.strokeStyle=dk;c.lineWidth=1.5;c.beginPath();c.moveTo(cx+60,base-84);c.lineTo(cx+75,base-85);c.stroke()}
+}
+// ── Birthdays: every villager has one (every 14 days); bring a present to their party ──
+const BDAY_EVERY=14,FAVS=['strawberry','pumpkin','cheese','pie','pizza','flower','honey','fish','melon','cottoncandy','shell','soup','corn','pearl'];
+const nameHash=n=>{let h=7;for(const ch of String(n))h=(h*31+ch.charCodeAt(0))>>>0;return h};
+const bdayOf=n=>nameHash(n)%BDAY_EVERY;
+const isBday=v=>S.day>=3&&S.day%BDAY_EVERY===bdayOf(v.name);
+const favOf=n=>FAVS[(nameHash(n)>>4)%FAVS.length];
+const nextBday=v=>{let d=Math.max(3,S.day+1);while(d%BDAY_EVERY!==bdayOf(v.name))d++;return d};
+function bdayModal(vw){
+  const v=vw.v,fav=favOf(v.name),ks=Object.keys(S.inv).filter(k=>S.inv[k]>0&&ITEMS[k]&&!ITEMS[k].keep);vw.say='It\'s my birthday! 🎉';vw.talkT=3;
+  let h=`<h2>🎂 Happy birthday, ${esc2(v.name)}!</h2><p>“It's my birthday today! 🎉 Did you bring me a present? I really love ${ITEMS[fav].e} <b>${ITEMS[fav].n}</b>…”</p>`;
+  for(const k of ks)h+=`<div class="irow"><span class="ie">${ITEMS[k].e}</span><span class="in">${ITEMS[k].n} ×${S.inv[k]}${k===fav?' <b>💖 favorite!</b>':''}</span><button class="btn" data-a="gift" data-v="${k}">Give</button></div>`;
+  if(!ks.length)h+='<p>Your bag is empty — maybe just wish them a happy birthday!</p>';
+  h+='<div class="btns"><button class="btn blue" data-a="wish">🎉 Just say happy birthday</button><button class="btn gray" data-a="close">Later</button></div>';
+  const done=k=>{closeModal();doAct('bdayGift',{name:v.name,k});for(let i=0;i<40;i++)confetti.push({x:vw.x,y:vw.y-40,vx:(Math.random()-.5)*220,vy:-100-Math.random()*180,c:SHIRTS[i%8],t:0});vw.say=k?'Thank you!! 💖':'Thank you! 🥳';vw.talkT=3};
+  openModal(h,{gift:k=>done(k),wish:()=>done(null)});
+}
+function partyHat(c,x,y,t){const hy=y-36;poly(c,'#ff5fa2',x-5,hy+2,x+5,hy+2,x+1,hy-12);c.fillStyle='#ffd23f';c.fillRect(x-3,hy-4,6,2);ell(c,x+1,hy-13,2.2,2.2,'#fff')}
+function balloons(c,X,Y,t){const cols=['#e74c3c','#3498db','#ffd23f'];
+  for(let k=0;k<3;k++){const bx=X+k*7-6+Math.sin(t*1.5+k)*2,by=Y-34-k*5;c.strokeStyle='#888';c.lineWidth=.8;c.beginPath();c.moveTo(X,Y);c.lineTo(bx,by+7);c.stroke();ell(c,bx,by,5.5,7,cols[k]);ell(c,bx-2,by-2,1.4,2,'rgba(255,255,255,.6)')}}
+// streamers, balloons and a big cake in the birthday villager's house
+function drawPartyRoom(c,t){
+  const RWp=RW*T;for(let k=0;k<14;k++){const x=k*RWp/13,y=-2*T+10+Math.sin(k*1.3)*3;poly(c,SHIRTS[k%8],x-6,y,x+6,y,x,y+10)}
+  c.strokeStyle='rgba(120,90,60,.5)';c.lineWidth=1;c.beginPath();c.moveTo(0,-2*T+10);for(let k=0;k<14;k++)c.lineTo(k*RWp/13,-2*T+10+Math.sin(k*1.3)*3);c.stroke();
+  for(const[bx,by]of[[18,-20],[RWp-18,-24],[RWp/2,-30]])balloons(c,bx,by+30,t);
+  const cx=RWp/2,cy=T*.9;rect(c,cx-14,cy-4,28,14,'#ffd6ec',3);rect(c,cx-14,cy-4,28,4,'#fff',2);rect(c,cx-10,cy-14,20,11,'#ff9ac8',3);
+  for(const dx of[-6,0,6]){c.fillStyle='#fff';c.fillRect(cx+dx-.8,cy-21,1.6,7);const fl=Math.sin(t*10+dx)*.8;ell(c,cx+dx,cy-23+fl*.3,1.8,3,'#ffb030')}
 }
 // the fish smoker (fishing huts only): smoked fish sell for 30% more
 function smokerModal(){
@@ -1513,11 +1541,14 @@ function makeRequest(){
 }
 function talk(vw){
   const v=vw.v;vw.wait=Math.max(vw.wait,2);vw.dir='down';
+  if(isBday(v)&&!(S.bdayGift&&S.bdayGift[v.name]===S.day)&&!v.hurt){bdayModal(vw);return}
   if(v.req){const r=v.req,have=S.inv[r.k]||0;
     openModal(`<h2>${v.name}</h2><p>“${r.hurt?`Ouch! A ${(HUNT[r.by]||HUNT.terror).name} ${(HUNT[r.by]||HUNT.terror).verb} me! 🤕 `:''}Could you bring me <b>${r.n} ${ITEMS[r.k].e} ${ITEMS[r.k].n}</b>? I'll give you <b>🪙${r.reward}</b>!”</p><p style="font-size:13px">You have ${have}.</p>
       <div class="btns"><button class="btn" data-a="give" ${have<r.n?'disabled':''}>Give ${r.n} ${ITEMS[r.k].e}</button><button class="btn gray" data-a="close">Okay!</button></div>`,
       {give:()=>{closeModal();doAct('give',{name:v.name})}});
-  }else{vw.say=LINES[Math.random()*LINES.length|0];vw.talkT=3.5}
+  }else if(isBday(v)){vw.say=['Best birthday ever! 🎂','Thanks for the present! 🎁','Come to my party! 🎉'][Math.random()*3|0];vw.talkT=3.5}
+  else if(Math.random()<.3){const d=nextBday(v);vw.say=d-S.day<=3?`My birthday is in ${d-S.day} day${d-S.day>1?'s':''}! I love ${ITEMS[favOf(v.name)].e}!`:`My birthday is on day ${d}! 🎂`;vw.talkT=3.5}
+  else{vw.say=LINES[Math.random()*LINES.length|0];vw.talkT=3.5}
 }
 
 // ── Forage: new seashells, mushrooms and flowers every day ───────────────────
@@ -1547,6 +1578,8 @@ function newDay(quiet){
   for(const p of pets())if(p.fed<S.day-1)p.hearts=Math.max(0,p.hearts-1); // nobody fed it yesterday
   if(S.villagers.length&&Math.random()<.6)S.home.drop={name:S.villagers[Math.random()*S.villagers.length|0].name,at:now()+30000+Math.random()*150000}; // someone drops by today
   if(count('mailbox')&&!guestMode&&genMail()&&!quiet)setTimeout(()=>toast('📮 You\'ve got mail! Check your mailbox',3000),10500);
+  {const bs=S.villagers.filter(isBday);if(bs.length){if(!quiet)setTimeout(()=>toast(`🎂 It's ${bs.map(v=>v.name).join(' and ')}'s birthday today! Bring ${bs.length>1?'them':'a'} present${bs.length>1?'s':''} 🎁`,3600),14000);
+    if(count('mailbox')&&!guestMode){const mail=S.mail||(S.mail=[]);for(const v of bs)mail.push({id:(S.mailNext=(S.mailNext||1)+1)-1,from:v.name,day:S.day,text:`Dear friend,\nIt's my BIRTHDAY today! 🎂\nCome to my party at my house — there's cake! 🎉\nLove, ${v.name}`,gift:null})}}}
   dirty();if(!quiet&&isFestDay())setTimeout(()=>toast('🎪 It\'s Festival Day! Everyone is partying at the village square 🎉',3600),3200);
   if(!quiet&&weather()!=='sun'||!quiet&&rainbowDay())setTimeout(()=>toast(weather()==='storm'?'⛈️ A big storm is coming today — villagers will hide inside when it hits! The rain makes crops grow 2× faster':weather()==='rain'?(curKind==='ice'?'❄️ It\'s snowing! Crops grow 2× faster today':'🌧️ It\'s raining! Your crops grow 2× faster today'):'🌈 A rainbow! Find the pot of gold at the end of it!',3600),6800);
   if(!quiet)toast(`☀️ Good morning! Day ${S.day}${S.villagers.some(v=>v.req)?' — some villagers need help ❗':''}`,3000);
@@ -1790,6 +1823,11 @@ const ACT={
     else{if(!MUSEUM_CASES.includes(what)||m.cases[what]||!S.inv[what])return;S.inv[what]--;if(!S.inv[what])delete S.inv[what];m.cases[what]=1;S.coins+=50;
       const all=MUSEUM_CASES.every(k=>m.cases[k]);if(all){S.coins+=500;museumParty()}toast(all?'🏛️ Every display case is full! The museum gives you 🪙550!':`🔍 The ${ITEMS[what].n} is on display! 🪙50 from the museum`,3000)}
     tally('donate');dirty();refreshTray()},
+  bdayGift({name,k}){const v=S.villagers.find(v=>v.name===name);if(!v||!isBday(v))return;const g=S.bdayGift||(S.bdayGift={});if(g[name]===S.day)return;
+    if(k){if(!S.inv[k]||ITEMS[k].keep)return;S.inv[k]--;if(!S.inv[k])delete S.inv[k]}g[name]=S.day;
+    const fav=k===favOf(name),n=k?Math.round(priceOf(k)*(fav?3:2))+50:0;S.coins+=n;tally('bday');dirty();refreshTray();
+    toast(!k?`🎉 ${name}: “Thank you for the birthday wishes!”`:fav?`💖 ${name}: “${ITEMS[k].e} My FAVORITE! Best birthday ever!” They gave you 🪙${n}!`:`🎁 ${name}: “Oh, ${ITEMS[k].e} — I love it! Thank you!” They gave you 🪙${n}!`,3600)},
+  bdayCake({name}){const v=S.villagers.find(v=>v.name===name);if(!v||!isBday(v))return;const c=S.bdayCake||(S.bdayCake={});if(c[name]===S.day)return;c[name]=S.day;give('bdaycake',1);dirty()},
   smoke(){const n=S.inv.fish||0;if(!n)return;delete S.inv.fish;give('smokedfish',n);tally('smoke');dirty();refreshTray()},
   present({id}){const o=byId(id);if(!o||o.t!=='house'||presented(id))return;const p=S.presents&&S.presents.day===S.day?S.presents:(S.presents={day:S.day,ids:[]});p.ids.push(id);
     const v=S.villagers.find(v=>v.house===id);S.coins+=15;tally('present');dirty();refreshTray();toast(`🎁 ${v?v.name:'Someone'} loved the present! They tossed up 🪙15 to say thank you`,2800)},
@@ -2292,7 +2330,7 @@ function drawObjIn(c,o,t,icon){
     poly(c,roof,X+1,Y+30,X+32,Y+2,X+63,Y+30);poly(c,'rgba(0,0,0,.15)',X+1,Y+30,X+63,Y+30,X+60,Y+27,X+4,Y+27);
     const win=night>.2?'#ffe27a':'#9fd8ff';
     for(const wx of[X+12,X+42]){rect(c,wx,Y+36,11,11,win,2);c.fillStyle='#fff';c.fillRect(wx+5,Y+36,1.5,11);c.fillRect(wx,Y+41,11,1.5)}
-    rect(c,X+26,Y+42,12,20,'#8b5a3c',3);ell(c,X+35,Y+53,1.4,1.4,'#ffd24a');if(!icon&&asleepIn(o))bubble(c,X+32,Y+2,bedtime()?'💤':'☔');break}
+    rect(c,X+26,Y+42,12,20,'#8b5a3c',3);ell(c,X+35,Y+53,1.4,1.4,'#ffd24a');if(!icon){const bv=S.villagers.find(v=>v.house===o.id);if(bv&&isBday(bv))balloons(c,X+60,Y+40,t)}if(!icon&&asleepIn(o))bubble(c,X+32,Y+2,bedtime()?'💤':'☔');break}
   case'myhouse':if(curKind==='ice')igloo(c,o,t,icon,night);else{rect(c,X+68,Y-16,10,24,'#9a5b3c',2);rect(c,X+6,Y+18,84,44,'#fff6e6',4);rect(c,X+6,Y+56,84,6,'rgba(0,0,0,.08)');
     poly(c,'#3d7fc4',X,Y+24,X+48,Y-22,X+96,Y+24);poly(c,'#2f66a3',X,Y+24,X+96,Y+24,X+92,Y+20,X+4,Y+20);
     for(let k=0;k<7;k++)ell(c,X+6+k*14,Y+24,7,4,'#2f66a3');
@@ -2559,7 +2597,7 @@ function draw(t){
     for(const b of bombs){const p=Math.min(1,b.t/b.dur);ell(ctx,b.tx,b.ty,6+p*8,3+p*4,`rgba(0,0,0,${.12+p*.25})`)}}
   for(const a of animals)list.push([a.y,()=>{drawAnimal(ctx,a,t);if(a.zz)zzz(ctx,a.x,a.y-(a.kind==='cow'?34:24),t)}]);
   for(const cr of critters)if(!cr.hide&&!cr.gone)list.push([cr.y+(cr.kind==='parrot'?40:0),()=>drawCritter(ctx,cr,t)]);
-  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried)list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-40,v.v.req.hurt?'🩹':'❗')}]);
+  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried)list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);const bd=isBday(v.v);if(bd)partyHat(ctx,v.x,v.y-Math.sin(v.walk)*.8,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-(bd?54:40),v.v.req.hurt?'🩹':'❗');else if(bd&&!v.talkT&&!(S.bdayGift&&S.bdayGift[v.v.name]===S.day))bubble(ctx,v.x,v.y-54,'🎂')}]);
   if(!(train&&train.rider)&&!fly)list.push([player.y,()=>{drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t);if(player.frozen>0){rect(ctx,player.x-13,player.y-44,26,46,'rgba(170,220,255,.55)',5);ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=1.5;ctx.strokeRect(player.x-13,player.y-44,26,46);ctx.fillStyle='rgba(255,255,255,.7)';ctx.fillRect(player.x-9,player.y-40,3,14)}}]);
   for(const m of muds)list.push([m.y*T+4,()=>{const X=m.x*T+16,Y=m.y*T+22,a=Math.min(1,(10-m.t)/2);ctx.globalAlpha=a;ell(ctx,X,Y,13,6,'#5a4a2a');ell(ctx,X-3,Y-1,7,3,'#6b5a36');ell(ctx,X+4,Y-2,2.5,1.2,'rgba(255,255,255,.35)');ctx.globalAlpha=1}]);
   for(const f of flames)list.push([f.y*T+20,()=>{const X=f.x*T+16,Y=f.y*T+22,a=Math.min(1,(7-f.t)/1.5),fl=Math.sin(t*12+f.x)*2;ctx.globalAlpha=a;ell(ctx,X,Y,8,3,'rgba(255,120,30,.35)');ell(ctx,X,Y-6+fl*.3,5,8+fl,'#ff6a1a');ell(ctx,X,Y-5,3,5,'#ffd23f');ctx.globalAlpha=1}]);
@@ -3175,6 +3213,7 @@ function enterHouse(id,cab,lh,cave){
   else if(inLight){if(vw){vw.say='Welcome to the lighthouse!';vw.talkT=3}toast(vw?`🗼 The lighthouse — ${vw.v.name} keeps it shining. Tap 🎨 Decorate!`:'🗼 Inside the lighthouse! Tap 🎨 Decorate to fix it up',3000)}
   else if(inMuseum()){const m=museum();toast(m.skel>=SKEL.length&&MUSEUM_CASES.every(k=>m.cases[k])?'🏛️ The museum is complete — what a collection! 🦖':'🏛️ Welcome to the museum! Tap the skeleton to donate 🦴 fossils, and the cases to donate treasures',3200)}
   else if(inHospital()){const n=patients(byId(visit)).length;toast(n?`🏥 ${n} ${n>1?'patients need':'patient needs'} 🩹 band-aids — buy them at the front desk`:'🏥 The hospital — nobody is sick today! 😊',3000)}
+  else if(vw&&isBday(vw.v)){vw.say='Welcome to my birthday party! 🎂';vw.talkT=3.5;if(!(S.bdayCake&&S.bdayCake[vw.v.name]===S.day)){doAct('bdayCake',{name:vw.v.name});setTimeout(()=>toast(`🎂 ${vw.v.name} gave you a slice of birthday cake!`,2800),300)}else toast(`🎉 You're at ${vw.v.name}'s birthday party!`,2400)}
   else if(vw){vw.say='Welcome to my home!';vw.talkT=3;toast(`🏠 You're visiting ${vw.v.name}`,2400)}
   else if(inCab)toast(guestMode?'🛖 Your cabin! Tap 🎨 Decorate to make it your own':net&&net.joined?'🛖 Your friend\'s cabin':'🛖 The guest cabin — a friend who joins your island (👥) stays here and decorates it',3200);
   else toast('🏠 Welcome home! Tap 🎨 Decorate to add furniture',2800);
@@ -3609,6 +3648,7 @@ function drawInside(t){
   if(inCave)drawCaveRoom(ctx);else styled(ctx,themeFor(),()=>drawRoom(ctx));
   const H=room().items;
   for(const f of H)if(FURN[f.k].wall)drawFurn(ctx,f,t);
+  {const hv=visit&&hostVw();if(hv&&isBday(hv.v))drawPartyRoom(ctx,t)}
   for(const f of H)if(FURN[f.k].walk)drawFurn(ctx,f,t);
   const list=[];
   for(const f of H){const F=FURN[f.k];if(!F.wall&&!F.walk)list.push([(f.y+F.h)*T-2,()=>drawFurn(ctx,f,t)])}
