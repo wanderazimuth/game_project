@@ -151,13 +151,14 @@ const BUILD={
   library:{n:'Library',cost:600,w:2,h:2,tall:10,one:1,d:'Borrow books full of island secrets — return them for a reward'},
   cinema:{n:'Movie Theater',cost:800,w:2,h:2,tall:26,one:1,d:'Pick a movie — every evening villagers come to watch, and buy tickets!'},
   petpark:{n:'Pet Park',cost:600,w:3,h:3,one:1,d:'Your pets come outside to play here in the daytime! Tap it to throw a ball 🎾'},
+  moaegg:{n:'Moa Spawn Egg',cost:100,w:1,h:1,d:'Put it down and a friendly 🦤 moa hatches right there — you get to name it!'},
   zoo:{n:'Zoo',cost:1000,w:2,h:2,tall:30,one:1,d:'Villagers come to see your animal exhibits — 🪙50 for each exhibit they see!'},
   exhibit:{n:'Zoo Exhibit',cost:400,w:3,h:3,tall:8,d:'A big pen — tap it to pick which island\'s animals live inside'},
   observatory:{n:'Observatory',cost:900,w:2,h:2,tall:34,one:1,d:'Look at the stars at night — find constellations and wish on shooting stars!'},
   hospital:{n:'Hospital',cost:300,w:2,h:2,d:'Sells 🩹 band-aids for hurt villagers'},
   lighthouse:{n:'Lighthouse',cost:2500,w:2,h:2,tall:80,d:'Shows the whole island — go inside and decorate it!'},
 };
-const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','drawbridge','wood','hut','fisherhut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','guesthut','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','mailbox','museum','school','library','observatory','petpark','zoo','exhibit','cinema','kitchen','hospital','track','station','balloon','lighthouse'];
+const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','drawbridge','wood','hut','fisherhut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','guesthut','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','mailbox','museum','school','library','observatory','moaegg','petpark','zoo','exhibit','cinema','kitchen','hospital','track','station','balloon','lighthouse'];
 let guestMode=false,guestSel='carrot'; // guestMode: you're on a friend's island
 let visit=null,hostPos=null; // visit: the villager house you're in (null: Your House)
 let fly=null; // flying the hot air balloon
@@ -868,6 +869,17 @@ function drawScorp(c,sc,t){
 
 // ── Ice Island: snow, slippery frozen lakes, penguins and polar bears ────────
 let critters=[];
+// moas you hatched from a 🥚 Moa Spawn Egg: they live on the island where you put them down
+const MOA_NAMES=['Boomer','Pip','Inky','Shadow','Fluff','Moana','Pebble','Midnight','Stomper','Coco','Licorice','Nugget'];
+function nameTag(c,x,y,n){c.font='bold 10px system-ui,sans-serif';const w=c.measureText(n).width+10;rect(c,x-w/2,y-7,w,14,'rgba(255,255,255,.85)',6);c.fillStyle='#333';c.textAlign='center';c.textBaseline='middle';c.fillText(n,x,y)}
+function syncMoas(){if(!S||!S.moas)return;for(const m of S.moas)if(!critters.some(c=>c.mid===m.id))critters.push({kind:'moa',mid:m.id,name:m.name,night:0,gone:0,fly:0,loot:null,hide:0,x:m.x*T+16,y:m.y*T+20,wa:Math.random()*6,wt:2,dir:1,walk:0,happy:1.5,calm:0,still:true})}
+function moaNameModal(x,y){
+  const used=(S.moas||[]).map(m=>m.name),pick=()=>{const f=MOA_NAMES.filter(n=>!used.includes(n));return f[Math.random()*f.length|0]||'Moa'};
+  const ask=nm=>openModal(`<h2>🥚 Moa Spawn Egg</h2><p style="font-size:44px;text-align:center">🥚➡️🦤</p><p>The egg is wobbling… it's about to hatch! What will you name your moa?</p>
+    <input id="codeIn" maxlength="20" autocomplete="off" style="letter-spacing:0;font-size:20px;width:220px" value="${nm}">
+    <div class="btns"><button class="btn gray" data-a="dice">🎲 Another name</button><button class="btn gray" data-a="close">Not now</button><button class="btn" data-a="ok">🐣 Hatch!</button></div>`,
+    {dice:()=>ask(pick()),ok:()=>{const n=cleanName(document.getElementById('codeIn').value)||pick();closeModal();doAct('moaEgg',{x,y,name:n})}});
+  ask(pick())}
 function spawnCritters(){
   const kinds=curKind==='dino'?['rex','rex','longneck','longneck','longneck','trike','trike','trike','trike','ptero','ptero','ptero','terror','terror','terror','moa','moa','moa']:curKind==='haunted'?['ghost','ghost','ghost','ghost','ghost','ghost','bat','bat','bat','bat']:curKind==='pirate'?['crab','crab','crab','crab','crab','crab','crab','parrot','parrot']:curKind==='autumn'?['squirrel','squirrel','squirrel','squirrel','squirrel','squirrel']:curKind==='ice'?['peng','peng','peng','peng','peng','peng','peng','bear','bear','bear']:curKind==='jungle'?['monkey','monkey','monkey','monkey','monkey','parrot','parrot','parrot','parrot']:curKind==='volcano'?['terror','terror','terror']:curKind==='lagoon'?['dolphin','dolphin','dolphin','dolphin','crab','crab','crab','parrot','parrot']:curKind==='desert'?['camel','camel','camel','lizard','lizard','lizard','lizard','lizard']:[];
   kinds.push(...(curKind==='dino'?['chick','chick','chick']:curKind==='ice'?['frost','frost']:curKind==='volcano'?['fire','fire']:curKind==='falls'?['swamp','swamp','swamp']:[])); // the new terror birds
@@ -895,6 +907,7 @@ function slideStep(dt){
 // penguins and polar bears on Ice Island, monkeys and parrots on Jungle Island
 let nightWas=null;
 function critterUpdate(dt){
+  syncMoas();
   stealCool=Math.max(0,stealCool-dt);
   if(critters.some(c=>c.night)){const n=bedtime();if(n&&nightWas===false&&!inside)toast(curKind==='ice'?'🌙 Night is falling… more polar bears are prowling! 🐻‍❄️':'🌙 Night is falling… more terror birds are coming out! 🦤',3200);nightWas=n}
   for(const cr of critters){
@@ -1599,6 +1612,9 @@ function templeModal(){
 }
 function feedCritter(cr){
   if(cr.zz){cr.happy=.4;toast(`💤 Shh… the ${CRIT_NAMES[cr.kind]||'animal'} is fast asleep. Come back in the morning!`,2600);return}
+  if(cr.kind==='moa'&&cr.name){cr.happy=1.6;for(let k=0;k<3;k++)setTimeout(()=>floatAt(cr.x+(k-1)*10,cr.y-56,'❤️'),k*150);
+    if(cr.gave&&cr.gave>now()){toast(`🦤 Boom-boom! ${cr.name} gives you a big fluffy hug`);return}
+    cr.gave=now()+120000;doAct('giveBack',{k:'feather',n:1});floatAt(cr.x,cr.y-40,'+🪶');toast(`🦤 ${cr.name} loves you — ${cr.name} gave you a 🪶 Moa Feather!`,2800);return}
   if(cr.kind==='moa'){cr.happy=1.6;for(let k=0;k<3;k++)setTimeout(()=>floatAt(cr.x+(k-1)*10,cr.y-56,'❤️'),k*150);
     if(cr.gave&&cr.gave>now()){toast(['🦤 Boom-boom! The moa gives you a big fluffy hug','🦤 The moa does a happy little dance!','🦤 Boom-boom! Moas are the terror birds\' friendly cousins'][Math.random()*3|0]);return}
     cr.gave=now()+120000;doAct('giveBack',{k:'feather',n:1});floatAt(cr.x,cr.y-40,'+🪶');toast('🦤 Boom-boom! The friendly moa loves you — it gave you a 🪶 Moa Feather!',2800);return}
@@ -2173,6 +2189,7 @@ function placeWhy(t,x,y){const b=BUILD[t];return canPlace(t,x,y)||(S.coins<b.cos
 function place(t,x,y,quiet){
   const why=placeWhy(t,x,y);
   if(why){if(!quiet)toast(why);return false}
+  if(t==='moaegg'){moaNameModal(x,y);return true}
   doAct('place',{t,x,y});return true;
 }
 function doPlace(t,x,y){
@@ -2390,6 +2407,10 @@ const ACT={
     const v=newVillager(o.id);S.keeper=1;spawnVillager(v);dirty();refreshTray();toast(`🗼 ${v.name} moved into the lighthouse as the keeper!`,3200)},
   sleep(){const tod=((now()-S.t0)%DAY_MS)/DAY_MS;if(tod<.6){toast('😴 You\'re not sleepy yet — come back in the evening');return}
     S.t0=now()-(dayNow()+.01)*DAY_MS;dirty();if(!actor)sleepFade=1.2;else netSend({t:'sleep'});toast('💤 Good night… ☀️ Good morning!',2600)},
+  moaEgg({x,y,name}){if(placeWhy('moaegg',x,y))return;const b=BUILD.moaegg;S.coins-=b.cost;tally('build:moaegg');
+    const m={id:S.nextId++,x,y,name:cleanName(String(name||''))||'Moa'};(S.moas||(S.moas=[])).push(m);dirty();refreshTray();
+    floatAt(x*T+16,y*T-10,'🥚 crack!');setTimeout(()=>{floatAt(x*T+16,y*T-30,`🦤 Hi, ${m.name}!`);for(let k=0;k<30;k++)confetti.push({x:x*T+16,y:y*T+10,vx:(Math.random()-.5)*200,vy:-80-Math.random()*180,c:SHIRTS[k%8],t:0})},500);
+    toast(`🦤 ${m.name} the moa hatched!`,2600)},
   remove({id}){const o=byId(id);if(o)doRemove(o)},
   unwood({i}){if(!wood[i])return;if(objAt(i)){toast('Take the things off the wood first');return}S.wood=(S.wood||[]).filter(k=>k!==i);applyWood();drawTerrain();
     for(const e of[player,...villagers])unstick(e);dirty()},
@@ -2895,6 +2916,7 @@ function drawObjIn(c,o,t,icon){
     rect(c,X+25,Y+38,14,24,'#3a1a10',2);rect(c,X+31.3,Y+38,1.4,24,'#ffd23f');
     if(on){const g=(Math.sin(t*3)+1)/2;bubble(c,X+32,Y-26+g*3,M.sc[Math.floor(t/2.2)%M.sc.length][0].split(' ')[0])}break}
   case'petpark':drawPetPark(c,o,X,Y,t,icon);break;
+  case'moaegg':{const ex=X+16,ey=Y+18;ell(c,ex,ey+10,9,3,'rgba(0,0,0,.18)');ell(c,ex,ey,9,12,'#3a3a44');ell(c,ex-3,ey-5,3,4,'rgba(255,255,255,.25)');for(const[a,b]of[[-4,2],[3,-3],[4,5],[-2,8],[0,-8]])ell(c,ex+a,ey+b,1.6,1.6,'#9aa2ab');break}
   case'zoo':{rect(c,X+4,Y+30,56,32,'#f4e3b5',3);rect(c,X+40,Y+34,16,22,'#d9534f',2);rect(c,X+42,Y+38,12,8,'#ffe9a0',1);
     rect(c,X+6,Y-4,6,66,'#8a5a2c',2);rect(c,X+52,Y-4,6,66,'#8a5a2c',2);rect(c,X+2,Y-10,60,16,'#3f9a3a',6);
     c.fillStyle='#fff';c.font='bold 11px system-ui';c.textAlign='center';c.textBaseline='middle';c.fillText('ZOO',X+32,Y-2);
@@ -3210,7 +3232,7 @@ function draw(t){
     for(const sc of scorps)if(!sc.hide)list.push([sc.y,()=>{drawScorp(ctx,sc,t);if(sc.zz)zzz(ctx,sc.x,sc.y-22,t)}]);
     for(const b of bombs){const p=Math.min(1,b.t/b.dur);ell(ctx,b.tx,b.ty,6+p*8,3+p*4,`rgba(0,0,0,${.12+p*.25})`)}}
   for(const a of animals)list.push([a.y,()=>{drawAnimal(ctx,a,t);if(a.zz)zzz(ctx,a.x,a.y-(a.kind==='cow'?34:24),t)}]);
-  for(const cr of critters)if(!cr.hide&&!cr.gone)list.push([cr.y+(cr.kind==='parrot'?40:0),()=>drawCritter(ctx,cr,t)]);
+  for(const cr of critters)if(!cr.hide&&!cr.gone)list.push([cr.y+(cr.kind==='parrot'?40:0),()=>{drawCritter(ctx,cr,t);if(cr.name)nameTag(ctx,cr.x,cr.y-60,cr.name)}]);
   for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried&&!v.atMovie)list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);const bd=isBday(v.v);if(bd)partyHat(ctx,v.x,v.y-Math.sin(v.walk)*.8,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-(bd?54:40),v.v.req.hurt?'🩹':'❗');else if(bd&&!v.talkT&&!(S.bdayGift&&S.bdayGift[v.v.name]===S.day))bubble(ctx,v.x,v.y-54,'🎂')}]);
   if(!(train&&train.rider)&&!fly)list.push([player.ride?1e9:player.y,()=>{drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t);if(player.frozen>0){rect(ctx,player.x-13,player.y-44,26,46,'rgba(170,220,255,.55)',5);ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=1.5;ctx.strokeRect(player.x-13,player.y-44,26,46);ctx.fillStyle='rgba(255,255,255,.7)';ctx.fillRect(player.x-9,player.y-40,3,14)}}]);
   for(const m of muds)list.push([m.y*T+4,()=>{const X=m.x*T+16,Y=m.y*T+22,a=Math.min(1,(10-m.t)/2);ctx.globalAlpha=a;ell(ctx,X,Y,13,6,'#5a4a2a');ell(ctx,X-3,Y-1,7,3,'#6b5a36');ell(ctx,X+4,Y-2,2.5,1.2,'rgba(255,255,255,.35)');ctx.globalAlpha=1}]);
