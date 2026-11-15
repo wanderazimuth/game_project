@@ -155,6 +155,7 @@ const BUILD={
   dolphinegg:{n:'Dolphin Spawn Egg',cost:150,w:1,h:1,on:'water',flat:1,d:'Put it in the water and a 🐬 dolphin hatches — you get to name it!'},
   seafence:{n:'Underwater Fence',cost:10,w:1,h:1,on:'water',flat:1,d:'A net fence in the water — keeps your dolphins in!'},
   turtleegg:{n:'Sea Turtle Spawn Egg',cost:120,w:1,h:1,d:'Put it on the 🏖️ sand — a baby sea turtle hatches and crawls to the sea! (Underwater fences keep it in)'},
+  sandegg:{n:'Sand Terror Bird Spawn Egg',cost:250,w:1,h:1,d:'Hatches a WILD 🏜️ sand terror bird that snatches villagers into a hideout right here — sneak in and rescue them!'},
   terroregg:{n:'Terror Bird Spawn Egg',cost:300,w:1,h:1,d:'Hatches a TAME 🦤 terror bird that follows you and chases off wild terror birds to protect you!'},
   moaegg:{n:'Moa Spawn Egg',cost:100,w:1,h:1,d:'Put it down and a friendly 🦤 moa hatches right there — you get to name it!'},
   zoo:{n:'Zoo',cost:1000,w:2,h:2,tall:30,one:1,d:'Villagers come to see your animal exhibits — 🪙50 for each exhibit they see!'},
@@ -163,7 +164,7 @@ const BUILD={
   hospital:{n:'Hospital',cost:300,w:2,h:2,d:'Sells 🩹 band-aids for hurt villagers'},
   lighthouse:{n:'Lighthouse',cost:2500,w:2,h:2,tall:80,d:'Shows the whole island — go inside and decorate it!'},
 };
-const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','drawbridge','wood','hut','fisherhut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','guesthut','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','mailbox','museum','school','library','observatory','moaegg','terroregg','dolphinegg','turtleegg','seafence','petpark','zoo','exhibit','cinema','kitchen','hospital','track','station','balloon','fireworks','lighthouse'];
+const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','drawbridge','wood','hut','fisherhut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','guesthut','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','mailbox','museum','school','library','observatory','moaegg','terroregg','dolphinegg','turtleegg','sandegg','seafence','petpark','zoo','exhibit','cinema','kitchen','hospital','track','station','balloon','fireworks','lighthouse'];
 let guestMode=false,guestSel='carrot'; // guestMode: you're on a friend's island
 let visit=null,hostPos=null; // visit: the villager house you're in (null: Your House)
 let fly=null; // flying the hot air balloon
@@ -566,7 +567,7 @@ unstick(player);
 function pickAt(wx,wy){
   for(const sc of scorps)if(!sc.hide&&Math.abs(wx-sc.x)<17&&Math.abs(wy-sc.y+6)<15)return{k:'scorp',sc};
   for(const cr of critters){if(cr.hide||cr.gone)continue;const big=cr.kind==='camel'||cr.kind==='bear'||cr.kind==='rex'||cr.kind==='trike'||!!HUNT[cr.kind]||cr.kind==='moa',tall=cr.kind==='camel'?54:cr.kind==='longneck'?76:cr.kind==='rex'?50:HUNT[cr.kind]&&cr.kind!=='bear'||cr.kind==='moa'?44:0,up=cr.zz&&cr.kind==='parrot'?6:cr.kind==='parrot'||cr.kind==='bat'?24:cr.kind==='ptero'?(cr.zz?8:34):cr.kind==='ghost'?14:0;if(Math.abs(wx-cr.x)<(cr.kind==='longneck'?30:big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(tall||(big?32:24)))return{k:'critter',cr}}
-  for(const v of villagers)if(v.cage&&Math.abs(wx-v.x)<18&&wy<v.y+8&&wy>v.y-46)return{k:'captive',v,x:DEN.x+1+(v.slot||0),y:DEN.y};
+  for(const v of villagers)if(v.cage&&Math.abs(wx-v.x)<18&&wy<v.y+8&&wy>v.y-46)return{k:'captive',v,x:denOf(v.grab).x+1+(v.slot||0),y:denOf(v.grab).y};
   for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried&&!v.atMovie&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
   {const P=potAt();if(P&&Math.abs(wx-(P.x*T+16))<16&&wy>P.y*T-10&&wy<P.y*T+T)return{k:'pot',x:P.x,y:P.y}}
   if(festNow()){const fs=festSpot();for(const st of FEST_STALLS){const X=(fs.x+st.dx)*T,Y=(fs.y+st.dy)*T;if(wx>X-14&&wx<X+T+14&&wy>Y-46&&wy<Y+T)return{k:'fest',st}}}
@@ -918,6 +919,7 @@ let critters=[];
 // moas you hatched from a 🥚 Moa Spawn Egg: they live on the island where you put them down
 const DOLPHIN_NAMES=['Splash','Bubbles','Flipper','Echo','Wave','Coral','Squeaky','Skipper','Marina','Finn-tastic','Ripple','Sunny'];
 const GUARD_NAMES=['Rex','Talon','Brave','Captain','Buddy','Thunder','Guardian','Spike','Rocky','Blaze','Champ','Hero'];
+const SANDB_NAMES=['Dusty','Sneaky','Dune','Grabby','Shifty','Sahara','Snatch','Mirage','Sandy Claws','Gritty','Whisper','Sly'];
 const TURTLE_NAMES=['Shelly','Crush','Squirt','Myrtle','Tank','Sheldon','Pebble','Coral','Wavy','Sandy','Bubbles','Captain Flippers'];
 const MOA_NAMES=['Boomer','Pip','Inky','Shadow','Fluff','Moana','Pebble','Midnight','Stomper','Coco','Licorice','Nugget'];
 function nameTag(c,x,y,n){c.font='bold 10px system-ui,sans-serif';const w=c.measureText(n).width+10;rect(c,x-w/2,y-7,w,14,'rgba(255,255,255,.85)',6);c.fillStyle='#333';c.textAlign='center';c.textBaseline='middle';c.fillText(n,x,y)}
@@ -944,7 +946,9 @@ function guardStep(cr,dt){
 function SNATCH(k){return k==='sand'||k==='vine'}
 function snName(cr){return cr.kind==='vine'?'jungle terror bird':'sand terror bird'}
 function snE(cr){return cr.kind==='vine'?'🌴':'🏜️'}
-const denHome=()=>({x:DEN.x*T+16,y:(DEN.y+2)*T+20});
+function denOf(cr){return cr&&cr.den||DEN}
+const denHome=cr=>{const D=denOf(cr);return{x:D.x*T+16,y:(D.y+2)*T+20}};
+const allDens=()=>[DEN,...critters.filter(c=>c.den&&!c.gone).map(c=>c.den)].filter(Boolean);
 function sandSees(cr,e){const dx=e.x-cr.x,dy=e.y-cr.y,d=Math.hypot(dx,dy);if(d>T*5)return false;if(d<T*.9)return true;
   return dx*cr.dir>0&&Math.abs(Math.atan2(dy,Math.abs(dx)))<.95}
 function sandGrab(cr,v){
@@ -953,7 +957,7 @@ function sandGrab(cr,v){
   toast(`${snE(cr)} A ${snName(cr)} grabbed ${v.v.name}! Follow it to its secret hideout to rescue them!`,3600);
 }
 function sandFree(cr,saved){
-  const v=cr.prey,D=DEN,sn=cr.kind==='sand';cr.prey=null;cr.mode=0;cr.path=[];cr.cool=saved?(sn?40:120):(sn?30:60); // sand terror birds are back on the hunt much sooner
+  const v=cr.prey,D=denOf(cr),sn=cr.kind==='sand';cr.prey=null;cr.mode=0;cr.path=[];cr.cool=saved?(sn?40:120):(sn?30:60); // sand terror birds are back on the hunt much sooner
   if(!v)return;v.grab=null;v.carried=0;v.cage=0;v.x=(D.x+1+(v.slot||0))*T+16;v.slot=0;v.y=(D.y+1)*T+24;unstick(v);v.path=[];v.wait=2;
   if(saved){v.say='You saved me! 💕';v.talkT=3.5;doAct('giveBack',{coins:50});floatAt(v.x,v.y-50,'+🪙50');
     for(let k=0;k<50;k++)confetti.push({x:v.x,y:v.y-30,vx:(Math.random()-.5)*240,vy:-90-Math.random()*200,c:['#ffd23f','#fff','#ff6b8b'][k%3],t:0});
@@ -968,18 +972,18 @@ function sandSpotted(cr){
   toast(`👀 The ${snName(cr)} SAW you and chased you off! Sneak up from BEHIND it — watch where it's looking`,3400);
 }
 function sandStep(cr,dt){
-  if(!DEN){cr.walk=0;return}
-  const H0=denHome(),P=cr.prey;
+  const D=denOf(cr);if(!D){cr.walk=0;return}
+  const H0=denHome(cr),P=cr.prey;
   cr.cool=Math.max(0,(cr.cool||0)-dt);cr.seenT=Math.max(0,(cr.seenT||0)-dt);
   if(P&&!villagers.includes(P)){cr.prey=null;cr.mode=0;return}
   if(cr.mode==='carry'){P.x=cr.x+8*cr.dir;P.y=cr.y-4;
     if(cr.path&&cr.path.length){const d0=cr.dir;followPath(cr,T*2.4,dt);cr.dir=cr.dir==='left'?-1:cr.dir==='right'?1:d0;return}
-    if(Math.hypot(cr.x-H0.x,cr.y-H0.y)>T*1.2&&!cr.tried){cr.tried=1;const t=tileOf(cr),r=findPath(t.x,t.y,(x,y)=>x===DEN.x&&y===DEN.y+2,null,(x,y)=>terrorOk(x*T+16,y*T+20));if(r&&r.path.length){cr.path=r.path;return}}
+    if(Math.hypot(cr.x-H0.x,cr.y-H0.y)>T*1.2&&!cr.tried){cr.tried=1;const t=tileOf(cr),r=findPath(t.x,t.y,(x,y)=>x===D.x&&y===D.y+2,null,(x,y)=>terrorOk(x*T+16,y*T+20));if(r&&r.path.length){cr.path=r.path;return}}
     if(Math.hypot(cr.x-H0.x,cr.y-H0.y)>T*1.2){cr.x=H0.x;cr.y=H0.y} // it knows a secret way home
-    cr.tried=0;cr.mode='guard';P.cage=1;P.slot=critters.some(c=>c!==cr&&SNATCH(c.kind)&&c.mode==='guard'&&c.prey&&c.prey.slot===0)?1:0;cr.eatT=150;cr.wt=0;
+    cr.tried=0;cr.mode='guard';P.cage=1;P.slot=critters.some(c=>c!==cr&&SNATCH(c.kind)&&denOf(c)===D&&c.mode==='guard'&&c.prey&&c.prey.slot===0)?1:0;cr.eatT=150;cr.wt=0;
     toast(`${snE(cr)} ${P.v.name} is trapped in the ${snName(cr)}'s hideout! Sneak in and tap them — don't let it SEE you! 👀`,3600);return}
   if(cr.mode==='guard'){
-    P.x=(DEN.x+1+(P.slot||0))*T+16;P.y=DEN.y*T+28;P.walk=0;
+    P.x=(D.x+1+(P.slot||0))*T+16;P.y=D.y*T+28;P.walk=0;
     if((cr.eatT-=dt)<=0){sandFree(cr,false);return}
     if((cr.wt-=dt)<=0){cr.wt=1.2+Math.random()*2.3;cr.still=Math.random()<.45;if(cr.still){if(Math.random()<.6)cr.dir=-cr.dir}else cr.tx=H0.x+(Math.random()*6-3)*T}
     if(!cr.still&&cr.tx!=null){const dx=cr.tx-cr.x;if(Math.abs(dx)>3){const st=Math.sign(dx)*Math.min(Math.abs(dx),T*1.1*dt);if(terrorOk(cr.x+st,cr.y))cr.x+=st;else cr.tx=null;cr.dir=dx<0?-1:1;cr.walk+=dt*8}else{cr.walk=0;cr.tx=null}}else cr.walk=0;
@@ -1000,8 +1004,8 @@ function sandStep(cr,dt){
   if(terrorOk(cr.x+mx,cr.y)){cr.x+=mx;moved=true}if(terrorOk(cr.x,cr.y+my)){cr.y+=my;moved=true}
   if(!moved)cr.wa=Math.random()*Math.PI*2;if(mx)cr.dir=mx<0?-1:1;cr.walk+=dt*8;
 }
-function drawDen(c,t){
-  const X=DEN.x*T+16,Y=DEN.y*T+20,guards=critters.filter(c=>SNATCH(c.kind)&&c.mode==='guard'&&c.prey);
+function drawDen(c,t,D){
+  const X=D.x*T+16,Y=D.y*T+20,guards=critters.filter(c=>SNATCH(c.kind)&&denOf(c)===D&&c.mode==='guard'&&c.prey);
   const J=curKind==='jungle';ell(c,X+T*.5,Y+4,52,15,J?'#4a6a2e':'#c9a462');ell(c,X+T*.5,Y,44,12,J?'#5f8038':'#d8b878');
   if(J){for(const[a,b,r]of[[-22,-6,9],[24,-10,10],[50,-4,8],[-6,-14,8]]){ell(c,X+a,Y+b,r,r*.7,'#2f7a2c');ell(c,X+a-2,Y+b-2,r*.5,r*.35,'#4fae45')}}ell(c,X,Y-2,15,10,'#3a2a1a');ell(c,X,Y-4,11,6,'#1e140c'); // the burrow
   for(const[a,b,r]of[[-30,10,0],[58,12,1],[-18,16,1],[66,-2,0]]){c.save();c.translate(X+a,Y+b);c.rotate(r?.6:-.4);rect(c,-6,-1.3,12,2.6,'#f2ead6',1.2);for(const sx of[-6,6])ell(c,sx,0,2,2,'#f2ead6');c.restore()}
@@ -1011,7 +1015,7 @@ function drawDen(c,t){
   ell(c,px,py,13,10,'#3a3a40');ell(c,px,py-7,12,3.5,'#555');ell(c,px,py-7,10,2.5,hot?'#8fbf4a':'#2a2a2e');
   if(hot){c.globalAlpha=.6;for(let k=0;k<3;k++){const ph=(t*.8+k/3)%1;ell(c,px-4+k*4,py-12-ph*22,3+ph*4,2+ph*3,'#fff')}c.globalAlpha=1}
   // two cages, one for each sand terror bird
-  for(let slot=0;slot<2;slot++){const G=guards.find(g=>(g.prey.slot||0)===slot),v=G&&G.prey,cx=(DEN.x+1+slot)*T+16,cy=DEN.y*T+28;
+  for(let slot=0;slot<2;slot++){const G=guards.find(g=>(g.prey.slot||0)===slot),v=G&&G.prey,cx=(D.x+1+slot)*T+16,cy=D.y*T+28;
     if(v)drawPerson(c,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},'down',0,null,t);
     c.strokeStyle=curKind==='jungle'?'#c9b46a':'#e8dcc0';c.lineWidth=2.6;c.lineCap='round';for(let k=0;k<5;k++){if(!v&&k===4)continue;const bx=cx-12+k*6;c.beginPath();c.moveTo(bx,cy+2);c.lineTo(bx,cy-38);c.stroke()}
     c.beginPath();c.moveTo(cx-14,cy-38);c.lineTo(cx+14,cy-38);c.moveTo(cx-14,cy+2);c.lineTo(cx+14,cy+2);c.stroke();
@@ -1028,12 +1032,13 @@ function turtleStep(cr,dt){
   cr.path=[];if((cr.wt-=dt)<=0){cr.wt=2+Math.random()*4;cr.wa=Math.random()*Math.PI*2;cr.still=Math.random()<.25}
   if(cr.still){cr.walk=0;return}const mx=Math.cos(cr.wa)*T*.7*dt,my=Math.sin(cr.wa)*T*.7*dt;let mv=0;
   if(myDolphinOk(cr.x+mx,cr.y)){cr.x+=mx;mv=1}if(myDolphinOk(cr.x,cr.y+my)){cr.y+=my;mv=1}if(!mv)cr.wa=Math.random()*Math.PI*2;if(mx)cr.dir=mx<0?-1:1;cr.walk+=dt*4}
-function syncMoas(){if(!S||!S.moas)return;for(const m of S.moas)if(!critters.some(c=>c.mid===m.id))critters.push({kind:m.k||'moa',mid:m.id,guard:m.k==='terror'?1:0,name:m.name,night:0,gone:0,fly:0,loot:null,hide:0,x:m.x*T+16,y:m.y*T+20,wa:Math.random()*6,wt:2,dir:1,walk:0,happy:1.5,calm:0,still:true})}
+function syncMoas(){if(!S||!S.moas)return;for(const m of S.moas)if(!critters.some(c=>c.mid===m.id))critters.push({kind:m.k||'moa',mid:m.id,guard:m.k==='terror'?1:0,...(m.k==='sand'?{den:{x:m.x,y:m.y}}:{}),name:m.name,night:0,gone:0,fly:0,loot:null,hide:0,x:m.x*T+16,y:m.y*T+20,wa:Math.random()*6,wt:2,dir:1,walk:0,happy:1.5,calm:0,still:true})}
 // every spawn egg: which build item it is, what hatches, and what to say
 const EGGS={moa:{b:'moaegg',n:'Moa',e:'🦤',names:()=>MOA_NAMES,how:'wobbling',hi:'🦤',done:m=>`🦤 ${m.name} the moa hatched!`},
   dolphin:{b:'dolphinegg',n:'Dolphin',e:'🐬',names:()=>DOLPHIN_NAMES,how:'bobbing in the water',hi:'🐬',done:m=>`🐬 ${m.name} the dolphin hatched! Eee-eee!`},
   terror:{b:'terroregg',n:'Terror Bird',e:'🦤🛡️',names:()=>GUARD_NAMES,how:'wobbling',hi:'🛡️',def:'Guardian',extra:'This terror bird will be TAME — it\'ll follow you and scare away the wild ones. ',done:m=>`🦤 ${m.name} the tame terror bird hatched! ${m.name} will protect you 🛡️`},
-  seaturtle:{b:'turtleegg',n:'Sea Turtle',e:'🐢',names:()=>TURTLE_NAMES,how:'wiggling in the sand',hi:'🐢',extra:'Baby sea turtles crawl straight to the sea! ',done:m=>`🐢 ${m.name} the sea turtle hatched — off to the sea!`}};
+  seaturtle:{b:'turtleegg',n:'Sea Turtle',e:'🐢',names:()=>TURTLE_NAMES,how:'wiggling in the sand',hi:'🐢',extra:'Baby sea turtles crawl straight to the sea! ',done:m=>`🐢 ${m.name} the sea turtle hatched — off to the sea!`},
+  sand:{b:'sandegg',n:'Sand Terror Bird',e:'🏜️🦤',names:()=>SANDB_NAMES,how:'shaking in the sand',hi:'🦤',extra:'Watch out — this one is WILD! It snatches villagers and locks them in a cage right here. ',done:m=>`🏜️ ${m.name} the sand terror bird hatched… hide your villagers! 😱`}};
 const eggKind=t=>Object.keys(EGGS).find(k=>EGGS[k].b===t);
 function moaNameModal(x,y,k='moa'){
   const E=EGGS[k]||EGGS.moa,NM=E.names(),used=(S.moas||[]).map(m=>m.name),pick=()=>{const f=NM.filter(n=>!used.includes(n));return f[Math.random()*f.length|0]||E.def||E.n};
@@ -1076,7 +1081,7 @@ function critterUpdate(dt){
     if(cr.night){ // night-time terror birds: gone by day, out in the dark (somewhere away from you)
       if(!bedtime()){cr.gone=1;cr.chase=0;cr.prey=null;cr.path=[];continue}
       if(cr.gone){cr.gone=0;const sd=sideOf(cr);for(let k=0;k<20;k++){Object.assign(cr,scorpSpot(sd));if(Math.hypot(cr.x-player.x,cr.y-player.y)>T*10)break}}}
-    if(cr.hide>0){if((cr.hide-=dt)<=0)Object.assign(cr,scorpSpot(HUNT[cr.kind]?sideOf(cr):null),{loot:null});continue}
+    if(cr.hide>0){if((cr.hide-=dt)<=0)Object.assign(cr,SNATCH(cr.kind)&&denOf(cr)?denHome(cr):scorpSpot(HUNT[cr.kind]?sideOf(cr):null),{loot:null});continue}
     cr.happy=Math.max(0,cr.happy-dt);cr.calm=Math.max(0,cr.calm-dt);
     if(cr.guard){guardStep(cr,dt);continue}
     if(SNATCH(cr.kind)){sandStep(cr,dt);continue}
@@ -1883,6 +1888,7 @@ function feedCritter(cr){
     if(cr.gave&&cr.gave>now()){toast(['🐬 Eee-eee! The dolphin does a flip!','🐬 The dolphin splashes you. Hehe!','🐬 Click-click! The dolphin waves its flipper'][Math.random()*3|0]);return}
     cr.gave=now()+120000;const g=[{k:'pearl',n:1},{k:'fish',n:1},{coins:20}][Math.random()*3|0];doAct('giveBack',g);floatAt(cr.x,cr.y-56,g.coins?'+🪙20':'+'+ITEMS[g.k].e);
     toast(`🐬 Eee-eee! The dolphin jumped out of the water and brought you ${g.coins?'🪙20':g.k==='pearl'?'a 🦪 pearl':'a 🐟 fish'}!`,2800);return}
+  if(SNATCH(cr.kind)&&cr.mid&&!cr.mode&&!cr.prey){openModal(`<h2>🏜️ ${esc2(cr.name)} the sand terror bird</h2><p style="font-size:40px;text-align:center">🦤💨</p><p>${esc2(cr.name)} is sneaking around, looking for villagers to snatch!</p><p>Do you want to shoo ${esc2(cr.name)} away for good?</p><div class="btns"><button class="btn gray" data-a="close">Let it stay</button><button class="btn" data-a="shoo">👋 Shoo it away</button></div>`,{shoo:()=>{closeModal();doAct('eggBye',{id:cr.mid})}});return}
   if(SNATCH(cr.kind)){toast(cr.mode==='guard'?`${snE(cr)} Careful! It's guarding its hideout — sneak up from behind!`:`${snE(cr)} Shh… a ${snName(cr)}! It won't chase you, but it snatches villagers. Keep an eye on it!`,3000);return}
   if(cr.kind==='koi'){cr.happy=1;floatAt(cr.x,cr.y-24,'🫧');
     if(cr.gave&&cr.gave>now()){toast(['🐟 Bloop! The koi blows bubbles at you','🐟 The koi swishes its fancy tail','🐟 Splish! The koi swims a happy circle'][Math.random()*3|0]);return}
@@ -2691,6 +2697,7 @@ const ACT={
     const v=newVillager(o.id);S.keeper=1;spawnVillager(v);dirty();refreshTray();toast(`🗼 ${v.name} moved into the lighthouse as the keeper!`,3200)},
   sleep(){const tod=((now()-S.t0)%DAY_MS)/DAY_MS;if(tod<.6){toast('😴 You\'re not sleepy yet — come back in the evening');return}
     S.t0=now()-(dayNow()+.01)*DAY_MS;dirty();if(!actor)sleepFade=1.2;else netSend({t:'sleep'});toast('💤 Good night… ☀️ Good morning!',2600)},
+  eggBye({id}){const cr=critters.find(c=>c.mid===id);if(cr&&cr.prey)return;S.moas=(S.moas||[]).filter(m=>m.id!==id);critters=critters.filter(c=>c.mid!==id);dirty();if(cr){floatAt(cr.x,cr.y-50,'SKRAW! 💨');toast(`👋 ${cr.name} ran off into the dunes and won't be back!`,2800)}},
   moaEgg({x,y,name,k}){if(!EGGS[k])k='moa';const E=EGGS[k],bt=E.b;if(placeWhy(bt,x,y))return;const b=BUILD[bt];S.coins-=b.cost;tally('build:'+bt);
     const m={id:S.nextId++,x,y,k,name:cleanName(String(name||''))||E.def||E.n};(S.moas||(S.moas=[])).push(m);dirty();refreshTray();
     floatAt(x*T+16,y*T-10,'🥚 crack!');setTimeout(()=>{floatAt(x*T+16,y*T-30,`${E.hi} Hi, ${m.name}!`);for(let q=0;q<30;q++)confetti.push({x:x*T+16,y:y*T+10,vx:(Math.random()-.5)*200,vy:-80-Math.random()*180,c:SHIRTS[q%8],t:0})},500);
@@ -3219,6 +3226,7 @@ function drawObjIn(c,o,t,icon){
     if(has(-1,0))net(X,Y+12+wv,X+16,Y+12+wv);if(has(1,0))net(X+16,Y+12+wv,X+32,Y+12+wv);if(has(0,-1))rect(c,X+15,Y-4,2,18,'#f4d35e',1);if(has(0,1))rect(c,X+15,Y+16,2,18,'#f4d35e',1);
     rect(c,X+13,Y+6+wv,6,16,'#8a5a2c',2);ell(c,X+16,Y+22+wv,7,2.5,'rgba(255,255,255,.45)');ell(c,X+16,Y+5+wv,4,4,'#e74c3c');break}
   case'turtleegg':{const ex=X+16,ey=Y+20;ell(c,ex,ey+7,10,3,'rgba(0,0,0,.15)');ell(c,ex-6,ey+5,4,3,'#f3e1b6');ell(c,ex+6,ey+5,4,3,'#f3e1b6');ell(c,ex,ey,8,8,'#fbf6ea');ell(c,ex-2,ey-3,2.5,2.5,'rgba(255,255,255,.8)');break}
+  case'sandegg':{const ex=X+16,ey=Y+20;ell(c,ex,ey+6,12,4,'#d8b878');ell(c,ex,ey-2,8,10,'#e6cf98');ell(c,ex-3,ey-6,2.5,3,'rgba(255,255,255,.35)');for(const[a,b]of[[-3,0],[3,-4],[2,3],[-1,-8]])ell(c,ex+a,ey+b,1.6,1.6,'#a8864a');ell(c,ex,ey+5,11,3,'#d8b878');break}
   case'terroregg':{const ex=X+16,ey=Y+18;ell(c,ex,ey+10,9,3,'rgba(0,0,0,.18)');ell(c,ex,ey,9,12,'#c9a46a');ell(c,ex-3,ey-5,3,4,'rgba(255,255,255,.3)');for(const[a,b]of[[-4,2],[3,-3],[4,5],[-2,8],[0,-8]])ell(c,ex+a,ey+b,1.8,1.8,'#6b4a2a');break}
   case'moaegg':{const ex=X+16,ey=Y+18;ell(c,ex,ey+10,9,3,'rgba(0,0,0,.18)');ell(c,ex,ey,9,12,'#3a3a44');ell(c,ex-3,ey-5,3,4,'rgba(255,255,255,.25)');for(const[a,b]of[[-4,2],[3,-3],[4,5],[-2,8],[0,-8]])ell(c,ex+a,ey+b,1.6,1.6,'#9aa2ab');break}
   case'zoo':{rect(c,X+4,Y+30,56,32,'#f4e3b5',3);rect(c,X+40,Y+34,16,22,'#d9534f',2);rect(c,X+42,Y+38,12,8,'#ffe9a0',1);
@@ -3533,7 +3541,7 @@ function draw(t){
   if(MILL_AT)list.push([(MILL_AT.y+3)*T,()=>drawMill(ctx,t)]);
   if(NEST_AT)list.push([(NEST_AT.y+3)*T,()=>drawNest(ctx,t)]);
   if(PYR_AT)list.push([(PYR_AT.y+3)*T,()=>drawPyramid(ctx,t)]);
-  if(DEN)list.push([DEN.y*T+30,()=>drawDen(ctx,t)]);
+  for(const D of allDens())list.push([D.y*T+30,()=>drawDen(ctx,t,D)]);
   for(const p of SPRINGS)list.push([p.y*T+4,()=>drawSpring(ctx,p,t)]);
   for(const p of LANTERNS)list.push([(p.y+1)*T-4,()=>drawLantern(ctx,p,t)]);
   if(DUN_AT)list.push([(DUN_AT.y+1)*T-4,()=>drawDunDoor(ctx,t)]);
