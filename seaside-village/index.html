@@ -377,6 +377,7 @@ const objAt=i=>{const o=occ[i]>=0?S.objs[occ[i]]:null;return o===ignoreObj?null:
 const inShip=(x,y)=>x>=SHIP.x&&x<SHIP.x+SHIP.w&&y>=SHIP.y&&y<SHIP.y+SHIP.h;
 // a treasure chest that hasn't been opened yet (opened ones are gone)
 function chestHere(i){return chestAt[i]>=0&&!S.opened.includes(chestAt[i])}
+const onDrawbridge=e=>{const t=tileOf(e),o=inMap(t.x,t.y)&&objAt(t.y*W+t.x);return!!o&&o.t==='drawbridge'};
 let meWalk=0; // >0 while working out where YOU can walk (only you can cross a drawbridge)
 function walkable(x,y){
   if(!inMap(x,y))return false;const i=y*W+x,o=objAt(i);
@@ -758,9 +759,12 @@ function sandSpot(){
 function lagoonSpot(){const L=LAGOON;if(L)for(let k=0;k<300;k++){const a=Math.random()*Math.PI*2,q=Math.sqrt(Math.random())*.75,x=Math.round(L.cx+Math.cos(a)*L.rx*q),y=Math.round(L.cy+Math.sin(a)*L.ry*q);
   if(inMap(x,y)&&ter[y*W+x]===WATER&&!objAt(y*W+x))return{x:x*T+16,y:y*T+16}}return scorpSpot()}
 const inLagoon=(tx,ty)=>LAGOON&&((tx-LAGOON.cx)/LAGOON.rx)**2+((ty-LAGOON.cy)/LAGOON.ry)**2<1;
-function scorpSpot(){
+// all the land something can walk to from where it is (drawbridges stay up, so it can't get past them)
+function sideOf(e){const t=tileOf(e),seen=new Uint8Array(W*H);if(!walkable(t.x,t.y))return null;const q=[t.y*W+t.x];seen[q[0]]=1;
+  for(let h=0;h<q.length;h++){const j=q[h],x=j%W,y=j/W|0;for(const[nx,ny]of[[x+1,y],[x-1,y],[x,y+1],[x,y-1]]){const n=ny*W+nx;if(inMap(nx,ny)&&!seen[n]&&walkable(nx,ny)){seen[n]=1;q.push(n)}}}return seen}
+function scorpSpot(side){
   for(let k=0;k<300;k++){const x=2+(Math.random()*(W-4)|0),y=2+(Math.random()*(H-4)|0);
-    if(walkable(x,y)&&!objAt(y*W+x)&&Math.hypot(x-SPAWN.x,y-SPAWN.y)>11)return{x:x*T+16,y:y*T+20}}
+    if(walkable(x,y)&&(!side||side[y*W+x])&&!objAt(y*W+x)&&Math.hypot(x-SPAWN.x,y-SPAWN.y)>11)return{x:x*T+16,y:y*T+20}}
   return{x:SPAWN.x*T,y:(SPAWN.y-12)*T};
 }
 function spawnScorps(){spawnCritters();scorps=curKind==='volcano'?Array.from({length:6},()=>({...scorpSpot(),wa:Math.random()*6,wt:0,loot:null,stun:0,hide:0,flee:0,dir:1,walk:0})):[]}
@@ -893,8 +897,8 @@ function critterUpdate(dt){
   for(const cr of critters){
     if(cr.night){ // night-time terror birds: gone by day, out in the dark (somewhere away from you)
       if(!bedtime()){cr.gone=1;cr.chase=0;cr.prey=null;cr.path=[];continue}
-      if(cr.gone){cr.gone=0;for(let k=0;k<20;k++){Object.assign(cr,scorpSpot());if(Math.hypot(cr.x-player.x,cr.y-player.y)>T*10)break}}}
-    if(cr.hide>0){if((cr.hide-=dt)<=0)Object.assign(cr,scorpSpot(),{loot:null});continue}
+      if(cr.gone){cr.gone=0;const sd=sideOf(cr);for(let k=0;k<20;k++){Object.assign(cr,scorpSpot(sd));if(Math.hypot(cr.x-player.x,cr.y-player.y)>T*10)break}}}
+    if(cr.hide>0){if((cr.hide-=dt)<=0)Object.assign(cr,scorpSpot(HUNT[cr.kind]?sideOf(cr):null),{loot:null});continue}
     cr.happy=Math.max(0,cr.happy-dt);cr.calm=Math.max(0,cr.calm-dt);
     if(!NIGHT_OWLS.includes(cr.kind)){const fly=cr.kind==='ptero'||cr.kind==='parrot';cr.zz=bedtime()&&!cr.loot&&(!fly||cr.zz||animalOk(cr.x,cr.y));if(cr.zz){cr.walk=0;cr.chase=0;cr.path=[];continue}} // animals sleep at night (fliers wait until they're over land); ghosts, bats and terror birds stay up
     if(cr.kind==='parrot'||cr.kind==='bat'||cr.kind==='ptero'){flyParrot(cr,dt);continue}
@@ -911,7 +915,7 @@ function critterUpdate(dt){
       if(!cr.chase){cr.chase=.01;floatAt(cr.x,cr.y-50,Hk.cry);toast(`${Hk.e} A ${Hk.name} spotted you — RUN!`,2200)}
       cr.chase+=dt;if(d>T*10||cr.chase>6){cr.chase=0;cr.calm=5;continue} // it gives up
       const spd=Hk.spd*(cr.rage>0?1.2:1)*(cr.kind==='frost'&&onIce(cr)?1.5:1),reach=cr.kind==='bear'?18:16;
-      if(d<reach){cr.chase=0;if(cr.kind==='bear'&&S.inv.fish)bearHit(cr);else if(Hk.freeze)freezePlayer(cr);else terrorCatch(cr);continue} // a bear would rather have your fish
+      if(d<reach&&!onDrawbridge(player)){cr.chase=0;if(cr.kind==='bear'&&S.inv.fish)bearHit(cr);else if(Hk.freeze)freezePlayer(cr);else terrorCatch(cr);continue} // a bear would rather have your fish
       if(cr.kind!=='ghostbird'&&d>T*1.3&&chaseStep(cr,player,T*spd,dt))continue;
       vx=dx;vy=dy;sp=T*spd}
     else if(HUNT[cr.kind]&&!cr.calm&&!tame(cr)&&!guestMode&&(cr.prey=preyOk(cr.prey)?cr.prey:preyNear(cr))){ // …or one of your villagers!
@@ -2732,7 +2736,7 @@ const ROOFS=['#d9534f','#4a8fd9','#4fae5c','#9b59b6','#f0ad4e','#e8739a'],WALLS=
 // drawbridges come down when you walk up to them, and pull up again for everyone else
 const dbOpen=new Map();
 function dbAnim(o,t,icon){if(icon)return 1;let A=dbOpen.get(o.id);if(!A){A={op:0,t};dbOpen.set(o.id,A)}const dt=Math.min(.1,Math.max(0,t-A.t));A.t=t;
-  const near=!inside&&Math.hypot(player.x-(o.x*T+16),player.y-(o.y*T+16))<T*2.4;A.op=Math.max(0,Math.min(1,A.op+(near?3:-2.5)*dt));return A.op}
+  const near=!inside&&[player,amb].some(e=>e&&Math.hypot(e.x-(o.x*T+16),e.y-(o.y*T+16))<T*2.4);A.op=Math.max(0,Math.min(1,A.op+(near?3:-2.5)*dt));return A.op}
 function hutArt(c,X,Y,t,icon,night){const win=night>.2?'#ffe27a':'#9fd8ff';
     for(const px of[X+6,X+56])rect(c,px-2,Y+56,5,8,'#5a3418',1);
     rect(c,X+4,Y+24,56,36,'#9c6a3c',3);c.fillStyle='rgba(0,0,0,.14)';for(let k=0;k<5;k++)c.fillRect(X+4,Y+30+k*7,56,1.5);
@@ -3389,10 +3393,11 @@ function drawCar(c,p,i,t){
 }
 // The ambulance: it drives out from the hospital, picks up a hurt villager and takes them back
 let amb=null;
+const ambWalk=(x,y)=>meWalkable(x,y); // the ambulance is allowed over drawbridges too
 // the walkable tile right outside the hospital (in front of the door if it can)
 function hospDoor(H){for(const[x,y]of[[H.x+1,H.y+2],[H.x,H.y+2],[H.x+2,H.y+2],[H.x-1,H.y+2],[H.x+1,H.y+3],[H.x-1,H.y],[H.x+2,H.y],[H.x-1,H.y+1],[H.x+2,H.y+1],[H.x,H.y-1],[H.x+1,H.y-1]])if(inMap(x,y)&&walkable(x,y))return{x,y};return{x:H.x+1,y:H.y+2}}
 function callAmb(vw,H){
-  const D=hospDoor(H),sx=D.x,sy=D.y,t=tileOf(vw),r=findPath(sx,sy,(x,y)=>Math.abs(x-t.x)<=1&&Math.abs(y-t.y)<=1,null);if(!r)return false;
+  const D=hospDoor(H),sx=D.x,sy=D.y,t=tileOf(vw),r=findPath(sx,sy,(x,y)=>Math.abs(x-t.x)<=1&&Math.abs(y-t.y)<=1,null,ambWalk);if(!r)return false;
   amb={x:sx*T,y:sy*T+12,path:r.path,dir:'down',walk:0,h:H.id,vw,back:0};
   toast(`🚑 Wee-woo! The ambulance is on its way to help ${vw.v.name}`,2800);return true;
 }
@@ -3401,7 +3406,7 @@ function ambUpdate(dt){
   if(!H||!v.hurt||v.hosp||!villagers.includes(vw)){if(vw.carried){vw.carried=0;vw.x=a.x;vw.y=a.y;unstick(vw)}amb=null;return} // not needed any more
   if(followPath(a,T*5,dt)){if((a.woo=(a.woo||0)-dt)<=0){a.woo=2.2;floatAt(a.x,a.y-34,'wee-woo!')}return}
   if(!a.back){ // picked up: back to the hospital
-    a.back=1;vw.carried=1;vw.talkT=0;floatAt(a.x,a.y-34,'🚑');const t=tileOf(a),D=hospDoor(H),r=findPath(t.x,t.y,(x,y)=>x===D.x&&y===D.y,null);a.path=r?r.path:[];return}
+    a.back=1;vw.carried=1;vw.talkT=0;floatAt(a.x,a.y-34,'🚑');const t=tileOf(a),D=hospDoor(H),r=findPath(t.x,t.y,(x,y)=>x===D.x&&y===D.y,null,ambWalk);a.path=r?r.path:[];return}
   vw.carried=0;v.hosp=H.id;vw.inHosp=H.id;patientAt.delete(v.name);amb=null;dirty();toast(`🚑 The ambulance took ${v.name} to the hospital 🏥`,2800);
 }
 function drawAmb(c,a,t){
