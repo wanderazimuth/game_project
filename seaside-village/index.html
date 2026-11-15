@@ -100,7 +100,7 @@ const ITEMS={...CROPS,
   flower:{n:'Wildflower',e:'🌼',sell:5},coconut:{n:'Coconut',e:'🥥',sell:15},pearl:{n:'Pearl',e:'🦪',sell:60},ring:{n:'Wedding Ring',e:'💍',sell:0,keep:1},springegg:{n:'Hot Spring Egg',e:'♨️',sell:45},mappiece:{n:'Map Piece',e:'🗺️',sell:0,keep:1},
   apple:{n:'Apple',e:'🍎',sell:10},acorn:{n:'Acorn',e:'🌰',sell:5},candy:{n:'Spooky Candy',e:'🍬',sell:20},bdaycake:{n:'Birthday Cake',e:'🎂',sell:40},
   soup:{n:'Veggie Soup',e:'🥣',sell:50,dish:1},salad:{n:'Garden Salad',e:'🥗',sell:150,dish:1},pie:{n:'Pumpkin Pie',e:'🥧',sell:340,dish:1},breakfast:{n:'Big Breakfast',e:'🍳',sell:200,dish:1},
-  pizza:{n:'Pizza',e:'🍕',sell:430,dish:1},friedfish:{n:'Fried Fish',e:'🍤',sell:110,dish:1},honeycake:{n:'Honey Cake',e:'🍰',sell:0,dish:1},stew:{n:'Mushroom Stew',e:'🍲',sell:145,dish:1},smoothie:{n:'Tropical Smoothie',e:'🍹',sell:130,dish:1},ribbon:{n:'Festival Ribbon',e:'🎀',sell:100},cottoncandy:{n:'Cotton Candy',e:'🍭',sell:10},bandaid:{n:'Band-aid',e:'🩹',sell:5},feather:{n:'Moa Feather',e:'🪶',sell:30},
+  pizza:{n:'Pizza',e:'🍕',sell:430,dish:1},friedfish:{n:'Fried Fish',e:'🍤',sell:110,dish:1},honeycake:{n:'Honey Cake',e:'🍰',sell:0,dish:1},stew:{n:'Mushroom Stew',e:'🍲',sell:145,dish:1},smoothie:{n:'Tropical Smoothie',e:'🍹',sell:130,dish:1},ribbon:{n:'Festival Ribbon',e:'🎀',sell:100},cottoncandy:{n:'Cotton Candy',e:'🍭',sell:10},bandaid:{n:'Band-aid',e:'🩹',sell:5},feather:{n:'Moa Feather',e:'🪶',sell:30},blossom:{n:'Cherry Blossom',e:'🌸',sell:6},
   fossil:{n:'Fossil',e:'🦴',sell:40},amber:{n:'Amber',e:'🟠',sell:80}};
 
 // ── Things you can build. on: where it goes; walk: you can walk over it; tall: px drawn above it ──
@@ -197,7 +197,7 @@ function noise(rng,cell){
     const a=g[iy*gw+ix],b=g[iy*gw+ix+1],c=g[(iy+1)*gw+ix],d=g[(iy+1)*gw+ix+1];
     return a+(b-a)*tx+(c-a)*ty+(a-b-c+d)*tx*ty}}
 const hash=(x,y)=>(((x*73856093)^(y*19349663))>>>0)%1000/1000;
-const WATER=0,SAND=1,GRASS=2,ICE=3,TREE=1,PALM=2,ROCK=3,VOLC=4,FALL=5,TEMPLE=6,CAVE=7,GALLEON=8,MILL=9,XSPOT=10,NEST=11,PYRAMID=12,HSPRING=13,SLIDE=14; // GALLEON, XSPOT: Pirate Island; MILL: Autumn Island
+const WATER=0,SAND=1,GRASS=2,ICE=3,TREE=1,PALM=2,ROCK=3,VOLC=4,FALL=5,TEMPLE=6,CAVE=7,GALLEON=8,MILL=9,XSPOT=10,NEST=11,PYRAMID=12,HSPRING=13,SLIDE=14,LANTERN=15; // GALLEON, XSPOT: Pirate Island; MILL: Autumn Island
  // CAVE: the cave hill, Under the Waterfall
  // ICE: a frozen lake (ground); VOLC, FALL, TEMPLE: the volcano, waterfall cliff and temple (features you can't chop)
 const ter=new Uint8Array(W*H),feat=new Uint8Array(W*H),depth=new Uint8Array(W*H);
@@ -206,7 +206,7 @@ let SPAWN,SHIP,chests=[],landTotal=0;
 const inMap=(x,y)=>x>=0&&y>=0&&x<W&&y<H;
 const N4=[[1,0],[-1,0],[0,1],[0,-1]],N8=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
 const HOME_SEED=20261108;
-let curSeed=HOME_SEED,curKind='',VOLCANO=null,FALLS=null,TEMPLE_AT=null,CAVE_AT=null,GAL_AT=null,MILL_AT=null,X_AT=null,NEST_AT=null,PYR_AT=null,LAGOON=null,SPRINGS=[],SLIDE_AT=null; // FALLS, TEMPLE_AT: on Jungle Island // VOLCANO: the volcano's middle tile, on Volcano Island
+let curSeed=HOME_SEED,curKind='',VOLCANO=null,FALLS=null,TEMPLE_AT=null,CAVE_AT=null,GAL_AT=null,MILL_AT=null,X_AT=null,NEST_AT=null,PYR_AT=null,LAGOON=null,SPRINGS=[],SLIDE_AT=null,POND=null,LANTERNS=[]; // FALLS, TEMPLE_AT: on Jungle Island // VOLCANO: the volcano's middle tile, on Volcano Island
 // the land tile farthest from the sea, near the middle and away from the beach where you land
 function inlandMiddle(){
   const far=new Int16Array(W*H).fill(-1),q=[];for(let i=0;i<W*H;i++)if(ter[i]===WATER){far[i]=0;q.push(i)}
@@ -215,10 +215,10 @@ function inlandMiddle(){
   return best;
 }
 function genIsland(seed=HOME_SEED,kind=''){
-  feat.fill(0);chestAt.fill(-1);chests=[];landTotal=0;curSeed=seed;curKind=kind;VOLCANO=null;FALLS=null;TEMPLE_AT=null;CAVE_AT=null;GAL_AT=null;MILL_AT=null;X_AT=null;NEST_AT=null;PYR_AT=null;LAGOON=null;SPRINGS=[];SLIDE_AT=null;
+  feat.fill(0);chestAt.fill(-1);chests=[];landTotal=0;curSeed=seed;curKind=kind;VOLCANO=null;FALLS=null;TEMPLE_AT=null;CAVE_AT=null;GAL_AT=null;MILL_AT=null;X_AT=null;NEST_AT=null;PYR_AT=null;LAGOON=null;SPRINGS=[];SLIDE_AT=null;POND=null;LANTERNS=[];
   // each new island gets its own size, lakes and forests; the home island keeps the ones it always had
   const v=seed===HOME_SEED?null:rngFrom(seed^0x5bd1e995);
-  const P=kind==='dino'?{rx:.43,ry:.42,lake:.8,forest:.55,trees:.62,palms:.3,lone:.05,rocks:.05,sandRocks:.015}:kind==='haunted'?{rx:.43,ry:.42,lake:.8,forest:.55,trees:.5,palms:0,lone:.05,rocks:.07,sandRocks:.02}:kind==='pirate'?{rx:.43,ry:.42,lake:2,forest:.62,trees:.6,palms:.4,lone:.04,rocks:.03,sandRocks:.01}:kind==='autumn'?{rx:.43,ry:.42,lake:.78,forest:.5,trees:.75,palms:0,lone:.06,rocks:.04,sandRocks:.01}:kind==='falls'?{rx:.44,ry:.44,lake:.8,forest:.5,trees:.55,palms:0,lone:.04,rocks:.06,sandRocks:.03}:kind==='jungle'?{rx:.43,ry:.42,lake:2,forest:.45,trees:.78,palms:.22,lone:.06,rocks:.03,sandRocks:.01}:kind==='ice'?{rx:.42,ry:.41,lake:.6,forest:.55,trees:.55,palms:0,lone:.02,rocks:.06,sandRocks:.02}:kind==='volcano'?{rx:.42,ry:.42,lake:2,forest:2,trees:0,palms:0,lone:0,rocks:.22,sandRocks:.12}:kind==='lagoon'?{rx:.44,ry:.43,lake:2,forest:.6,trees:.55,palms:.45,lone:.04,rocks:.03,sandRocks:.01}:kind==='desert'?{rx:.44,ry:.43,lake:2,forest:.66,trees:.35,palms:.06,lone:.025,rocks:.035,sandRocks:.02}:v?{rx:.36+v()*.12,ry:.34+v()*.12,lake:.66+v()*.14,forest:.52+v()*.16,trees:.5+v()*.35,palms:.06+v()*.08,rocks:.04+v()*.04}
+  const P=kind==='dino'?{rx:.43,ry:.42,lake:.8,forest:.55,trees:.62,palms:.3,lone:.05,rocks:.05,sandRocks:.015}:kind==='haunted'?{rx:.43,ry:.42,lake:.8,forest:.55,trees:.5,palms:0,lone:.05,rocks:.07,sandRocks:.02}:kind==='pirate'?{rx:.43,ry:.42,lake:2,forest:.62,trees:.6,palms:.4,lone:.04,rocks:.03,sandRocks:.01}:kind==='autumn'?{rx:.43,ry:.42,lake:.78,forest:.5,trees:.75,palms:0,lone:.06,rocks:.04,sandRocks:.01}:kind==='falls'?{rx:.44,ry:.44,lake:.8,forest:.5,trees:.55,palms:0,lone:.04,rocks:.06,sandRocks:.03}:kind==='jungle'?{rx:.43,ry:.42,lake:2,forest:.45,trees:.78,palms:.22,lone:.06,rocks:.03,sandRocks:.01}:kind==='ice'?{rx:.42,ry:.41,lake:.6,forest:.55,trees:.55,palms:0,lone:.02,rocks:.06,sandRocks:.02}:kind==='volcano'?{rx:.42,ry:.42,lake:2,forest:2,trees:0,palms:0,lone:0,rocks:.22,sandRocks:.12}:kind==='lagoon'?{rx:.44,ry:.43,lake:2,forest:.6,trees:.55,palms:.45,lone:.04,rocks:.03,sandRocks:.01}:kind==='blossom'?{rx:.43,ry:.42,lake:.8,forest:.5,trees:.7,palms:0,lone:.06,rocks:.04,sandRocks:.01}:kind==='desert'?{rx:.44,ry:.43,lake:2,forest:.66,trees:.35,palms:.06,lone:.025,rocks:.035,sandRocks:.02}:v?{rx:.36+v()*.12,ry:.34+v()*.12,lake:.66+v()*.14,forest:.52+v()*.16,trees:.5+v()*.35,palms:.06+v()*.08,rocks:.04+v()*.04}
     :{rx:.45,ry:.43,lake:.72,forest:.6,trees:.7,palms:.09,rocks:.055};
   const r=rngFrom(seed),n1=noise(r,9),n2=noise(r,4),n3=noise(r,7),nf=noise(r,5);
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){
@@ -326,6 +326,15 @@ function genIsland(seed=HOME_SEED,kind=''){
     if(best>=0){PYR_AT={x:best%W,y:best/W|0,w:3,h:3};
       for(let j=-1;j<=3;j++)for(let i=-1;i<=3;i++){const k=(PYR_AT.y+j)*W+PYR_AT.x+i;feat[k]=j>=0&&j<3&&i>=0&&i<3?PYRAMID:0}}
   }
+  // Cherry Blossom Island: a koi pond in the middle, with stone lanterns all around it
+  if(kind==='blossom'){
+    const mid=inlandMiddle(),cx=mid%W,cy=mid/W|0,rx=3.6,ry=2.6;POND={cx,cy,rx,ry};
+    for(let y=cy-6;y<=cy+6;y++)for(let x=cx-7;x<=cx+7;x++){if(!inMap(x,y))continue;const i=y*W+x,e=Math.hypot((x-cx)/rx,(y-cy)/ry);
+      if(e<1){if(ter[i]!==WATER)landTotal--;ter[i]=WATER;feat[i]=0;depth[i]=1}
+      else if(e<1.9&&ter[i]!==WATER){ter[i]=GRASS;feat[i]=0}}
+    for(let k=0;k<6;k++){const a=k/6*Math.PI*2+.3,x=Math.round(cx+Math.cos(a)*rx*1.45),y=Math.round(cy+Math.sin(a)*ry*1.5),i=y*W+x;
+      if(!inMap(x,y)||ter[i]===WATER||Math.hypot(x-SPAWN.x,y-SPAWN.y)<4)continue;feat[i]=LANTERN;LANTERNS.push({x,y,i})}
+  }
   // Treasure chests, hidden away from the crash site (on Jungle Island, three of them hold the temple's keys)
   const loot=kind==='dino'?['amber','fossil','amber','fossil',60,80,100,120,150,200]:kind==='pirate'?['mappiece','mappiece',100,120,150,200,250,'pineapple','melon',80]:kind==='jungle'?['templekey','templekey','templekey','pineapple',100,120,150,200,250,'melon']:kind==='desert'?['scarab','scarab','scarab','melon',100,120,150,200,250,80]:['strawberry','melon','pineapple',60,80,100,120,150,200,250];
   for(let tries=0;tries<5000&&chests.length<loot.length;tries++){
@@ -425,9 +434,9 @@ const terC=document.createElement('canvas');terC.width=W*T;terC.height=H*T;
 function drawTerrain(){
   const c=terC.getContext('2d');
   for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x;
-    c.fillStyle=curKind==='dino'?(depth[i]===1?'#5fd0b8':depth[i]===2?'#3cb3a0':'#25907f'):curKind==='haunted'?(depth[i]===1?'#5a7d73':depth[i]===2?'#40625c':'#2b4646'):curKind==='pirate'?(depth[i]===1?'#62dbe2':depth[i]===2?'#3ab9d8':'#1f93c6'):curKind==='autumn'?(depth[i]===1?'#6aaed6':depth[i]===2?'#4d92c4':'#35719f'):curKind==='falls'?(depth[i]===1?'#5fe3d3':depth[i]===2?'#33bdbf':'#178095'):curKind==='volcano'?(depth[i]===1?'#ff8a1f':depth[i]===2?'#ef5a16':'#c63a12'):curKind==='ice'?(depth[i]===1?'#6fa9cf':depth[i]===2?'#4f8bb8':'#2f6795'):curKind==='jungle'?(depth[i]===1?'#3fc1c9':depth[i]===2?'#2aa5b8':'#1f86a3'):curKind==='lagoon'?(depth[i]===1?'#5fe6da':depth[i]===2?'#38c6d2':'#1f9cc0'):curKind==='desert'?(depth[i]===1?'#5fd6d0':depth[i]===2?'#3cbcc8':'#2499b8'):depth[i]===1?'#56b9e3':depth[i]===2?'#42a2da':'#2f88c9';c.fillRect(x*T,y*T,T,T)}
+    c.fillStyle=curKind==='dino'?(depth[i]===1?'#5fd0b8':depth[i]===2?'#3cb3a0':'#25907f'):curKind==='haunted'?(depth[i]===1?'#5a7d73':depth[i]===2?'#40625c':'#2b4646'):curKind==='pirate'?(depth[i]===1?'#62dbe2':depth[i]===2?'#3ab9d8':'#1f93c6'):curKind==='autumn'?(depth[i]===1?'#6aaed6':depth[i]===2?'#4d92c4':'#35719f'):curKind==='falls'?(depth[i]===1?'#5fe3d3':depth[i]===2?'#33bdbf':'#178095'):curKind==='volcano'?(depth[i]===1?'#ff8a1f':depth[i]===2?'#ef5a16':'#c63a12'):curKind==='ice'?(depth[i]===1?'#6fa9cf':depth[i]===2?'#4f8bb8':'#2f6795'):curKind==='jungle'?(depth[i]===1?'#3fc1c9':depth[i]===2?'#2aa5b8':'#1f86a3'):curKind==='lagoon'?(depth[i]===1?'#5fe6da':depth[i]===2?'#38c6d2':'#1f9cc0'):curKind==='blossom'?(depth[i]===1?'#7fd6e6':depth[i]===2?'#5ab8d8':'#3a96c4'):curKind==='desert'?(depth[i]===1?'#5fd6d0':depth[i]===2?'#3cbcc8':'#2499b8'):depth[i]===1?'#56b9e3':depth[i]===2?'#42a2da':'#2f88c9';c.fillRect(x*T,y*T,T,T)}
   const blob=(col,test,grow)=>{c.fillStyle=col;for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(test(y*W+x)){c.beginPath();c.roundRect(x*T-grow,y*T-grow,T+grow*2,T+grow*2,grow+6);c.fill()}};
-  const V=curKind==='volcano',PAL=curKind==='dino'?{s1:'#e6cb8c',s2:'#eed79e',g:'#74b83c',g2:'#69aa35',g3:'#5a972d',sd:'#d5b574'}:curKind==='haunted'?{s1:'#8a8090',s2:'#978d9c',g:'#4f5a48',g2:'#475240',g3:'#3d4637',sd:'#776e7e'}:curKind==='pirate'?{s1:'#f2cf73',s2:'#f8de90',g:'#5cbf54',g2:'#53b34c',g3:'#47a141',sd:'#e2b85a'}:curKind==='autumn'?{s1:'#d9c08a',s2:'#e4cc96',g:'#a7aa4c',g2:'#9b9e44',g3:'#8b8e3c',sd:'#c8ad74'}:curKind==='falls'?{s1:'#93a9a8',s2:'#a8bcb9',g:'#3fae7d',g2:'#389f72',g3:'#2e8c63',sd:'#7f9594'}:curKind==='jungle'?{s1:'#e6c983',s2:'#eed49a',g:'#3f9a3a',g2:'#378a33',g3:'#2c7a2a',sd:'#d7b46c'}:V?{s1:'#3e393a',s2:'#4a4446',g:'#6e6159',g2:'#655850',g3:'#564a43',sd:'#2f2b2c'}:curKind==='ice'?{s1:'#b9cddd',s2:'#c9dae8',g:'#f2f7fb',g2:'#e7eff7',g3:'#cfdeec',sd:'#a9bfd2'}:curKind==='lagoon'?{s1:'#f6e3ae',s2:'#fbecc0',g:'#5ccf6a',g2:'#52c060',g3:'#44ad52',sd:'#e8d08e'}:curKind==='desert'?{s1:'#f0d79a',s2:'#f6e2ac',g:'#e8c27a',g2:'#dfb56a',g3:'#c99a52',sd:'#e0c283'}:{s1:'#efd79a',s2:'#f4e0a8',g:'#7cc35d',g2:'#73b955',g3:'#5fa647',sd:'#e1c47f'};
+  const V=curKind==='volcano',PAL=curKind==='dino'?{s1:'#e6cb8c',s2:'#eed79e',g:'#74b83c',g2:'#69aa35',g3:'#5a972d',sd:'#d5b574'}:curKind==='haunted'?{s1:'#8a8090',s2:'#978d9c',g:'#4f5a48',g2:'#475240',g3:'#3d4637',sd:'#776e7e'}:curKind==='pirate'?{s1:'#f2cf73',s2:'#f8de90',g:'#5cbf54',g2:'#53b34c',g3:'#47a141',sd:'#e2b85a'}:curKind==='autumn'?{s1:'#d9c08a',s2:'#e4cc96',g:'#a7aa4c',g2:'#9b9e44',g3:'#8b8e3c',sd:'#c8ad74'}:curKind==='falls'?{s1:'#93a9a8',s2:'#a8bcb9',g:'#3fae7d',g2:'#389f72',g3:'#2e8c63',sd:'#7f9594'}:curKind==='jungle'?{s1:'#e6c983',s2:'#eed49a',g:'#3f9a3a',g2:'#378a33',g3:'#2c7a2a',sd:'#d7b46c'}:V?{s1:'#3e393a',s2:'#4a4446',g:'#6e6159',g2:'#655850',g3:'#564a43',sd:'#2f2b2c'}:curKind==='ice'?{s1:'#b9cddd',s2:'#c9dae8',g:'#f2f7fb',g2:'#e7eff7',g3:'#cfdeec',sd:'#a9bfd2'}:curKind==='lagoon'?{s1:'#f6e3ae',s2:'#fbecc0',g:'#5ccf6a',g2:'#52c060',g3:'#44ad52',sd:'#e8d08e'}:curKind==='blossom'?{s1:'#ecd6a8',s2:'#f3e2bc',g:'#86c46a',g2:'#7cba60',g3:'#6aa652',sd:'#dcc08e'}:curKind==='desert'?{s1:'#f0d79a',s2:'#f6e2ac',g:'#e8c27a',g2:'#dfb56a',g3:'#c99a52',sd:'#e0c283'}:{s1:'#efd79a',s2:'#f4e0a8',g:'#7cc35d',g2:'#73b955',g3:'#5fa647',sd:'#e1c47f'};
   blob(PAL.s1,i=>ter[i]!==WATER,5);
   blob(PAL.s2,i=>ter[i]!==WATER,2);
   blob(PAL.g,i=>ter[i]===GRASS,3);
@@ -553,6 +562,7 @@ function pickAt(wx,wy){
     if(feat[i]===NEST)return{k:'nest'};
     if(feat[i]===PYRAMID)return{k:'pyramid'};
     if(feat[i]===HSPRING)return{k:'spring',i};
+    if(feat[i]===LANTERN)return{k:'lantern',i};
     if(feat[i]===SLIDE)return{k:'slide'};
     if(feat[i]===XSPOT)return{k:'xspot'};
     if(feat[i]&&(d===0||d===1&&feat[i]!==ROCK))return{k:'feat',i,x,y};
@@ -628,6 +638,7 @@ function arrive(tg){
     case'nest':nestModal();break;
     case'pyramid':pyramidModal();break;
     case'spring':doAct('soak',{i:tg.i});break;
+    case'lantern':doAct('lantern',{i:tg.i});break;
     case'slide':slideRide();break;
     case'pot':doAct('potGold',{});break;
     case'fest':festStall(tg.st);break;
@@ -766,6 +777,9 @@ function sandSpot(){
 }
 function lagoonSpot(){const L=LAGOON;if(L)for(let k=0;k<300;k++){const a=Math.random()*Math.PI*2,q=Math.sqrt(Math.random())*.75,x=Math.round(L.cx+Math.cos(a)*L.rx*q),y=Math.round(L.cy+Math.sin(a)*L.ry*q);
   if(inMap(x,y)&&ter[y*W+x]===WATER&&!objAt(y*W+x))return{x:x*T+16,y:y*T+16}}return scorpSpot()}
+function pondSpot(){const L=POND;if(L)for(let k=0;k<300;k++){const a=Math.random()*Math.PI*2,q=Math.sqrt(Math.random())*.7,x=Math.round(L.cx+Math.cos(a)*L.rx*q),y=Math.round(L.cy+Math.sin(a)*L.ry*q);
+  if(inMap(x,y)&&ter[y*W+x]===WATER&&!objAt(y*W+x))return{x:x*T+16,y:y*T+16}}return scorpSpot()}
+const inPond=(tx,ty)=>POND&&((tx-POND.cx)/POND.rx)**2+((ty-POND.cy)/POND.ry)**2<1;
 const inLagoon=(tx,ty)=>LAGOON&&((tx-LAGOON.cx)/LAGOON.rx)**2+((ty-LAGOON.cy)/LAGOON.ry)**2<1;
 // all the land something can walk to from where it is (drawbridges stay up, so it can't get past them)
 function sideOf(e){const t=tileOf(e),seen=new Uint8Array(W*H);if(!walkable(t.x,t.y))return null;const q=[t.y*W+t.x];seen[q[0]]=1;
@@ -921,12 +935,12 @@ function moaNameModal(x,y,k='moa'){
     {dice:()=>ask(pick()),ok:()=>{const n=cleanName(document.getElementById('codeIn').value)||pick();closeModal();doAct('moaEgg',{x,y,name:n,k})}});
   ask(pick())}
 function spawnCritters(){
-  const kinds=curKind==='dino'?['rex','rex','longneck','longneck','longneck','trike','trike','trike','trike','ptero','ptero','ptero','terror','terror','terror','moa','moa','moa']:curKind==='haunted'?['ghost','ghost','ghost','ghost','ghost','ghost','bat','bat','bat','bat']:curKind==='pirate'?['crab','crab','crab','crab','crab','crab','crab','parrot','parrot']:curKind==='autumn'?['squirrel','squirrel','squirrel','squirrel','squirrel','squirrel']:curKind==='ice'?['peng','peng','peng','peng','peng','peng','peng','bear','bear','bear']:curKind==='jungle'?['monkey','monkey','monkey','monkey','monkey','parrot','parrot','parrot','parrot']:curKind==='volcano'?['terror','terror','terror']:curKind==='lagoon'?['dolphin','dolphin','dolphin','dolphin','crab','crab','crab','parrot','parrot']:curKind==='desert'?['camel','camel','camel','lizard','lizard','lizard','lizard','lizard']:[];
+  const kinds=curKind==='dino'?['rex','rex','longneck','longneck','longneck','trike','trike','trike','trike','ptero','ptero','ptero','terror','terror','terror','moa','moa','moa']:curKind==='haunted'?['ghost','ghost','ghost','ghost','ghost','ghost','bat','bat','bat','bat']:curKind==='pirate'?['crab','crab','crab','crab','crab','crab','crab','parrot','parrot']:curKind==='autumn'?['squirrel','squirrel','squirrel','squirrel','squirrel','squirrel']:curKind==='ice'?['peng','peng','peng','peng','peng','peng','peng','bear','bear','bear']:curKind==='jungle'?['monkey','monkey','monkey','monkey','monkey','parrot','parrot','parrot','parrot']:curKind==='volcano'?['terror','terror','terror']:curKind==='lagoon'?['dolphin','dolphin','dolphin','dolphin','crab','crab','crab','parrot','parrot']:curKind==='blossom'?['crane','crane','crane','redpanda','redpanda','redpanda','redpanda','koi','koi','koi','koi','koi']:curKind==='desert'?['camel','camel','camel','lizard','lizard','lizard','lizard','lizard']:[];
   kinds.push(...(curKind==='dino'?['chick','chick','chick']:curKind==='ice'?['frost','frost']:curKind==='volcano'?['fire','fire']:curKind==='falls'?['swamp','swamp','swamp']:[])); // the new terror birds
   kinds.push('gray'); // the gray terror bird: on every island, even home
   if(curKind!=='dino')kinds.push(...(curKind==='volcano'?['moa','moa']:['terror','terror','moa','moa'])); // terror birds and moas live on every island now
   const nightOnly=curKind==='dino'||curKind==='volcano'?['terror','terror','terror','terror']:curKind==='ice'?['bear','bear','bear','frost','terror']:curKind==='haunted'?['ghostbird','ghostbird','ghostbird','terror']:['terror','terror'];kinds.push(...nightOnly); // these only come out at night
-  critters=kinds.map((kind,i)=>({kind,night:i>=kinds.length-nightOnly.length?1:0,gone:0,fly:0,loot:null,hide:0,...(kind==='dolphin'?lagoonSpot():kind==='crab'?sandSpot():scorpSpot()),wa:Math.random()*6,wt:0,dir:1,walk:0,happy:0,calm:0,still:false}));
+  critters=kinds.map((kind,i)=>({kind,night:i>=kinds.length-nightOnly.length?1:0,gone:0,fly:0,loot:null,hide:0,...(kind==='koi'?pondSpot():kind==='dolphin'?lagoonSpot():kind==='crab'?sandSpot():scorpSpot()),wa:Math.random()*6,wt:0,dir:1,walk:0,happy:0,calm:0,still:false}));
 }
 const onIce=e=>{const t=tileOf(e);return inMap(t.x,t.y)&&ter[t.y*W+t.x]===ICE};
 const noIce=(x,y)=>walkable(x,y)&&ter[y*W+x]!==ICE;
@@ -990,7 +1004,7 @@ function critterUpdate(dt){
     else if(cr.kind==='monkey'&&cr.loot&&d<T*8){vx=-dx;vy=-dy;sp=T*3.2}  // running off with your bananas
     else if(cr.kind==='monkey'&&!cr.loot&&!cr.calm&&S.inv.banana&&d<T*5&&!stealCool&&!player.stun){vx=dx;vy=dy;sp=T*2.6;if(d<15){swipe(cr);continue}} // it smells your bananas!
     else{if((cr.wt-=dt)<=0){cr.wt=1+Math.random()*3;cr.wa=Math.random()*Math.PI*2;cr.still=Math.random()<.4}
-      if(cr.still){cr.walk=0;continue}vx=Math.cos(cr.wa);vy=Math.sin(cr.wa);sp=cr.kind==='dolphin'?T*1.4:cr.kind==='camel'?T*.5:cr.kind==='lizard'?T*1.7:cr.kind==='moa'?T*.8:HUNT[cr.kind]&&cr.kind!=='bear'?T*1.1:cr.kind==='longneck'?T*.35:cr.kind==='bear'||cr.kind==='rex'?T*.6:cr.kind==='crab'?T*.7:T*.9}
+      if(cr.still){cr.walk=0;continue}vx=Math.cos(cr.wa);vy=Math.sin(cr.wa);sp=cr.kind==='koi'?T*.8:cr.kind==='crane'?T*.45:cr.kind==='redpanda'?T*1:cr.kind==='dolphin'?T*1.4:cr.kind==='camel'?T*.5:cr.kind==='lizard'?T*1.7:cr.kind==='moa'?T*.8:HUNT[cr.kind]&&cr.kind!=='bear'?T*1.1:cr.kind==='longneck'?T*.35:cr.kind==='bear'||cr.kind==='rex'?T*.6:cr.kind==='crab'?T*.7:T*.9}
     const l=Math.hypot(vx,vy)||1,mx=vx/l*sp*dt,my=vy/l*sp*dt;let moved=false;
     const ok=cr.mid&&cr.kind==='dolphin'?myDolphinOk:critOk(cr.kind);if(ok(cr.x+mx,cr.y)){cr.x+=mx;moved=true}if(ok(cr.x,cr.y+my)){cr.y+=my;moved=true}
     if(!moved)cr.wa=Math.random()*Math.PI*2;if(mx)cr.dir=mx<0?-1:1;cr.walk+=dt*10;
@@ -1314,6 +1328,7 @@ const EXHIBITS=[
   {k:'volcano',isle:'volcano',n:'Fire Exhibit',e:'🔥',a:['fire','fire'],g:'#5e524c',d:'Fire terror birds (bring a fire extinguisher!)'},
   {k:'frost',isle:'ice',n:'Frost Exhibit',e:'❄️',a:['frost','peng'],g:'#d6ecf7',d:'A frost terror bird and a brave penguin'},
   {k:'lagoon',isle:'lagoon',n:'Dolphin Pool',e:'🐬',a:['dolphin','dolphin','dolphin'],g:'#5fd6e0',d:'Dolphins splashing and flipping'},
+  {k:'blossom',isle:'blossom',n:'Blossom Garden',e:'🌸',a:['crane','redpanda','redpanda'],g:'#f4c6d6',d:'A crane and two red pandas'},
   {k:'swamp',isle:'falls',n:'Swamp Exhibit',e:'🐊',a:['swamp','swamp'],g:'#6a7a48',d:'Swamp terror birds splashing in the mud'}];
 const exOf=k=>EXHIBITS.find(e=>e.k===k);
 const beenTo=k=>isles.list.some(i=>i.kind===k);
@@ -1419,10 +1434,10 @@ function zooModal(){
   openModal(h);
 }
 function exhibitModal(o){
-  if(o.ex){const E=exOf(o.ex);openModal(`<h2>${E.e} ${E.n}</h2><p>${E.d} live here, all the way from ${E.isle==='falls'?'Under the Waterfall':E.isle[0].toUpperCase()+E.isle.slice(1)+' Island'}!</p>${count('zoo')?'':'<p>🦁 Build a <b>Zoo</b> so visitors can buy tickets!</p>'}<div class="btns"><button class="btn" data-a="close">So cute!</button></div>`);return}
+  if(o.ex){const E=exOf(o.ex);openModal(`<h2>${E.e} ${E.n}</h2><p>${E.d} live here, all the way from ${E.isle==='falls'?'Under the Waterfall':E.isle==='blossom'?'Cherry Blossom Island':E.isle[0].toUpperCase()+E.isle.slice(1)+' Island'}!</p>${count('zoo')?'':'<p>🦁 Build a <b>Zoo</b> so visitors can buy tickets!</p>'}<div class="btns"><button class="btn" data-a="close">So cute!</button></div>`);return}
   let h='<h2>🚧 Empty Exhibit</h2><p>Which animals should live here? You can have animals from islands you\'ve visited.</p>';
   for(const E of EXHIBITS){const used=S.objs.some(p=>p.t==='exhibit'&&p.ex===E.k),ok=beenTo(E.isle);
-    h+=`<div class="irow"><span class="ie">${E.e}</span><span class="in">${E.n}<br><span class="ip">${used?'Already in your zoo':ok?E.d:'🔒 Visit '+(E.isle==='falls'?'Under the Waterfall':E.isle[0].toUpperCase()+E.isle.slice(1)+' Island')+' first'}</span></span>${!used&&ok?`<button class="btn" data-a="pick" data-v="${E.k}">Pick</button>`:''}</div>`}
+    h+=`<div class="irow"><span class="ie">${E.e}</span><span class="in">${E.n}<br><span class="ip">${used?'Already in your zoo':ok?E.d:'🔒 Visit '+(E.isle==='falls'?'Under the Waterfall':E.isle==='blossom'?'Cherry Blossom Island':E.isle[0].toUpperCase()+E.isle.slice(1)+' Island')+' first'}</span></span>${!used&&ok?`<button class="btn" data-a="pick" data-v="${E.k}">Pick</button>`:''}</div>`}
   openModal(h+'<div class="btns"><button class="btn gray" data-a="close">Later</button></div>',{pick:k=>{closeModal();doAct('exhibit',{id:o.id,ex:k});toast(`${exOf(k).e} The ${exOf(k).n} is open!`)}});
 }
 // the animals walking around inside each exhibit
@@ -1521,7 +1536,7 @@ const HUNT={terror:{name:'terror bird',e:'🦤',cry:'SKRAAAW!',hit:'PECK!',verb:
 const tame=cr=>cr.guard||cr.kind==='gray'&&count('hospital')>0;
 // how each kind gets around: terror birds hop fences, fire birds cross lava, ghost birds float through anything
 const myDolphinOk=(x,y)=>{const tx=Math.floor(x/T),ty=Math.floor(y/T),i=ty*W+tx;return inMap(tx,ty)&&ter[i]===WATER&&!wood[i]&&!objAt(i)};
-const critOk=k=>k==='dolphin'?(x,y)=>{const tx=Math.floor(x/T),ty=Math.floor(y/T);return inMap(tx,ty)&&ter[ty*W+tx]===WATER&&!objAt(ty*W+tx)&&(!LAGOON||inLagoon(tx,ty))}:k==='swamp'?(x,y)=>{const tx=Math.floor(x/T),ty=Math.floor(y/T);return inMap(tx,ty)&&(ter[ty*W+tx]===WATER&&!objAt(ty*W+tx)||terrorOk(x,y))}:k==='ghostbird'?(x,y)=>inMap(Math.floor(x/T),Math.floor(y/T)):k==='fire'?(x,y)=>{const tx=Math.floor(x/T),ty=Math.floor(y/T);return inMap(tx,ty)&&(ter[ty*W+tx]===WATER&&!objAt(ty*W+tx)||terrorOk(x,y))}:HUNT[k]||k==='chick'?terrorOk:animalOk;
+const critOk=k=>k==='koi'?(x,y)=>{const tx=Math.floor(x/T),ty=Math.floor(y/T);return inMap(tx,ty)&&ter[ty*W+tx]===WATER&&!objAt(ty*W+tx)&&inPond(tx,ty)}:k==='dolphin'?(x,y)=>{const tx=Math.floor(x/T),ty=Math.floor(y/T);return inMap(tx,ty)&&ter[ty*W+tx]===WATER&&!objAt(ty*W+tx)&&(!LAGOON||inLagoon(tx,ty))}:k==='swamp'?(x,y)=>{const tx=Math.floor(x/T),ty=Math.floor(y/T);return inMap(tx,ty)&&(ter[ty*W+tx]===WATER&&!objAt(ty*W+tx)||terrorOk(x,y))}:k==='ghostbird'?(x,y)=>inMap(Math.floor(x/T),Math.floor(y/T)):k==='fire'?(x,y)=>{const tx=Math.floor(x/T),ty=Math.floor(y/T);return inMap(tx,ty)&&(ter[ty*W+tx]===WATER&&!objAt(ty*W+tx)||terrorOk(x,y))}:HUNT[k]||k==='chick'?terrorOk:animalOk;
 // a frost terror bird freezes you in a block of ice for a few seconds
 function freezePlayer(cr){
   for(const c of critters)if(c.kind==='frost'){c.chase=0;c.calm=7}
@@ -1618,6 +1633,14 @@ function rideStep(dt){
     let best=null,bd=1e9;for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(walkable(x,y)){const d=Math.hypot(x*T+16-R.sp.x,y*T+16-R.sp.y);if(d<bd){bd=d;best={x,y}}}
     if(best){player.x=best.x*T+16;player.y=best.y*T+20;unstick(player)}if(!(S.slides>0)){S.slides=1;toast('💦 SPLASH! You swam to shore. Ride the river again!',2600)}}
 }
+function drawLantern(c,p,t){
+  const X=p.x*T+16,Y=p.y*T+28,lit=S.lit&&S.lit.includes(p.i),G='#a7a39a',D='#8a867e';
+  ell(c,X,Y,10,3.5,'rgba(0,0,0,.2)');rect(c,X-7,Y-5,14,5,D,2);rect(c,X-2.5,Y-16,5,12,G,1);rect(c,X-7,Y-19,14,4,D,1.5);
+  rect(c,X-6,Y-29,12,10,G,2);rect(c,X-3.5,Y-27,7,6,lit?'#ffd86a':'#4a463f',1);
+  poly(c,D,X-11,Y-29,X+11,Y-29,X+4,Y-36,X-4,Y-36);ell(c,X,Y-37,2.6,2.6,D);
+  if(lit){const g=.3+.15*Math.sin(t*3+p.x);c.fillStyle=`rgba(255,210,110,${g})`;c.beginPath();c.arc(X,Y-24,14,0,Math.PI*2);c.fill()}
+  else{const g=(Math.sin(t*3+p.x)+1)/2;bubble(c,X,Y-50+g*3,'🏮')}
+}
 function drawSpring(c,p,t){
   const X=p.x*T+16,Y=p.y*T+18,soaked=S.soaked&&S.soaked.day===S.day&&S.soaked.k.includes(p.i);
   ell(c,X,Y+2,17,10,'#8a8d93');ell(c,X,Y,15,8.5,'#9aa0a8');ell(c,X,Y+1,12,6.5,'#7fe0e6');ell(c,X-3,Y-1,5,2,'rgba(255,255,255,.45)');
@@ -1697,6 +1720,15 @@ function feedCritter(cr){
     if(cr.gave&&cr.gave>now()){toast(['🐬 Eee-eee! The dolphin does a flip!','🐬 The dolphin splashes you. Hehe!','🐬 Click-click! The dolphin waves its flipper'][Math.random()*3|0]);return}
     cr.gave=now()+120000;const g=[{k:'pearl',n:1},{k:'fish',n:1},{coins:20}][Math.random()*3|0];doAct('giveBack',g);floatAt(cr.x,cr.y-56,g.coins?'+🪙20':'+'+ITEMS[g.k].e);
     toast(`🐬 Eee-eee! The dolphin jumped out of the water and brought you ${g.coins?'🪙20':g.k==='pearl'?'a 🦪 pearl':'a 🐟 fish'}!`,2800);return}
+  if(cr.kind==='koi'){cr.happy=1;floatAt(cr.x,cr.y-24,'🫧');
+    if(cr.gave&&cr.gave>now()){toast(['🐟 Bloop! The koi blows bubbles at you','🐟 The koi swishes its fancy tail','🐟 Splish! The koi swims a happy circle'][Math.random()*3|0]);return}
+    cr.gave=now()+120000;doAct('giveBack',{coins:15});floatAt(cr.x,cr.y-40,'+🪙15');toast('🐟 Lucky koi! It flipped a shiny 🪙15 out of the pond for you!',2800);return}
+  if(cr.kind==='crane'){cr.happy=1.4;floatAt(cr.x,cr.y-60,'💮');
+    if(cr.gave&&cr.gave>now()){toast(['🦢 The crane bows to you politely','🦢 The crane stands on one leg… so balanced!','🦢 The crane does a graceful little dance'][Math.random()*3|0]);return}
+    cr.gave=now()+120000;doAct('giveBack',{k:'feather',n:1});floatAt(cr.x,cr.y-74,'+🪶');toast('🦢 The crane bows and gives you one of its soft 🪶 feathers!',2800);return}
+  if(cr.kind==='redpanda'){cr.happy=1.6;floatAt(cr.x,cr.y-40,'❤️');
+    if(!S.inv.blossom){toast('🐼 The red panda rolls over for a tummy rub! Red pandas LOVE 🌸 cherry blossoms — find them under the pink trees');return}
+    cr.calm=60;doAct('trade',{from:'blossom',coins:25});floatAt(cr.x,cr.y-56,'+🪙25');toast('🐼 Munch munch! The red panda loved the 🌸 blossom and found 🪙25 in its den for you!',2800);return}
   if(cr.kind==='camel'){cr.happy=1.6;floatAt(cr.x,cr.y-60,'❤️');
     if(!S.inv.cactusfruit){toast('🐪 Hrrumph! Camels love 🌵 cactus fruit — chop a cactus or look around their spiky stems');return}
     cr.calm=60;const sc=!S.pyrOpen&&!(S.inv.scarab>=3)&&Math.random()<.3;doAct('trade',{from:'cactusfruit',coins:30});
@@ -1739,6 +1771,23 @@ function drawCritterRaw(c,cr,t){
     poly(c,C,-12,-6,-20,-12,-17,-6,-20,0);ell(c,0,-6,14,6.5,C);ell(c,2,-3.5,10,3,'#c8dcef');ell(c,14,-5,5,2.6,C);poly(c,C,-3,-11,3,-19,6,-11);
     c.fillStyle='#1a2a3a';c.fillRect(8,-9,1.8,1.8);c.restore();
     if(!(cr.happy>0)&&!cr.zz){c.globalAlpha=.5;ell(c,cr.x,cr.y-1,16,3.5,'#bff3ff');c.globalAlpha=1}return}
+  if(cr.kind==='koi'){const s=cr.dir,v=(cr.kv??=(cr.id??Math.random()*3)|0)%3,C=['#ff7a2a','#ffffff','#ffb02a'][v],D=['#ffffff','#ff5a2a','#1a1a1a'][v],sw=Math.sin(cr.walk*.8)*3,j=cr.happy>0?Math.sin(Math.min(1,(1-cr.happy))*Math.PI)*14:0;
+    c.globalAlpha=.4;ell(c,cr.x,cr.y,14,4,'#bff3ff');c.globalAlpha=1;c.save();c.translate(cr.x,cr.y-3-j);c.scale(s,1);
+    poly(c,C,-9,0,-16,-5+sw*.5,-15,5+sw*.5);ell(c,0,0,10,4.5,C);ell(c,2,-1,4,2.4,D);ell(c,-4,1,3,2,D);poly(c,C,-2,-3,2,-8,4,-3);
+    c.fillStyle='#1a1a1a';c.fillRect(6,-2,1.5,1.5);c.restore();return}
+  if(cr.kind==='crane'){const s=cr.dir,x=cr.x,bob=cr.happy>0?Math.sin(cr.happy*6)*3:0,one=cr.still&&!cr.walk,st=cr.walk?Math.sin(cr.walk)*3:0,y=cr.y-bob;
+    ell(c,x,cr.y,10,3.5,'rgba(0,0,0,.15)');c.strokeStyle='#3a3a3a';c.lineWidth=1.6;c.lineCap='round';
+    c.beginPath();c.moveTo(x-2,y-22);c.lineTo(x-2+st,y);if(!one){c.moveTo(x+2,y-22);c.lineTo(x+2-st,y)}else{c.moveTo(x+2,y-22);c.lineTo(x+6*s,y-15);c.lineTo(x+2,y-12)}c.stroke();
+    c.save();c.translate(x,y);c.scale(s,1);ell(c,0,-28,11,7,'#f7f7f4');poly(c,'#222',-11,-30,-17,-24,-8,-24);
+    c.strokeStyle='#f7f7f4';c.lineWidth=3.2;c.beginPath();c.moveTo(6,-31);c.quadraticCurveTo(12,-40,9,-50);c.stroke();c.strokeStyle='#222';c.lineWidth=3;c.beginPath();c.moveTo(8,-38);c.lineTo(10,-44);c.stroke();
+    ell(c,9,-51,3.4,3,'#f7f7f4');ell(c,9,-53.5,2,1.3,'#e8202a');poly(c,'#c9a23a',11,-52,19,-50,11,-50);c.fillStyle='#111';c.fillRect(9.5,-52,1.3,1.3);c.restore();return}
+  if(cr.kind==='redpanda'){const s=cr.dir,x=cr.x,y=cr.y-(cr.happy>0?Math.abs(Math.sin(cr.happy*8))*4:0),st=cr.walk?Math.sin(cr.walk)*2.5:0,R='#c8502a',K='#3a1e14';
+    ell(c,x,cr.y,13,3.5,'rgba(0,0,0,.16)');c.save();c.translate(x,y);c.scale(s,1);
+    c.strokeStyle=R;c.lineWidth=6;c.lineCap='round';c.beginPath();c.moveTo(-8,-8);c.quadraticCurveTo(-20,-10,-18,-22);c.stroke();
+    c.strokeStyle='#f0c8a0';c.lineWidth=6;c.setLineDash([3,4]);c.beginPath();c.moveTo(-8,-8);c.quadraticCurveTo(-20,-10,-18,-22);c.stroke();c.setLineDash([]);
+    for(const dx of[-6,5])rect(c,dx-1.6+(dx<0?st:-st),-6,3.4,6,K,1.5);ell(c,0,-9,10,6,R);ell(c,0,-6,7,3,K);
+    ell(c,9,-15,6.5,5.5,R);ell(c,5,-20,2.4,2.4,R);ell(c,12,-20,2.4,2.4,R);ell(c,5,-20,1.2,1.2,'#fff');ell(c,12,-20,1.2,1.2,'#fff');
+    ell(c,11,-13,3.6,2.8,'#fff4e8');ell(c,7,-16,2,1.6,'#fff4e8');c.fillStyle='#111';c.fillRect(8.6,-17,1.5,1.5);c.fillRect(11.6,-17,1.5,1.5);ell(c,14.5,-13,1.3,1,'#111');c.restore();return}
   if(cr.kind==='camel'){const s=cr.dir,x=cr.x,y=cr.y-(cr.happy>0?Math.abs(Math.sin(cr.happy*8))*3:0),st=cr.walk?Math.sin(cr.walk)*3:0,C='#c9975a',D='#a87a42';
     ell(c,x,cr.y,18,5,'rgba(0,0,0,.18)');
     for(const dx of[-11,-6,7,12])rect(c,x+dx*s-2,y-22+(dx<0?st:-st),4,22,D,2);
@@ -1784,8 +1833,8 @@ const zzz=(c,x,y,t)=>{c.font='13px sans-serif';c.textAlign='center';c.textBaseli
 const drawCritter=(c,cr,t)=>{plain(drawCritterRaw)(c,cr,t);if(cr.zz)zzz(c,cr.x,cr.y-(ZZ_UP[cr.kind]||30),t)};
 // Dino Island's dinosaurs
 const DINOS=['rex','longneck','trike','ptero','terror','gray','moa','frost','fire','ghostbird','chick','swamp'],NIGHT_OWLS=['terror','gray','bear','ghost','bat','frost','fire','ghostbird','chick','swamp'],
-  CRIT_NAMES={seaturtle:'sea turtle',rex:'T-Rex',longneck:'long-neck',trike:'triceratops',ptero:'pterodactyl',terror:'terror bird',moa:'moa',frost:'frost terror bird',fire:'fire terror bird',ghostbird:'ghost terror bird',swamp:'swamp terror bird',dolphin:'dolphin',gray:'gray terror bird',chick:'terror chick',camel:'camel',lizard:'lizard',peng:'penguin',bear:'polar bear',monkey:'monkey',parrot:'parrot',crab:'crab',squirrel:'squirrel'},
-  ZZ_UP={gray:50,dolphin:22,camel:58,lizard:14,moa:50,longneck:78,rex:56,bear:40,ptero:20,parrot:18,crab:26,trike:30,peng:32,monkey:32,squirrel:30};
+  CRIT_NAMES={koi:'koi fish',crane:'crane',redpanda:'red panda',seaturtle:'sea turtle',rex:'T-Rex',longneck:'long-neck',trike:'triceratops',ptero:'pterodactyl',terror:'terror bird',moa:'moa',frost:'frost terror bird',fire:'fire terror bird',ghostbird:'ghost terror bird',swamp:'swamp terror bird',dolphin:'dolphin',gray:'gray terror bird',chick:'terror chick',camel:'camel',lizard:'lizard',peng:'penguin',bear:'polar bear',monkey:'monkey',parrot:'parrot',crab:'crab',squirrel:'squirrel'},
+  ZZ_UP={koi:14,crane:58,redpanda:26,gray:50,dolphin:22,camel:58,lizard:14,moa:50,longneck:78,rex:56,bear:40,ptero:20,parrot:18,crab:26,trike:30,peng:32,monkey:32,squirrel:30};
 function drawDino(c,cr,t){
   const s=cr.dir,x=cr.x,hop=cr.happy>0?Math.abs(Math.sin(cr.happy*8))*4:0,y=cr.y-hop,zz=cr.calm>30;
   if(cr.kind==='rex'){const st=cr.walk?Math.sin(cr.walk*.8)*3:0,col='#5e9a3a',dk='#4a7d2c',open=cr.happy>0||cr.calm>0&&cr.calm<6.5&&cr.calm>5;
@@ -1925,6 +1974,7 @@ function sailModal(){
   if(!isles.list.some(i=>i.kind==='pirate'))h+=`<div class="irow"><span class="ie">🏴‍☠️</span><span class="in">Pirate Island<br><span class="ip">A pirate shipwreck, a treasure map and pinchy crabs!</span></span><button class="btn blue" data-a="pirate">Sail</button></div>`;
   if(!isles.list.some(i=>i.kind==='autumn'))h+=`<div class="irow"><span class="ie">🍂</span><span class="in">Autumn Island<br><span class="ip">Falling leaves, apples, sneaky squirrels and a spooky old windmill!</span></span><button class="btn blue" data-a="autumn">Sail</button></div>`;
   if(!isles.list.some(i=>i.kind==='lagoon'))h+=`<div class="irow"><span class="ie">🐬</span><span class="in">Lagoon Island<br><span class="ip">A ring of land around a warm lagoon — dolphins, hot springs and a waterslide!</span></span><button class="btn blue" data-a="lagoon">Sail</button></div>`;
+  if(!isles.list.some(i=>i.kind==='blossom'))h+=`<div class="irow"><span class="ie">🌸</span><span class="in">Cherry Blossom Island<br><span class="ip">Pink blossom trees, a koi pond, stone lanterns, cranes and red pandas!</span></span><button class="btn blue" data-a="blossom">Sail</button></div>`;
   if(!isles.list.some(i=>i.kind==='desert'))h+=`<div class="irow"><span class="ie">🏜️</span><span class="in">Desert Island<br><span class="ip">Sand dunes, cactuses, camels, lizards and a mysterious pyramid!</span></span><button class="btn blue" data-a="desert">Sail</button></div>`;
   if(!isles.list.some(i=>i.kind==='volcano'))h+=`<div class="irow"><span class="ie">🌋</span><span class="in">Volcano Island<br><span class="ip">Hot lava and sneaky scorpions — be careful!</span></span><button class="btn blue" data-a="volc">Sail</button></div>`;
   h+=`<div class="btns">${isles.list.length<MAX_ISLES?'<button class="btn" data-a="new">✨ Discover a new island</button>':''}<button class="btn gray" data-a="close">Stay here</button></div>`;
@@ -1936,6 +1986,7 @@ function sailModal(){
     pirate:()=>{closeModal();if(net){toast('Stop playing together (👥) before sailing');return}const id=isles.next++;isles.list.push({id,name:'Pirate Island',seed:PIRATE_SEED,kind:'pirate'});saveIsles();sailTo(id)},
     autumn:()=>{closeModal();if(net){toast('Stop playing together (👥) before sailing');return}const id=isles.next++;isles.list.push({id,name:'Autumn Island',seed:AUTUMN_SEED,kind:'autumn'});saveIsles();sailTo(id)},
     lagoon:()=>{closeModal();if(net){toast('Stop playing together (👥) before sailing');return}const id=isles.next++;isles.list.push({id,name:'Lagoon Island',seed:LAGOON_SEED,kind:'lagoon'});saveIsles();sailTo(id)},
+    blossom:()=>{closeModal();if(net){toast('Stop playing together (👥) before sailing');return}const id=isles.next++;isles.list.push({id,name:'Cherry Blossom Island',seed:BLOSSOM_SEED,kind:'blossom'});saveIsles();sailTo(id)},
     desert:()=>{closeModal();if(net){toast('Stop playing together (👥) before sailing');return}const id=isles.next++;isles.list.push({id,name:'Desert Island',seed:DESERT_SEED,kind:'desert'});saveIsles();sailTo(id)},
     volc:()=>{closeModal();if(net){toast('Stop playing together (👥) before sailing');return}const id=isles.next++;isles.list.push({id,name:'Volcano Island',seed:666013,kind:'volcano'});saveIsles();sailTo(id)}});
 }
@@ -1954,7 +2005,7 @@ function nameModal(id,suggest){
   const inp=document.getElementById('codeIn');inp.focus();inp.select();inp.onkeydown=e=>{if(e.key==='Enter')modalActs.ok()};
 }
 // ── Under the Waterfall: a hidden island behind the waterfall on Jungle Island ──
-const LAGOON_SEED=575759,DESERT_SEED=828284,FALLS_SEED=515158,PIRATE_SEED=313135,AUTUMN_SEED=919192,HAUNT_SEED=131313,DINO_SEED=242425;
+const BLOSSOM_SEED=373739,LAGOON_SEED=575759,DESERT_SEED=828284,FALLS_SEED=515158,PIRATE_SEED=313135,AUTUMN_SEED=919192,HAUNT_SEED=131313,DINO_SEED=242425;
 function fallsModal(){
   const under=curKind==='falls';
   if(guestMode){toast(under?'💦 Only your friend can take you back through the waterfall':'💦 What a beautiful waterfall! (Only your friend can go through it)',2800);return}
@@ -2090,6 +2141,7 @@ function genForage(){
     add('apple',(x,y,i)=>ter[i]===GRASS&&nearTree(x,y),16);add('acorn',(x,y,i)=>ter[i]===GRASS&&nearTree(x,y),16);add('pumpkin',(x,y,i)=>ter[i]===GRASS,8)}
   if(curKind==='dino'){add('fossil',(x,y,i)=>ter[i]!==WATER,10);add('amber',(x,y,i)=>ter[i]===GRASS&&N4.some(([a,b])=>feat[(y+b)*W+x+a]===TREE),3)}
   if(curKind==='falls')add('mushroom',(x,y,i)=>ter[i]===GRASS,14);
+  if(curKind==='blossom')add('blossom',(x,y,i)=>ter[i]===GRASS&&N4.some(([a,b])=>feat[(y+b)*W+x+a]===TREE),18);
   if(curKind==='desert')add('cactusfruit',(x,y,i)=>ter[i]===GRASS&&N4.some(([a,b])=>feat[(y+b)*W+x+a]===TREE),12);
   if(curKind==='jungle')add('banana',(x,y,i)=>ter[i]===GRASS&&N4.some(([a,b])=>feat[(y+b)*W+x+a]===TREE),16);
   if(curKind==='volcano')add('fireflower',(x,y,i)=>ter[i]===GRASS,18);else add('flower',(x,y,i)=>ter[i]===GRASS,10);
@@ -2313,6 +2365,7 @@ const ACT={
   feat({i}){const kind=feat[i],X=(i%W)*T+16,Y=(i/W|0)*T;if(!kind||kind>=VOLC)return;feat[i]=0;S.cut.push(i);tally(kind===ROCK?'mine':'chop');dirty();
     if(kind===ROCK){give('stone',1);if(Math.random()<(curKind==='falls'?.3:.12)){give('gem',1);floatAt(X,Y-14,'+1 💎');toast('Ooh, a gem! 💎')}else floatAt(X,Y,'+1 🪨')}
     else if(curKind==='falls'){give('moss',2);floatAt(X,Y,'+2 🌿')}
+    else if(curKind==='blossom'){give('wood',2);give('blossom',1);floatAt(X,Y,'+2 🪵 +1 🌸')}
     else if(curKind==='desert'){give('wood',1);give('cactusfruit',1);floatAt(X,Y,'+1 🪵 +1 🌵')}
     else{give('wood',2);floatAt(X,Y,'+2 🪵')}},
   chest({c}){if(chests[c])openChest(c)},
@@ -2398,6 +2451,12 @@ const ACT={
     const sp=S.villagers.find(v=>v.name===S.spouse)||PLAYER_LOOK,pick=a=>a[Math.random()*a.length|0];
     kids.push({name:n,bed,look:{shirt:pick(['#ff6b8b','#ffd23f','#5fd6e0','#9b59b6','#7cc35d','#ff8c42']),skin:pick([sp.skin||PLAYER_LOOK.skin,PLAYER_LOOK.skin]),hair:sp.hair||'#5a3a20'}});dirty();
     toast(`👶 Welcome to the family, ${n}! 💕`,3000)},
+  lantern({i}){if(feat[i]!==LANTERN)return;S.lit=S.lit||[];const X=(i%W)*T+16,Y=(i/W|0)*T;
+    if(S.lit.includes(i)){toast(`🏮 This lantern is glowing — ${S.lit.length} of ${LANTERNS.length} lit`);return}
+    S.lit.push(i);dirty();floatAt(X,Y-20,'✨');
+    if(S.lit.length>=LANTERNS.length){S.coins+=200;for(let k=0;k<50;k++)confetti.push({x:X,y:Y-20,vx:(Math.random()-.5)*220,vy:-90-Math.random()*200,c:['#ffc6da','#ffd23f','#fff'][k%3],t:0});
+      floatAt(X,Y-40,'+🪙200');toast('🏮 All the lanterns around the koi pond are glowing! The garden spirits give you 🪙200!',3400)}
+    else toast(`🏮 You lit the stone lantern! ${S.lit.length} of ${LANTERNS.length} — light them all for a surprise`,2600)},
   soak({i}){if(feat[i]!==HSPRING)return;const Sk=S.soaked&&S.soaked.day===S.day?S.soaked:(S.soaked={day:S.day,k:[]});player.frozen=0;
     if(Sk.k.includes(i)){toast('♨️ Ahh… so warm and relaxing 😌');return}Sk.k.push(i);give('springegg',1);dirty();refreshTray();floatAt((i%W)*T+16,(i/W|0)*T-10,'+1 ♨️');
     toast('♨️ Ahh… so warm! You cooked a ♨️ Hot Spring Egg in the steamy water!',2800)},
@@ -2589,7 +2648,7 @@ function useNearest(){
   for(const[x,y]of[[t.x+d[0],t.y+d[1]],[t.x,t.y],...N8.map(([a,b])=>[t.x+a,t.y+b])]){
     if(!inMap(x,y))continue;const i=y*W+x;
     const v=villagers.find(v=>{const vt=tileOf(v);return vt.x===x&&vt.y===y});
-    let tg=v?{k:'vill',v}:objAt(i)&&objAt(i).t!=='path'?{k:'obj',o:objAt(i)}:inShip(x,y)?{k:'ship'}:chestHere(i)?{k:'chest',c:chestAt[i]}:feat[i]===CAVE?{k:'cave'}:feat[i]===GALLEON?{k:'galleon'}:feat[i]===MILL?{k:'mill'}:feat[i]===NEST?{k:'nest'}:feat[i]===PYRAMID?{k:'pyramid'}:feat[i]===HSPRING?{k:'spring',i}:feat[i]===SLIDE?{k:'slide'}:feat[i]===XSPOT?{k:'xspot'}:feat[i]?{k:'feat',i,x,y}:fireAt(x,y)?null:forageAt.has(i)?{k:'forage',i}:null;
+    let tg=v?{k:'vill',v}:objAt(i)&&objAt(i).t!=='path'?{k:'obj',o:objAt(i)}:inShip(x,y)?{k:'ship'}:chestHere(i)?{k:'chest',c:chestAt[i]}:feat[i]===CAVE?{k:'cave'}:feat[i]===GALLEON?{k:'galleon'}:feat[i]===MILL?{k:'mill'}:feat[i]===NEST?{k:'nest'}:feat[i]===PYRAMID?{k:'pyramid'}:feat[i]===HSPRING?{k:'spring',i}:feat[i]===LANTERN?{k:'lantern',i}:feat[i]===SLIDE?{k:'slide'}:feat[i]===XSPOT?{k:'xspot'}:feat[i]?{k:'feat',i,x,y}:fireAt(x,y)?null:forageAt.has(i)?{k:'forage',i}:null;
     if(tg){arrive(tg);return}
   }
 }
@@ -2742,9 +2801,10 @@ const HNAMES={petpark:'Spooky Pet Park',cinema:'Haunted Movie House',zoo:'Spooky
   pigpen:'Mud Pen',bakery:'Cauldron Bakery',creamery:'Spooky Creamery',greenhouse:'Night Greenhouse',bin:'Coffin Bin',market:'Midnight Market',fountain:'Ghost Fountain',lighthouse:'Ghost Lighthouse'};
 const LNAMES={seafence:'Lagoon Net Fence',petpark:'Beach Pet Park',farm:'Lagoon Farmland',myhouse:'Your Beach Villa',path:'Shell Path',fence:'Bamboo Fence',gate:'Bamboo Gate',hedge:'Hibiscus Hedge',bridge:'Boardwalk Bridge',wood:'Floating Deck',hut:'Lagoon Hut',flowers:'Hibiscus Flowers',tree:'Coconut Palm',bench:'Beach Bench',lamp:'Tiki Torch',campfire:'Beach Bonfire',picnic:'Beach Table',statue:'Dolphin Statue',playground:'Splash Playground',windmill:'Breezy Windmill',well:'Freshwater Well',house:'Beach Bungalow',cabin:'Surf Shack',coop:'Beach Coop',hive:'Tropical Hive',dock:'Lagoon Dock',barn:'Beach Barn',pond:'Tide Pool',pigpen:'Sandy Pen',bakery:'Coconut Bakery',creamery:'Smoothie Creamery',greenhouse:'Tropical Greenhouse',bin:'Driftwood Bin',market:'Beach Market',fountain:'Dolphin Fountain',mailbox:'Seashell Mailbox',museum:'Ocean Museum',school:'Beach School',library:'Seashell Library',observatory:'Starfish Observatory',kitchen:'Beach Kitchen',hospital:'Lifeguard Hospital',track:'Boardwalk Track',station:'Beach Station',balloon:'Sunset Balloon Port',lighthouse:'Lagoon Lighthouse',zoo:'Lagoon Zoo',exhibit:'Lagoon Pen',cinema:'Beach Cinema'};
 const DNAMES={petpark:'Dino Pet Park',cinema:'Cave Cinema',zoo:'Jurassic Zoo',exhibit:'Bone Pen',farm:'Fern Farmland',myhouse:'Your Stone-Age House',path:'Bone Path',fence:'Bone Fence',gate:'Bone Gate',hedge:'Fern Hedge',bridge:'Log Bridge',wood:'Log Raft',hut:'Cave Fishing Hut',flowers:'Jurassic Flowers',tree:'Tree Fern',bench:'Boulder Bench',lamp:'Torch Post',campfire:'Caveman Fire',picnic:'Stone Slab Table',statue:'Dino Statue',playground:'Bone Playground',windmill:'Leaf Windmill',well:'Stone Well',house:'Cave House',cabin:'Rock Cabin',coop:'Raptor-Proof Coop',hive:'Giant Beehive',dock:'Log Dock',barn:'Stone Barn',pond:'Dino Pond',pigpen:'Mud Wallow',bakery:'Stone Oven Bakery',creamery:'Dino Creamery',greenhouse:'Fern House',bin:'Rock Bin',market:'Fossil Market',fountain:'Geyser Fountain',mailbox:'Stone Mailbox',museum:'Fossil Museum',school:'Stone-Age School',library:'Cave Painting Library',observatory:'Rock Observatory',kitchen:'Cave Kitchen',hospital:'Dino Hospital',track:'Bone Track',station:'Rock Station',balloon:'Pterodactyl Port',lighthouse:'Torch Tower'},PNAMES={seafence:'Shark Net',petpark:'Pirate Pet Deck',cinema:'Pirate Picture House',zoo:'Pirate Zoo',exhibit:'Plank Pen',farm:'Treasure Farmland',myhouse:'Your Pirate Ship House',path:'Plank Path',fence:'Rope Fence',gate:'Plank Gate',hedge:'Seaweed Hedge',bridge:'Gangplank Bridge',wood:'Raft',hut:'Pirate Shack',flowers:'Sea Flowers',tree:'Palm Tree',bench:'Barrel Bench',lamp:'Ship Lantern',campfire:'Pirate Bonfire',picnic:'Barrel Table',statue:'Pirate Statue',playground:'Ship Playground',windmill:'Sail Mill',well:'Wishing Well',house:'Pirate Cottage',cabin:'Captain\'s Cabin',coop:'Parrot Coop',hive:'Pirate Hive',dock:'Pirate Pier',barn:'Cargo Barn',pond:'Rock Pool',pigpen:'Pirate Pig Pen',bakery:'Hardtack Bakery',creamery:'Grog Creamery',greenhouse:'Bottle House',bin:'Treasure Chest Bin',market:'Pirate Market',fountain:'Mermaid Fountain',mailbox:'Message-in-a-Bottle Box',museum:'Treasure Museum',school:'Pirate School',library:'Map Library',observatory:'Crow\'s Nest',kitchen:'Galley Kitchen',hospital:'Pirate Hospital',track:'Plank Track',station:'Harbor Station',balloon:'Jolly Roger Balloon',lighthouse:'Pirate Lighthouse'},ANAMES={petpark:'Leafy Pet Park',cinema:'Cozy Cinema',zoo:'Harvest Zoo',exhibit:'Picket Pen',farm:'Harvest Farmland',myhouse:'Your Cozy Cottage',path:'Leafy Path',fence:'Picket Fence',gate:'Picket Gate',hedge:'Maple Hedge',bridge:'Covered Bridge',wood:'Maple Raft',hut:'Cozy Fishing Hut',flowers:'Mums',tree:'Maple Tree',bench:'Leafy Bench',lamp:'Lantern Post',campfire:'Bonfire',picnic:'Harvest Table',statue:'Scarecrow',playground:'Leaf-Pile Playground',windmill:'Old Windmill',well:'Cider Well',house:'Cozy House',cabin:'Log Cabin',coop:'Harvest Coop',hive:'Honey Hive',dock:'Maple Dock',barn:'Red Barn',pond:'Leafy Pond',pigpen:'Pumpkin Pen',bakery:'Pie Bakery',creamery:'Cider Creamery',greenhouse:'Pumpkin House',bin:'Harvest Bin',market:'Farmers Market',fountain:'Acorn Fountain',mailbox:'Acorn Mailbox',museum:'Harvest Museum',school:'Little Red School',library:'Cozy Library',observatory:'Harvest Moon Tower',kitchen:'Pie Kitchen',hospital:'Maple Hospital',track:'Leafy Track',station:'Harvest Station',balloon:'Maple Leaf Balloon',lighthouse:'Harvest Lighthouse'},FNAMES={petpark:'Grotto Pet Park',cinema:'Grotto Cinema',zoo:'Grotto Zoo',exhibit:'Crystal Pen',farm:'Moss Farmland',myhouse:'Your Crystal Grotto',path:'Glow Path',fence:'Crystal Fence',gate:'Crystal Gate',hedge:'Moss Hedge',bridge:'Stone Bridge',wood:'Moss Raft',hut:'Grotto Hut',flowers:'Glow Flowers',tree:'Moss Mound',bench:'Mossy Bench',lamp:'Glow-Worm Lamp',campfire:'Blue Fire',picnic:'Crystal Table',statue:'Crystal Statue',playground:'Grotto Playground',windmill:'Water Wheel',well:'Crystal Well',house:'Grotto House',cabin:'Grotto Cabin',coop:'Mossy Coop',hive:'Glow Hive',dock:'Grotto Dock',barn:'Grotto Barn',pond:'Crystal Pool',pigpen:'Mossy Pen',bakery:'Mushroom Bakery',creamery:'Grotto Creamery',greenhouse:'Glow House',bin:'Crystal Bin',market:'Grotto Market',fountain:'Crystal Fountain',mailbox:'Mossy Mailbox',museum:'Crystal Museum',school:'Grotto School',library:'Glow Library',observatory:'Crystal Observatory',kitchen:'Mushroom Kitchen',hospital:'Crystal Hospital',track:'Moss Track',station:'Grotto Station',balloon:'Firefly Balloon',lighthouse:'Glow Beacon'},SNAMES={petpark:'Oasis Pet Park',cinema:'Starlight Cinema',zoo:'Oasis Zoo',exhibit:'Adobe Pen',farm:'Oasis Farmland',myhouse:'Your Desert Palace',path:'Sandstone Path',fence:'Adobe Wall',gate:'Desert Gate',hedge:'Cactus Hedge',bridge:'Sandstone Bridge',wood:'Palm Raft',hut:'Oasis Hut',flowers:'Desert Blooms',tree:'Date Palm',bench:'Sandstone Bench',lamp:'Desert Lantern',campfire:'Desert Campfire',picnic:'Rug Picnic',statue:'Sphinx Statue',playground:'Sand Playground',windmill:'Desert Windmill',well:'Oasis Well',house:'Adobe House',cabin:'Desert Tent',coop:'Adobe Coop',hive:'Desert Hive',dock:'Oasis Dock',barn:'Adobe Barn',pond:'Oasis Pond',pigpen:'Desert Pen',bakery:'Clay Oven Bakery',creamery:'Camel Creamery',greenhouse:'Cactus House',bin:'Clay Pot Bin',market:'Bazaar Stall',fountain:'Oasis Fountain',mailbox:'Clay Mailbox',museum:'Pharaoh Museum',school:'Desert School',library:'Scroll Library',observatory:'Star Tower',kitchen:'Bazaar Kitchen',hospital:'Oasis Hospital',track:'Sandstone Track',station:'Caravan Station',balloon:'Desert Balloon Port',lighthouse:'Sandstone Lighthouse'};
-const bname=t=>({volcano:VNAMES,ice:INAMES,jungle:JNAMES,haunted:HNAMES,dino:DNAMES,pirate:PNAMES,autumn:ANAMES,falls:FNAMES,desert:SNAMES,lagoon:LNAMES}[curKind]||{})[t]||BUILD[t].n;
+const KNAMES={farm:'Rice Paddies',myhouse:'Your Blossom House',path:'Stepping Stones',fence:'Bamboo Fence',gate:'Moon Gate',hedge:'Azalea Hedge',bridge:'Red Arch Bridge',wood:'Wooden Deck',hut:'Koi Fishing Hut',flowers:'Blossom Flowers',tree:'Cherry Tree',bench:'Garden Bench',lamp:'Paper Lantern',campfire:'Lantern Fire',picnic:'Tea Table',statue:'Crane Statue',playground:'Blossom Playground',windmill:'Bamboo Windmill',well:'Stone Well',house:'Blossom Cottage',cabin:'Tea Cabin',coop:'Garden Coop',hive:'Blossom Hive',dock:'Pond Dock',barn:'Garden Barn',pond:'Koi Pond',pigpen:'Garden Pen',bakery:'Rice Cake Bakery',creamery:'Tea Creamery',greenhouse:'Blossom Greenhouse',bin:'Bamboo Bin',market:'Lantern Market',fountain:'Koi Fountain',museum:'Pagoda Museum',school:'Pagoda School',library:'Scroll Library',kitchen:'Tea Kitchen',lighthouse:'Pagoda Lighthouse',zoo:'Blossom Zoo',exhibit:'Garden Pen',petpark:'Blossom Pet Park'};
+const bname=t=>({blossom:KNAMES,volcano:VNAMES,ice:INAMES,jungle:JNAMES,haunted:HNAMES,dino:DNAMES,pirate:PNAMES,autumn:ANAMES,falls:FNAMES,desert:SNAMES,lagoon:LNAMES}[curKind]||{})[t]||BUILD[t].n;
 let themed=null; // the color change to draw with, while drawing Volcano or Ice Island's version of something
-const themeFor=()=>({volcano:volc,ice:icy,jungle,haunted:haunt,dino:dinoT,pirate:pirateT,autumn:autumnT,falls:fallsT,desert:desertT,lagoon:lagoonT})[curKind]||null;
+const themeFor=()=>({blossom:blossomT,volcano:volc,ice:icy,jungle,haunted:haunt,dino:dinoT,pirate:pirateT,autumn:autumnT,falls:fallsT,desert:desertT,lagoon:lagoonT})[curKind]||null;
 // a color change, made from a rule that turns one hue/saturation/lightness into another
 function hslMap(rule){const cache=new Map();return col=>{
   if(cache.has(col))return cache.get(col);
@@ -2835,6 +2895,14 @@ const desertT=hslMap((h,s,l)=>{
   if(h<15||h>=330)return[16,.62,.38+l*.3];
   if(h>=175&&h<265)return[176,.65,.38+l*.3];
   if(h>=70&&h<175)return[95,.32,.28+l*.4];
+  return[h,s,l]});
+// Cherry Blossom Island: pink-red roofs, dark cherry wood, cream walls, soft pink leaves
+const blossomT=hslMap((h,s,l)=>{
+  if(l>.86||s<.15)return[30,.35,.7+l*.25];
+  if(h<15||h>=330)return[352,.7,.38+l*.3];
+  if(h>=15&&h<50&&!(s>.65&&l>.45))return[8,.42,.2+l*.38];
+  if(h>=70&&h<175)return[338,.62,.55+l*.25];
+  if(h>=175&&h<265)return[190,.5,.42+l*.3];
   return[h,s,l]});
 const FS=Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype,'fillStyle'),SS=Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype,'strokeStyle');
 // let a canvas draw in the volcano style while `themed` is on
@@ -3133,6 +3201,15 @@ function drawTree(c,x,y,kind,t,built){
     ell(c,X+sw,Y-26,18,14,'#1f6b2a');ell(c,X-8+sw,Y-30,11,9,'#2a8a35');ell(c,X+7+sw,Y-34,11,9,'#2f9a3a');ell(c,X+sw,Y-38,8,6,'#3fae45');
     c.strokeStyle='#2f7a2c';c.lineWidth=1.5;for(const vx of[-10,-2,9]){c.beginPath();c.moveTo(X+vx+sw,Y-22);c.quadraticCurveTo(X+vx+3+sw,Y-14,X+vx+sw*.5,Y-6+hash(x+vx,y)*4);c.stroke()}
     if(h>.6){for(let k=0;k<3;k++)ell(c,X+6+k*2.2+sw,Y-21+k*1.5,1.6,3.6,'#ffd23f')}}
+  else if(kind===TREE&&curKind==='blossom'&&h<.2){ // a clump of bamboo
+    ell(c,X,Y,11,4,'rgba(0,0,0,.16)');for(const[dx,ht]of[[-6,34],[-1,42],[5,37],[9,28]]){const bx=X+dx+sw*(ht/40);rect(c,X+dx-1.6,Y-ht,3.4,ht+1,'#6aa84a',1.5);
+      c.fillStyle='#4f8a36';for(let k=8;k<ht;k+=9)c.fillRect(X+dx-1.8,Y-k,3.8,1.4);ell(c,bx+4,Y-ht+2,5,1.6,'#7cc35d');ell(c,bx-4,Y-ht+6,4.5,1.5,'#6fbf50')}}
+  else if(kind===TREE&&curKind==='blossom'){ // a pink cherry blossom tree
+    const P1=h>.6?'#ffb7cf':'#ffc6da',P2=h>.6?'#ff9cbd':'#ffaecb';ell(c,X,Y,13,4,'rgba(0,0,0,.16)');
+    poly(c,'#5a3326',X-3,Y,X+3,Y,X+2,Y-16,X-2,Y-16);c.strokeStyle='#5a3326';c.lineWidth=2.2;c.lineCap='round';
+    c.beginPath();c.moveTo(X,Y-14);c.lineTo(X-8+sw*.4,Y-22);c.moveTo(X,Y-14);c.lineTo(X+8+sw*.4,Y-24);c.stroke();
+    ell(c,X+sw,Y-26,16,11,P2);ell(c,X-9+sw,Y-24,9,7,P1);ell(c,X+9+sw,Y-27,9,7,P1);ell(c,X-3+sw,Y-33,10,7,P1);ell(c,X+5+sw,Y-34,7,5,'#ffd9e6');
+    c.fillStyle='#fff0f5';for(let k=0;k<5;k++)c.fillRect(X-10+k*5+hash(x+k,y)*3,Y-30+(k%3)*4,1.6,1.6)}
   else if(kind===TREE&&curKind==='desert'){ // a saguaro cactus
     const G='#4f9a4a',G2='#6fbf5f';ell(c,X,Y,9,3.5,'rgba(0,0,0,.18)');
     rect(c,X-5,Y-34,10,35,G,5);rect(c,X-2,Y-32,2,30,G2,1);
@@ -3168,6 +3245,7 @@ function drawForage(c,f,t){
   else if(f.k==='fireflower'){const fl=Math.sin(t*9+f.x*3)*1.2;c.fillStyle='rgba(255,140,40,.22)';c.beginPath();c.arc(X,Y-5,11,0,Math.PI*2);c.fill();
     c.fillStyle='#6e2414';c.fillRect(X-.7,Y-4,1.4,8);for(let p=0;p<5;p++)ell(c,X+Math.cos(p*1.26)*3.4,Y-5+Math.sin(p*1.26)*3.4,2.6,2.6,'#e8401a');
     ell(c,X,Y-5,2,2,'#ffd23f');ell(c,X,Y-10+fl,2.6,4,'#ff8a1f');ell(c,X,Y-9+fl*.5,1.4,2.4,'#ffe066')}
+  else if(f.k==='blossom'){for(let p=0;p<5;p++){const a=p*1.26-1.57;ell(c,X+Math.cos(a)*3.6,Y-4+Math.sin(a)*3.6,2.8,2.8,p%2?'#ffc2d6':'#ffb0c8')}ell(c,X,Y-4,1.6,1.6,'#e8507a')}
   else if(f.k==='fossil'){c.save();c.translate(X,Y-3);c.rotate(-.5);rect(c,-7,-1.6,14,3.2,'#f2ead6',1.5);for(const sx of[-7,7])for(const sy of[-2,2])ell(c,sx,sy,2.6,2.6,'#f2ead6');c.restore()}
   else if(f.k==='amber'){const g=.5+.3*Math.sin(t*2+f.x);ell(c,X,Y-4,5.5,6.5,`rgba(240,150,30,${.75+g*.2})`);ell(c,X-2,Y-7,1.8,2.4,'rgba(255,240,180,.7)');ell(c,X+1,Y-3,1.6,1,'#5a3412')}
   else if(f.k==='candy'){c.save();c.translate(X,Y-4);c.rotate(-.4);poly(c,'#ff7fc8',-9,-4,-9,4,-4,0);poly(c,'#ff7fc8',9,-4,9,4,4,0);ell(c,0,0,5,4,'#b980ff');c.fillStyle='rgba(255,255,255,.6)';c.fillRect(-2,-3,1.5,6);c.restore()}
@@ -3254,7 +3332,7 @@ function drawLava(c,x0,y0,x1,y1,t){
 function draw(t){
   if(inside){drawInside(t);return}
   const z=zoom(),s=z*dpr;
-  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=curKind==='dino'?'#25907f':curKind==='haunted'?'#2b4646':curKind==='pirate'?'#1f93c6':curKind==='autumn'?'#35719f':curKind==='falls'?'#178095':curKind==='volcano'?'#c63a12':curKind==='ice'?'#2f6795':curKind==='jungle'?'#1f86a3':curKind==='desert'?'#2499b8':curKind==='lagoon'?'#1f9cc0':'#2f88c9';ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=curKind==='dino'?'#25907f':curKind==='haunted'?'#2b4646':curKind==='pirate'?'#1f93c6':curKind==='autumn'?'#35719f':curKind==='falls'?'#178095':curKind==='volcano'?'#c63a12':curKind==='ice'?'#2f6795':curKind==='jungle'?'#1f86a3':curKind==='blossom'?'#3a96c4':curKind==='desert'?'#2499b8':curKind==='lagoon'?'#1f9cc0':'#2f88c9';ctx.fillRect(0,0,cv.width,cv.height);
   const sh=shake>0?shake*5:0,shx=(Math.random()-.5)*sh,shy=(Math.random()-.5)*sh; // the ground shakes when the volcano blows
   ctx.setTransform(s,0,0,s,(cssW/2-cam.x*z+shx)*dpr,(cssH/2-cam.y*z+shy)*dpr);
   ctx.imageSmoothingEnabled=false;ctx.drawImage(terC,0,0);
@@ -3283,6 +3361,7 @@ function draw(t){
   if(NEST_AT)list.push([(NEST_AT.y+3)*T,()=>drawNest(ctx,t)]);
   if(PYR_AT)list.push([(PYR_AT.y+3)*T,()=>drawPyramid(ctx,t)]);
   for(const p of SPRINGS)list.push([p.y*T+4,()=>drawSpring(ctx,p,t)]);
+  for(const p of LANTERNS)list.push([(p.y+1)*T-4,()=>drawLantern(ctx,p,t)]);
   if(SLIDE_AT)list.push([(SLIDE_AT.y+2)*T,()=>drawSlide(ctx,t)]);
   if(X_AT)list.push([X_AT.y*T+2,()=>drawXSpot(ctx,t)]);
   if(amb)list.push([amb.y,()=>drawAmb(ctx,amb,t)]);
@@ -3330,7 +3409,7 @@ function draw(t){
     const light=(wx,wy,r)=>{const sx=(cssW/2+(wx-cam.x)*z)*dpr,sy=(cssH/2+(wy-cam.y)*z)*dpr,R=r*z*dpr;
       if(sx<-R||sy<-R||sx>darkC.width+R||sy>darkC.height+R)return;
       const g=darkX.createRadialGradient(sx,sy,0,sx,sy,R);g.addColorStop(0,'rgba(0,0,0,1)');g.addColorStop(1,'rgba(0,0,0,0)');darkX.fillStyle=g;darkX.fillRect(sx-R,sy-R,R*2,R*2)};
-    light(player.x,player.y-14,70);if(fly)light(fly.x,fly.y-70,120);if(VOLCANO)light((VOLCANO.x+.5)*T,(VOLCANO.y-2.5)*T,150);if(friend&&!friend.in)light(friend.x,friend.y-14,70);
+    light(player.x,player.y-14,70);if(fly)light(fly.x,fly.y-70,120);if(VOLCANO)light((VOLCANO.x+.5)*T,(VOLCANO.y-2.5)*T,150);for(const p of LANTERNS)if(S.lit&&S.lit.includes(p.i))light(p.x*T+16,p.y*T,95);if(friend&&!friend.in)light(friend.x,friend.y-14,70);
     for(const o of S.objs){if(o.t==='lamp')light(o.x*T+16,o.y*T-12,110);else if(o.t==='house'||o.t==='cabin'||o.t==='hut')light(o.x*T+32,o.y*T+42,55);else if(o.t==='myhouse')light(o.x*T+48,o.y*T+40,70);else if(o.t==='campfire')light(o.x*T+16,o.y*T+16,95);else if(o.t==='lighthouse')light(o.x*T+32,o.y*T-58,130)}
     darkX.globalCompositeOperation='source-over';
     ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(darkC,0,0);
@@ -3346,6 +3425,7 @@ function draw(t){
   if(curKind==='ice')drawSnowfall(t);
   if(curKind==='falls')drawMotes(t);
   if(curKind==='autumn')drawLeaves(t);
+  if(curKind==='blossom')drawPetals(t);
   if(curKind==='haunted')drawSpooky(t);
   drawWeather(t);
   if(VOLCANO){const left=ERUPT_MS-now()%ERUPT_MS;if(left<3000){ctx.setTransform(dpr,0,0,dpr,0,0);ctx.font='bold 34px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
@@ -3864,6 +3944,12 @@ function drawLeaves(t){
   ctx.setTransform(dpr,0,0,dpr,0,0);const cols=['#e8742a','#c0392b','#f2b630','#d35400'];
   for(let k=0;k<26;k++){const sp=.4+(k%5)/6,x=((k*97.3+t*18*sp+Math.sin(t*1.3+k)*26)%cssW+cssW)%cssW,y=(k*53.7+t*30*sp)%cssH;
     ctx.save();ctx.translate(x,y);ctx.rotate(Math.sin(t*2+k)*1.2);ctx.fillStyle=cols[k%4];ctx.beginPath();ctx.ellipse(0,0,5,2.6,0,0,Math.PI*2);ctx.fill();ctx.restore()}
+}
+// cherry blossom petals floating down on Cherry Blossom Island
+function drawPetals(t){
+  ctx.setTransform(dpr,0,0,dpr,0,0);const cols=['#ffc6da','#ffb0c8','#fff0f5','#ff9cbd'];
+  for(let k=0;k<30;k++){const sp=.35+(k%5)/7,x=((k*89.1+t*22*sp+Math.sin(t*1.1+k)*30)%cssW+cssW)%cssW,y=(k*61.3+t*26*sp)%cssH;
+    ctx.save();ctx.translate(x,y);ctx.rotate(t*1.5*sp+k);ctx.fillStyle=cols[k%4];ctx.beginPath();ctx.ellipse(0,0,4,2.4,0,0,Math.PI*2);ctx.fill();ctx.restore()}
 }
 function enterCave(){
   if(!CAVE_AT)return;enterHouse(null,false,0,true);
