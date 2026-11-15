@@ -2135,12 +2135,13 @@ function proposeModal(vw){
     <div class="btns"><button class="btn" data-a="yes">💍 Give the ring</button><button class="btn gray" data-a="chat">💬 Just chat</button></div>`,{yes:()=>{closeModal();doAct('marry',{name:v.name})},chat:()=>{closeModal();talk(vw,1)}});
 }
 let babyAsk=0,kidAt=new Map();
-// the villager you marry moves into Your House, and their old house goes up for sale
+// the villager you marry moves into Your House (or your Fishing Hut, if that's your home here), and their old house goes up for sale
+const myHome=()=>S.objs.find(o=>o.t==='myhouse')||S.objs.find(o=>o.t==='hut');
 function spouseHome(){
-  if(guestMode||!S.spouse)return;const me=S.objs.find(o=>o.t==='myhouse'),v=S.villagers.find(v=>v.name===S.spouse);if(!me||!v||v.house===me.id)return;
+  if(guestMode||!S.spouse)return;const me=myHome(),v=S.villagers.find(v=>v.name===S.spouse);if(!me||!v||v.house===me.id)return;
   const old=byId(v.house);v.house=me.id;if(old&&old.t==='house')old.sale=S.day;
-  const vw=villagers.find(w=>w.v===v);if(vw){vw.door={x:(me.x+1)*T+16,y:(me.y+2)*T+6};vw.path=[];vw.homing=0}
-  dirty();toast(`🏡 ${v.name} moved into your house! ${old&&old.t==='house'?'Their old house is now for sale.':''}`,3200);
+  const vw=villagers.find(w=>w.v===v);if(vw){vw.door={x:(me.x+1)*T+(me.t==='myhouse'?16:0),y:(me.y+2)*T+6};vw.path=[];vw.homing=0}
+  dirty();toast(`${me.t==='hut'?'🎣':'🏡'} ${v.name} moved into your ${me.t==='hut'?'fishing hut':'house'}! ${old&&old.t==='house'?'Their old house is now for sale.':''}`,3200);
 }
 function drawSale(c,X,Y,t){const sx=X+58,sy=Y+40+Math.sin(t*2)*.5;rect(c,sx-1.5,sy,3,26,'#8a5a2c');rect(c,sx-15,sy-6,30,19,'#fff',3);rect(c,sx-15,sy-6,30,6,'#e74c3c',3);
   c.fillStyle='#e74c3c';c.font='bold 7px system-ui';c.textAlign='center';c.textBaseline='middle';c.fillText('FOR SALE',sx,sy+6)}
@@ -2503,7 +2504,7 @@ const ACT={
   trade({from,to,coins}){if(!S.inv[from])return;S.inv[from]--;if(!S.inv[from])delete S.inv[from];if(to)give(to,1);if(coins)S.coins+=coins;refreshTray();dirty()},
   marry({name}){const v=S.villagers.find(v=>v.name===name);if(!v||S.spouse||!S.inv.ring||v.hurt)return;S.inv.ring--;if(!S.inv.ring)delete S.inv.ring;S.spouse=name;dirty();refreshTray();
     const vw=villagers.find(w=>w.v===v);if(vw){vw.say='YES! Yes, I will! 💕';vw.talkT=4;for(let k=0;k<60;k++)confetti.push({x:vw.x,y:vw.y-30,vx:(Math.random()-.5)*260,vy:-100-Math.random()*220,c:['#ff6b8b','#fff','#ffd23f','#ffb3c6'][k%4],t:0});for(let k=0;k<5;k++)setTimeout(()=>floatAt(vw.x+(k-2)*12,vw.y-50,'❤️'),k*150)}
-    openModal(`<h2>💒 ${esc2(name)} said YES!</h2><p style="font-size:44px;text-align:center">💍💕🎉</p><p>You and <b>${esc2(name)}</b> are married! Everyone on the island is cheering!</p><p>🏡 ${esc2(name)} is moving into your house${count('myhouse')?'':' (once you build one)'}!</p><p>👶 Put a <b>🧸 Child Bed</b> in your house (🎨 Decorate) and you can have kids!</p><div class="btns"><button class="btn" data-a="close">Yay! 💕</button></div>`)},
+    openModal(`<h2>💒 ${esc2(name)} said YES!</h2><p style="font-size:44px;text-align:center">💍💕🎉</p><p>You and <b>${esc2(name)}</b> are married! Everyone on the island is cheering!</p><p>🏡 ${esc2(name)} is moving into your ${count('myhouse')||!count('hut')?'house':'fishing hut'}${count('myhouse')||count('hut')?'':' (once you build one)'}!</p><p>👶 Put a <b>🧸 Child Bed</b> in your house (🎨 Decorate) and you can have kids!</p><div class="btns"><button class="btn" data-a="close">Yay! 💕</button></div>`)},
   baby({name,bed}){const n=cleanName(name).slice(0,14);if(!S.spouse||!n)return;const kids=S.kids||(S.kids=[]);if(kids.some(k=>k.bed===bed||k.name===n)||!S.home.items.some(f=>f.id===bed&&f.k==='childbed'))return;
     const sp=S.villagers.find(v=>v.name===S.spouse)||PLAYER_LOOK,pick=a=>a[Math.random()*a.length|0];
     kids.push({name:n,bed,look:{shirt:pick(['#ff6b8b','#ffd23f','#5fd6e0','#9b59b6','#7cc35d','#ff8c42']),skin:pick([sp.skin||PLAYER_LOOK.skin,PLAYER_LOOK.skin]),hair:sp.hair||'#5a3a20'}});dirty();
