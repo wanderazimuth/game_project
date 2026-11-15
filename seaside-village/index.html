@@ -150,6 +150,7 @@ const BUILD={
   school:{n:'School',cost:700,w:2,h:2,tall:24,one:1,d:'Villagers go to class in the morning — take a quiz to earn ⭐ gold stars for prizes!'},
   library:{n:'Library',cost:600,w:2,h:2,tall:10,one:1,d:'Borrow books full of island secrets — return them for a reward'},
   cinema:{n:'Movie Theater',cost:800,w:2,h:2,tall:26,one:1,d:'Pick a movie — every evening villagers come to watch, and buy tickets!'},
+  fireworks:{n:'Fireworks Launcher',cost:350,w:2,h:2,tall:20,d:'Tap it for a 🎆 fireworks show (🪙25) — best at night, when the villagers come to watch!'},
   petpark:{n:'Pet Park',cost:600,w:3,h:3,one:1,d:'Your pets come outside to play here in the daytime! Tap it to throw a ball 🎾'},
   dolphinegg:{n:'Dolphin Spawn Egg',cost:150,w:1,h:1,on:'water',flat:1,d:'Put it in the water and a 🐬 dolphin hatches — you get to name it!'},
   seafence:{n:'Underwater Fence',cost:10,w:1,h:1,on:'water',flat:1,d:'A net fence in the water — keeps your dolphins in!'},
@@ -162,7 +163,7 @@ const BUILD={
   hospital:{n:'Hospital',cost:300,w:2,h:2,d:'Sells 🩹 band-aids for hurt villagers'},
   lighthouse:{n:'Lighthouse',cost:2500,w:2,h:2,tall:80,d:'Shows the whole island — go inside and decorate it!'},
 };
-const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','drawbridge','wood','hut','fisherhut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','guesthut','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','mailbox','museum','school','library','observatory','moaegg','terroregg','dolphinegg','turtleegg','seafence','petpark','zoo','exhibit','cinema','kitchen','hospital','track','station','balloon','lighthouse'];
+const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','drawbridge','wood','hut','fisherhut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','guesthut','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','mailbox','museum','school','library','observatory','moaegg','terroregg','dolphinegg','turtleegg','seafence','petpark','zoo','exhibit','cinema','kitchen','hospital','track','station','balloon','fireworks','lighthouse'];
 let guestMode=false,guestSel='carrot'; // guestMode: you're on a friend's island
 let visit=null,hostPos=null; // visit: the villager house you're in (null: Your House)
 let fly=null; // flying the hot air balloon
@@ -665,6 +666,7 @@ function useObj(o,act){
     case'observatory':obsModal();break;
     case'zoo':zooModal();break;
     case'petpark':parkFetch(o);break;
+    case'fireworks':launchShow(o);break;
     case'cinema':cinemaModal();break;
     case'exhibit':exhibitModal(o);break;
     case'museum':enterHouse(o.id);break;
@@ -1380,6 +1382,60 @@ function parkFetch(o){
   A.ball={x0:X+48,y0:Y+60,x:X+18+Math.random()*60,y:Y+30+Math.random()*50,t:0};
   for(const q of A.list){q.tx=A.ball.x;q.ty=A.ball.y;q.wt=4}
   floatAt(X+48,Y-10,'🎾 Fetch!');}
+// ── Fireworks Launcher: rockets zoom up and burst into colors; at night the villagers come to watch ──
+let fwShow=null,fwRockets=[],fwSp=[],fwBursts=[];
+const FW_COLS=['#ff4f6a','#ffd23f','#5fd0ff','#7cff7a','#c58bff','#ff9a3c','#ffffff','#ff7fd0'];
+const FW_LINES=['Ooooh! 🎆','Aaaah! ✨','So pretty! 🎇','WOW! Look at that one!','A heart! 💖','Best night ever! 🎆','Boom! Hehe 🎉'];
+function launchShow(o){
+  if(fwShow){toast('🎆 The show is already going — look up!');return}
+  if(S.coins<25){toast('🎆 A fireworks show costs 🪙25');return}
+  doAct('fireworks',{});const X=(o.x+1)*T,Y=o.y*T+18,dark=nightness()>.3;
+  fwShow={x:X,y:Y,left:dark?16:10,next:.3,dark,fans:[]};floatAt(X,Y-30,'-🪙25');
+  if(dark){for(const v of villagers){if(v.asleep||v.inHosp||v.atMovie||v.carried||isGuest(v.v.name))continue;const t=tileOf(v);
+      if(Math.hypot(t.x-o.x,t.y-o.y)>28)continue;
+      const r=findPath(t.x,t.y,(x,y)=>y>=o.y+2&&y<=o.y+4&&x>=o.x-2&&x<=o.x+3,null);if(!r||r.path.length>40)continue;
+      v.path=r.path;v.fwGo=1;v.say='Fireworks! 🎆 Let\'s go watch!';v.talkT=2.5;fwShow.fans.push(v)}
+    toast(fwShow.fans.length?`🎆 Fireworks! ${fwShow.fans.length} villager${fwShow.fans.length>1?'s are':' is'} coming to watch!`:'🎆 Fireworks! Pop pop BOOM!',2800)}
+  else toast('🎆 Pop pop! (Fireworks look even better at night — and the villagers come to watch!)',3000);
+}
+function fwBurst(r){
+  const shape=['ring','ring','heart','star','willow','double'][Math.random()*6|0],c2=FW_COLS[Math.random()*FW_COLS.length|0],N=shape==='willow'?50:44;
+  fwBursts.push({x:r.x,y:r.y,t:0});
+  for(let k=0;k<N;k++){const a=k/N*Math.PI*2;let vx,vy;
+    if(shape==='heart'){const hx=16*Math.sin(a)**3,hy=-(13*Math.cos(a)-5*Math.cos(2*a)-2*Math.cos(3*a)-Math.cos(4*a));vx=hx*7;vy=hy*7}
+    else if(shape==='star'){const m=k%2?.55:1;vx=Math.cos(a)*120*m;vy=Math.sin(a)*120*m}
+    else{const sp=shape==='willow'?70+Math.random()*30:110+Math.random()*20;vx=Math.cos(a)*sp;vy=Math.sin(a)*sp}
+    fwSp.push({x:r.x,y:r.y,vx,vy,t:0,life:shape==='willow'?2:1.4,c:shape==='double'&&k%2?c2:r.c,g:shape==='willow'?70:40})}
+  for(const v of villagers)if(v.fwGo===0&&fwShow&&fwShow.fans.includes(v)&&Math.random()<.35){v.say=FW_LINES[Math.random()*FW_LINES.length|0];v.talkT=1.6}
+}
+function fwUpdate(dt){
+  const F=fwShow;
+  if(F&&F.left>0&&(F.next-=dt)<=0){F.left--;F.next=.4+Math.random()*.55;
+    fwRockets.push({x:F.x-14+Math.random()*28,y:F.y-20,vx:(Math.random()-.5)*70,vy:-(200+Math.random()*60),fuse:.7+Math.random()*.35,c:FW_COLS[Math.random()*FW_COLS.length|0]})}
+  for(const r of fwRockets){r.x+=r.vx*dt;r.y+=r.vy*dt;r.vy+=55*dt;r.fuse-=dt;if(Math.random()<.7)fwSp.push({x:r.x,y:r.y+4,vx:(Math.random()-.5)*15,vy:20,t:0,life:.35,c:'#ffe9a0',g:0});if(r.fuse<=0)fwBurst(r)}
+  fwRockets=fwRockets.filter(r=>r.fuse>0);
+  for(const p of fwSp){p.t+=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;const d=Math.pow(.25,dt);p.vx*=d;p.vy=p.vy*d+p.g*dt}fwSp=fwSp.filter(p=>p.t<p.life);
+  for(const b of fwBursts)b.t+=dt;fwBursts=fwBursts.filter(b=>b.t<.7);
+  if(F&&!F.left&&!fwRockets.length&&!fwSp.length){fwShow=null;
+    const n=F.fans.filter(v=>Math.hypot(v.x-F.x,v.y-F.y)<T*8).length;
+    for(const v of F.fans){v.say=['👏 Hooray!','👏 Encore! Encore!','That was AMAZING! 🎆'][Math.random()*3|0];v.talkT=2.5;v.wait=1.5}
+    if(n){doAct('giveBack',{coins:n*10});floatAt(F.x,F.y-40,`+🪙${n*10}`);toast(`👏 The villagers loved the show and gave you 🪙${n*10} in tips!`,2800)}}
+}
+function drawFireworks(c){
+  if(!fwRockets.length&&!fwSp.length)return;c.save();c.globalCompositeOperation='lighter';
+  for(const r of fwRockets){ell(c,r.x,r.y,2.4,2.4,'#fff6c8');ell(c,r.x,r.y,5,5,'rgba(255,220,140,.35)')}
+  for(const p of fwSp){const a=Math.max(0,1-p.t/p.life);c.globalAlpha=a;ell(c,p.x,p.y,2.2,2.2,p.c);c.globalAlpha=a*.35;ell(c,p.x,p.y,5,5,p.c)}
+  c.restore();
+}
+function drawLauncher(c,o,X,Y,t,icon){
+  const w=2*T;ell(c,X+w/2,Y+w-4,w/2,7,'rgba(0,0,0,.18)');
+  rect(c,X+6,Y+30,w-12,28,'#8a5a2c',4);c.fillStyle='rgba(0,0,0,.15)';c.fillRect(X+6,Y+42,w-12,2);
+  c.fillStyle='#ffd23f';c.font='bold 11px sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText('★ BOOM ★',X+w/2,Y+50);
+  for(const[dx,a,col]of[[16,-.25,'#e8404a'],[32,0,'#3d7fc4'],[48,.25,'#4fae3f']]){c.save();c.translate(X+dx,Y+32);c.rotate(a);rect(c,-5,-26,10,26,col,2);rect(c,-5,-26,10,4,'#333',1);
+    c.fillStyle='rgba(255,255,255,.5)';c.fillRect(-3,-20,2,16);c.restore()}
+  if(!icon&&!fwShow){const g=(Math.sin(t*4)+1)/2;c.strokeStyle='#5a3a1a';c.lineWidth=1.5;c.beginPath();c.moveTo(X+w-12,Y+40);c.quadraticCurveTo(X+w,Y+36,X+w-2,Y+28);c.stroke();
+    ell(c,X+w-2,Y+27,2+g*1.5,2+g*1.5,'#ffd23f');bubble(c,X+w/2,Y-12+g*3,'🎆')}
+}
 function startPark(v){
   if(!parkPets().length)return false;const o=S.objs.find(o=>o.t==='petpark');const t=tileOf(v);
   const r=findPath(t.x,t.y,(x,y)=>y===o.y+3&&x>=o.x&&x<=o.x+2,null);if(!r||r.path.length>30)return false;
@@ -2441,6 +2497,7 @@ const ACT={
   buyBandaid({n}){n=Math.max(1,Math.min(10,n|0));if(!count('hospital')||S.coins<BANDAID*n)return;S.coins-=BANDAID*n;give('bandaid',n);dirty();refreshTray()},
   place({t,x,y}){if(BUILD[t])doPlace(t,x,y)},
   steal({k,n,coins}){if(coins){S.coins-=Math.min(coins,S.coins)}else if(S.inv[k]){S.inv[k]-=Math.min(n,S.inv[k]);if(!S.inv[k])delete S.inv[k];refreshTray()}dirty()},
+  fireworks(){if(S.coins<25)return;S.coins-=25;dirty()},
   giveBack({k,n,coins}){if(coins)S.coins+=coins;else if(ITEMS[k])give(k,n);dirty()},
   lavaPick(){give('lavarock',1);tally('collect:lavarock')},
   trade({from,to,coins}){if(!S.inv[from])return;S.inv[from]--;if(!S.inv[from])delete S.inv[from];if(to)give(to,1);if(coins)S.coins+=coins;refreshTray();dirty()},
@@ -2724,6 +2781,7 @@ function update(dt){
     v.homing=0;
     if(followPath(v,T*1.8,dt))continue;v.walk=0;
     if(v.tour&&zooTour(v,dt))continue;
+    if(v.fwGo){v.fwGo=0;v.dir='up';v.say=FW_LINES[Math.random()*FW_LINES.length|0];v.talkT=3;v.wait=fwShow?14:3;continue}
     if(v.parkGo){v.parkGo=0;v.dir='up';v.say=parkPets().length?PARK_LINES[Math.random()*PARK_LINES.length|0].replace('{n}',parkPets()[Math.random()*parkPets().length|0].name):'Aww, no pets out today…';v.talkT=3;v.wait=3;continue}
     if(movieGo(v))continue;
     const party=festNow(),fs=party?festSpot():classNow()?schoolSpot():null;
@@ -2752,6 +2810,7 @@ function update(dt){
   }
   for(const f of floats)f.t+=dt;floats=floats.filter(f=>f.t<1.6);sleepFade=Math.max(0,sleepFade-dt);
   for(const p of confetti){p.t+=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=300*dt}confetti=confetti.filter(p=>p.t<2.5);
+  fwUpdate(dt);
   // Camera
   if(inside){cam.x=RW*T/2;cam.y=(RH-2)*T/2+31/zoom()}
   else if(fly){cam.x+=(fly.x-cam.x)*Math.min(1,dt*4);cam.y+=(fly.y-60-cam.y)*Math.min(1,dt*4)}
@@ -3040,6 +3099,7 @@ function drawObjIn(c,o,t,icon){
     rect(c,X+25,Y+38,14,24,'#3a1a10',2);rect(c,X+31.3,Y+38,1.4,24,'#ffd23f');
     if(on){const g=(Math.sin(t*3)+1)/2;bubble(c,X+32,Y-26+g*3,M.sc[Math.floor(t/2.2)%M.sc.length][0].split(' ')[0])}break}
   case'petpark':drawPetPark(c,o,X,Y,t,icon);break;
+  case'fireworks':drawLauncher(c,o,X,Y,t,icon);break;
   case'dolphinegg':{const ex=X+16,ey=Y+18,bob=icon?0:Math.sin(t*2)*1.5;ell(c,ex,ey+9,11,3,'rgba(255,255,255,.35)');ell(c,ex,ey+bob,9,12,'#5fb8ff');ell(c,ex-3,ey-5+bob,3,4,'rgba(255,255,255,.4)');for(const[a,b]of[[-4,2],[3,-3],[4,5],[-2,8],[0,-8]])ell(c,ex+a,ey+b+bob,1.6,1.6,'#e8f6ff');break}
   case'seafence':{const has=(dx,dy)=>{if(icon)return dx!==0&&!dy;const n=inMap(o.x+dx,o.y+dy)&&objAt((o.y+dy)*W+o.x+dx);return n&&n.t==='seafence'},wv=icon?0:Math.sin(t*2+o.x+o.y)*1;
     c.strokeStyle='rgba(240,240,220,.75)';c.lineWidth=1;const net=(x1,y1,x2,y2)=>{c.beginPath();for(let k=0;k<=4;k++){const f=k/4;c.moveTo(x1+(x2-x1)*f,y1+(y2-y1)*f);c.lineTo(x1+(x2-x1)*f,y1+(y2-y1)*f+12)}c.moveTo(x1,y1+6);c.lineTo(x2,y2+6);c.stroke();rect(c,Math.min(x1,x2),Math.min(y1,y2)-1,Math.abs(x2-x1)+1,Math.abs(y2-y1)+2.5,'#f4d35e',1)};
@@ -3409,13 +3469,14 @@ function draw(t){
     const light=(wx,wy,r)=>{const sx=(cssW/2+(wx-cam.x)*z)*dpr,sy=(cssH/2+(wy-cam.y)*z)*dpr,R=r*z*dpr;
       if(sx<-R||sy<-R||sx>darkC.width+R||sy>darkC.height+R)return;
       const g=darkX.createRadialGradient(sx,sy,0,sx,sy,R);g.addColorStop(0,'rgba(0,0,0,1)');g.addColorStop(1,'rgba(0,0,0,0)');darkX.fillStyle=g;darkX.fillRect(sx-R,sy-R,R*2,R*2)};
-    light(player.x,player.y-14,70);if(fly)light(fly.x,fly.y-70,120);if(VOLCANO)light((VOLCANO.x+.5)*T,(VOLCANO.y-2.5)*T,150);for(const p of LANTERNS)if(S.lit&&S.lit.includes(p.i))light(p.x*T+16,p.y*T,95);if(friend&&!friend.in)light(friend.x,friend.y-14,70);
+    light(player.x,player.y-14,70);if(fly)light(fly.x,fly.y-70,120);if(VOLCANO)light((VOLCANO.x+.5)*T,(VOLCANO.y-2.5)*T,150);for(const p of LANTERNS)if(S.lit&&S.lit.includes(p.i))light(p.x*T+16,p.y*T,95);for(const b of fwBursts)light(b.x,b.y,170*(1-b.t/.7));if(friend&&!friend.in)light(friend.x,friend.y-14,70);
     for(const o of S.objs){if(o.t==='lamp')light(o.x*T+16,o.y*T-12,110);else if(o.t==='house'||o.t==='cabin'||o.t==='hut')light(o.x*T+32,o.y*T+42,55);else if(o.t==='myhouse')light(o.x*T+48,o.y*T+40,70);else if(o.t==='campfire')light(o.x*T+16,o.y*T+16,95);else if(o.t==='lighthouse')light(o.x*T+32,o.y*T-58,130)}
     darkX.globalCompositeOperation='source-over';
     ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(darkC,0,0);
     ctx.setTransform(s,0,0,s,(cssW/2-cam.x*z)*dpr,(cssH/2-cam.y*z)*dpr);
     for(const o of S.objs)if(o.t==='lighthouse'){const lx=o.x*T+32,ly=o.y*T-59,a=t*.9;ctx.fillStyle=`rgba(255,240,160,${.22*n})`;ctx.beginPath();ctx.moveTo(lx,ly);ctx.arc(lx,ly,520,a-.12,a+.12);ctx.closePath();ctx.fill()}
   }
+  drawFireworks(ctx);
   if(fly)drawBalloon(ctx,t);
   // Floating "+1" text and confetti
   ctx.textAlign='center';ctx.textBaseline='middle';
