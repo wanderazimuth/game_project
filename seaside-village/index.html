@@ -917,7 +917,7 @@ const preyNear=cr=>villagers.find(v=>preyOk(v)&&Math.hypot(v.x-cr.x,v.y-cr.y)<T*
 const BANDAID=5;
 function hospitalModal(){
   const hurt=S.villagers.filter(v=>v.hurt).map(v=>v.name.replace(/[<>&"]/g,'')),have=S.inv.bandaid||0;
-  let h=`<h2>🏥 ${bname('hospital')}</h2><p>“Hello! Here are some 🩹 band-aids to patch people up. Only 🪙${BANDAID} each!”</p>`;
+  let h=`<h2>🏥 ${bname('hospital')}</h2><p>“Hello! Here are some 🩹 band-aids to patch people up. Only 🪙${BANDAID} each!”</p><p>Buy them, then give them to a 👩‍⚕️ doctor — the doctors have <b>${S.docAid||0}</b> 🩹.</p>`;
   h+=`<p>${hurt.length?`🤕 <b>${hurt.join(', ')}</b> ${hurt.length>1?'need':'needs'} band-aids.`:'Nobody is hurt right now. 😊'} You have <b>${have}</b> 🩹.</p>`;
   h+=`<div class="btns"><button class="btn" data-a="buy" data-v="1" ${S.coins<BANDAID?'disabled':''}>Buy 1 🩹 — 🪙${BANDAID}</button><button class="btn" data-a="buy" data-v="3" ${S.coins<BANDAID*3?'disabled':''}>Buy 3 🩹 — 🪙${BANDAID*3}</button><button class="btn gray" data-a="list">📋 Patients</button><button class="btn gray" data-a="close">Bye!</button></div>`;
   openModal(h,{list:patientsModal,buy:n=>{doAct('buyBandaid',{n:+n});setTimeout(hospitalModal,guestMode?300:0)}});
@@ -1314,7 +1314,7 @@ function patientsModal(){
   const esc=s=>s.replace(/[<>&"]/g,''),hurt=S.villagers.filter(v=>v.hurt),have=S.inv.bandaid||0;
   let h='<h2>📋 Patients</h2>';
   if(!hurt.length)h+='<p>Nobody is hurt — everyone is happy and healthy! 😊</p>';
-  else h+=`<p>You have <b>${have}</b> 🩹. Walk up to a patient in bed and tap them to give band-aids.</p>`;
+  else h+=`<p>You have <b>${have}</b> 🩹 and the doctors have <b>${S.docAid||0}</b> 🩹. Give band-aids to a 👩‍⚕️ doctor and they'll patch everyone up!</p>`;
   for(const v of hurt){const n=v.req&&v.req.hurt?v.req.n:1,by=HUNT[v.req&&v.req.by]||HUNT.terror,a=amb&&amb.vw.v===v;
     const where=v.hosp?'🛏️ In a hospital bed':a?(amb.back?'🚑 In the ambulance':'🚑 The ambulance is on its way'):count('hospital')?'🤕 Waiting to go to the hospital':'🤕 Hurt — build a 🏥 Hospital';
     h+=`<div class="irow"><span class="ie" style="width:26px;height:26px;border-radius:50%;background:${v.shirt};display:inline-block"></span><span class="in">${esc(v.name)}<br><span class="ip">${where} · ${by.verb} by a ${by.name}</span></span><span class="ip" style="white-space:nowrap">needs ${n} 🩹</span></div>`}
@@ -1765,6 +1765,9 @@ function makeRequest(){
 function talk(vw){
   const v=vw.v;vw.wait=Math.max(vw.wait,2);vw.dir='down';
   if(isBday(v)&&!(S.bdayGift&&S.bdayGift[v.name]===S.day)&&!v.hurt){bdayModal(vw);return}
+  if(v.req&&v.req.hurt&&count('hospital')){const r=v.req,by=HUNT[r.by]||HUNT.terror;
+    openModal(`<h2>${v.name}</h2><p>“Ouch! A ${by.name} ${by.verb} me! 🤕 The doctors need <b>${r.n} 🩹 band-aid${r.n>1?'s':''}</b> to patch me up.”</p><p>Give band-aids to a 👩‍⚕️ <b>doctor</b> at the hospital — they'll do the rest! (Doctors have <b>${S.docAid||0}</b> 🩹)</p>
+      <div class="btns"><button class="btn" data-a="close">Okay!</button></div>`);return}
   if(v.req){const r=v.req,have=S.inv[r.k]||0;
     openModal(`<h2>${v.name}</h2><p>“${r.hurt?`Ouch! A ${(HUNT[r.by]||HUNT.terror).name} ${(HUNT[r.by]||HUNT.terror).verb} me! 🤕 `:''}Could you bring me <b>${r.n} ${ITEMS[r.k].e} ${ITEMS[r.k].n}</b>? I'll give you <b>🪙${r.reward}</b>!”</p><p style="font-size:13px">You have ${have}.</p>
       <div class="btns"><button class="btn" data-a="give" ${have<r.n?'disabled':''}>Give ${r.n} ${ITEMS[r.k].e}</button><button class="btn gray" data-a="close">Okay!</button></div>`,
@@ -2029,7 +2032,7 @@ const ACT={
   fix({stage}){const st=SHIP_STAGES[S.ship];if(!st||stage!==S.ship)return;if(S.coins<st.cost){toast(`Need 🪙${st.cost}`);return}
     S.coins-=st.cost;S.ship++;dirty();shipConfetti();netSend({t:'confetti'});
     const msg=S.ship>=3?'⛵ The ship is fixed! Hooray!':`🔧 ${st.n} — done!`;toast(msg,3000);if(actor){actor=null;toast(msg,3000)}},
-  give({name}){const v=S.villagers.find(v=>v.name===name),r=v&&v.req;if(!r)return;
+  give({name}){const v=S.villagers.find(v=>v.name===name),r=v&&v.req;if(!r)return;if(r.hurt&&count('hospital')){toast('🩹 Give the band-aids to a doctor at the hospital!');return}
     if((S.inv[r.k]||0)<r.n){toast(`You need ${r.n} ${ITEMS[r.k].e}`);return}
     S.inv[r.k]-=r.n;if(!S.inv[r.k])delete S.inv[r.k];S.coins+=r.reward;S.stats.helped++;tally('help');v.req=null;if(r.hurt)v.hurt=0;dirty();refreshTray();
     const vw=villagers.find(w=>w.v===v);if(vw)floatAt(vw.x,vw.y-44,`+🪙${r.reward}`);toast(r.hurt?`🩹 ${v.name}: “All better! Thank you so much!”`:`💛 ${v.name}: “Thank you so much!”`)},
@@ -2068,6 +2071,10 @@ const ACT={
   smoke(){const n=S.inv.fish||0;if(!n)return;delete S.inv.fish;give('smokedfish',n);tally('smoke');dirty();refreshTray()},
   present({id}){const o=byId(id);if(!o||o.t!=='house'||presented(id))return;const p=S.presents&&S.presents.day===S.day?S.presents:(S.presents={day:S.day,ids:[]});p.ids.push(id);
     const v=S.villagers.find(v=>v.house===id);S.coins+=15;tally('present');dirty();refreshTray();toast(`🎁 ${v?v.name:'Someone'} loved the present! They tossed up 🪙15 to say thank you`,2800)},
+  docGive({n}){n=Math.max(1,Math.min(S.inv.bandaid||0,n|0));if(!count('hospital')||!S.inv.bandaid)return;S.inv.bandaid-=n;if(!S.inv.bandaid)delete S.inv.bandaid;S.docAid=(S.docAid||0)+n;dirty();refreshTray();toast(`🩹 You gave the doctors ${n} band-aid${n>1?'s':''}. They have ${S.docAid} now!`)},
+  docHeal({name,doc}){const v=S.villagers.find(v=>v.name===name),r=v&&v.req;if(!v||!v.hurt||!v.hosp||!r||!r.hurt||(S.docAid||0)<r.n)return;
+    S.docAid-=r.n;v.hurt=0;v.req=null;S.coins+=r.reward;S.stats.helped++;tally('help');dirty();refreshTray();
+    toast(`🩹 ${doc||'The doctor'} patched up ${v.name}! “All better — thank you!” +🪙${r.reward}`,2800)},
   buyBandaid({n}){n=Math.max(1,Math.min(10,n|0));if(!count('hospital')||S.coins<BANDAID*n)return;S.coins-=BANDAID*n;give('bandaid',n);dirty();refreshTray()},
   place({t,x,y}){if(BUILD[t])doPlace(t,x,y)},
   steal({k,n,coins}){if(coins){S.coins-=Math.min(coins,S.coins)}else if(S.inv[k]){S.inv[k]-=Math.min(n,S.inv[k]);if(!S.inv[k])delete S.inv[k];refreshTray()}dirty()},
@@ -2301,7 +2308,7 @@ function update(dt){
   const pt=tileOf(player),pk=pt.y*W+pt.x;
   if(inside){if(pt.x===DOOR_X&&pt.y===RH&&!player.path.length)exitHouse();else petsWander(dt)}
   else if(pk!==lastTile){lastTile=pk;reveal(pt.x,pt.y,4.6)}
-  trainUpdate(dt);ambUpdate(dt);festUpdate(dt);weatherUpdate(dt);flamesUpdate(dt);if(player.frozen>0)player.frozen-=dt;
+  docWork(dt);trainUpdate(dt);ambUpdate(dt);festUpdate(dt);weatherUpdate(dt);flamesUpdate(dt);if(player.frozen>0)player.frozen-=dt;
   // Villagers wander near home
   for(const v of villagers){
     v.talkT=Math.max(0,v.talkT-dt);
@@ -3174,18 +3181,39 @@ const DOC_LINES=['Eat your veggies and stay healthy! 🥕','Watch out for terror
 function staffLine(st){
   const pts=patients(byId(visit)).map(([vw])=>vw.v.name);
   if(st.role==='nurse')return pts.length?'Band-aids are 🪙'+BANDAID+' each!':'Welcome to the hospital! 😊';
-  if(pts.length)return Math.random()<.5?`How are you feeling, ${pts[Math.random()*pts.length|0]}?`:`${pts.join(' and ')} just need${pts.length>1?'':'s'} some 🩹 band-aids!`;
+  if(pts.length)return!(S.docAid>0)?'I need 🩹 band-aids to help my patients!':Math.random()<.5?`How are you feeling, ${pts[Math.random()*pts.length|0]}?`:`${pts.join(' and ')} just need${pts.length>1?'':'s'} some 🩹 band-aids!`;
   return Math.random()<.4?'Nobody\'s sick today — hooray! 🎉':DOC_LINES[Math.random()*DOC_LINES.length|0];
+}
+let docT=8;
+function docWork(dt){ // doctors patch people up even when you're not in the hospital to watch
+  if(guestMode||!(S.docAid>0)||(docT-=dt)>0)return;docT=10;
+  const v=S.villagers.find(v=>v.hurt&&v.hosp&&v.req&&v.req.hurt&&v.req.n<=S.docAid&&!(inHospital()&&visit===v.hosp));
+  if(v)doAct('docHeal',{name:v.name,doc:STAFF[Math.random()*2|0].name});
 }
 function staffUpdate(dt){
   for(const st of staff()){st.talkT=Math.max(0,st.talkT-dt);
-    if(st.role==='doc')wanderIn(st.q,T*1.3,dt);
+    if(st.role==='doc'){
+      if(st.job){const pq=patientAt.get(st.job),v=S.villagers.find(v=>v.name===st.job);
+        if(!pq||!v||!v.hurt){st.job=null}
+        else if(followPath(st.q,T*1.6,dt)){}
+        else if(st.heal===undefined){st.heal=1.4;st.q.walk=0;st.say='Here you go! 🩹';st.talkT=2}
+        else if((st.heal-=dt)<=0){doAct('docHeal',{name:st.job,doc:st.name});st.job=null;st.heal=undefined;st.q.wait=2}
+        continue}
+      if((S.docAid||0)>0&&!guestMode){const taken=staff().map(o=>o.job);
+        const p=patients(byId(visit)).find(([vw,q])=>q.bed&&!taken.includes(vw.v.name)&&vw.v.req&&vw.v.req.hurt&&vw.v.req.n<=S.docAid);
+        if(p){const b=p[1].bed,t=tileOf(st.q),r=findPath(t.x,t.y,(x,y)=>x>=b.x-1&&x<=b.x+1&&y>=b.y&&y<=b.y+2&&!(x===b.x&&y<b.y+2),null,inWalkable);
+          if(r){st.job=p[0].v.name;st.q.path=r.path;st.say=`Coming, ${p[0].v.name}! 🩹`;st.talkT=2;continue}}}
+      wanderIn(st.q,T*1.3,dt)}
     if((st.chat-=dt)<=0){st.chat=7+Math.random()*7;st.say=staffLine(st);st.talkT=3}}
 }
 function talkStaff(st){
   st.q.path=[];st.q.wait=4;st.q.dir='down';
   if(st.role==='nurse'){st.say='Hello! Need some band-aids? 🩹';st.talkT=2.5;hospitalModal();return}
-  st.say=staffLine(st);st.talkT=3.5;st.chat=8;
+  const pts=patients(byId(visit)),need=pts.reduce((n,[vw])=>n+(vw.v.req&&vw.v.req.hurt?vw.v.req.n:0),0),have=S.inv.bandaid||0;
+  st.say=pts.length?'Band-aids, please! 🩹':staffLine(st);st.talkT=3;st.chat=8;
+  openModal(`<h2>👩‍⚕️ ${st.name}</h2><p>“${pts.length?`I have <b>${S.docAid||0}</b> 🩹 and my patients need <b>${need}</b>. Can you give me some band-aids?`:`Nobody's hurt right now! But I'll keep band-aids ready, just in case. I have <b>${S.docAid||0}</b> 🩹.`}”</p><p style="font-size:13px">You have ${have} 🩹.${have?'':' The nurse sells them!'}</p>
+    <div class="btns"><button class="btn" data-a="g" data-v="1" ${have?'':'disabled'}>Give 1 🩹</button><button class="btn" data-a="g" data-v="${have}" ${have>1?'':'disabled'}>Give all ${have>1?have:''} 🩹</button><button class="btn gray" data-a="close">Bye!</button></div>`,
+    {g:n=>{closeModal();doAct('docGive',{n:+n});st.say='Thank you! I\'ll patch them up! 🩹';st.talkT=3}});
 }
 // a villager lying in a hospital bed
 function drawPatient(c,vw,q,t){
