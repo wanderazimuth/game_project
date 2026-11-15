@@ -1502,17 +1502,19 @@ const PARROT_SAYS=['Squawk! Pretty bird!','Squawk! Three keys open the temple!',
 // ── Lagoon Island: hot springs and the big waterslide ──
 function slideRide(){
   if(!SLIDE_AT||player.ride||inside)return;const L=LAGOON,top={x:(SLIDE_AT.x+1)*T,y:(SLIDE_AT.y+1)*T};
-  const sx=top.x+(L.cx*T+16-top.x)*.3,sy=top.y+(L.cy*T+16-top.y)*.3+T*2;
-  player.path=[];player.target=null;player.ride={s:0,top,sp:{x:sx,y:sy}};floatAt(top.x,top.y-50,'Wheee!');
+  const E=riverPts().pop(),sx=E[0]+(L.cx*T+16-E[0])*.25,sy=E[1]+T*1.5+(L.cy*T+16-E[1])*.15;
+  player.path=[];player.target=null;player.ride={s:0,top,sp:{x:sx,y:sy}};floatAt(top.x,top.y-80,'Wheee!');
 }
+// the river's path down the mountain (world coordinates), top to bottom
+function riverPts(){const X=SLIDE_AT.x*T,Y=SLIDE_AT.y*T,m=X+T;return[[m-2,Y-58],[m+16,Y-42],[m-12,Y-22],[m+14,Y-2],[m-8,Y+18],[m+4,Y+2*T+6]]}
 function rideStep(dt){
-  const R=player.ride;R.s+=dt/2.6;player.walk+=dt*6;
-  if(R.s<.65){const a=R.s/.65,ang=a*Math.PI*4;player.x=R.top.x+Math.cos(ang)*22;player.y=R.top.y+T*.6+Math.sin(ang)*10-(1-a)*40;player.dir=Math.cos(ang+Math.PI/2)<0?'left':'right'}
-  else if(R.s<1){const a=(R.s-.65)/.35,bx=R.top.x,by=R.top.y+T*.6;player.x=bx+(R.sp.x-bx)*a;player.y=by+(R.sp.y-by)*a-Math.sin(a*Math.PI)*24;player.dir='down'}
+  const R=player.ride,P=riverPts();R.s+=dt/2.8;player.walk+=dt*6;
+  if(R.s<.75){const f=R.s/.75*(P.length-1),i=Math.min(P.length-2,Math.floor(f)),a=f-i,[x0,y0]=P[i],[x1,y1]=P[i+1];player.x=x0+(x1-x0)*a;player.y=y0+(y1-y0)*a+6;player.dir=x1<x0?'left':'right'}
+  else if(R.s<1){const a=(R.s-.75)/.25,[bx,by]=P[P.length-1];player.x=bx+(R.sp.x-bx)*a;player.y=by+(R.sp.y-by)*a-Math.sin(a*Math.PI)*18;player.dir='down'}
   else{player.ride=null;for(let k=0;k<40;k++)confetti.push({x:R.sp.x,y:R.sp.y,vx:(Math.random()-.5)*200,vy:-80-Math.random()*200,c:['#bff3ff','#5fd6e0','#fff'][k%3],t:0});
     floatAt(R.sp.x,R.sp.y-30,'SPLASH!');doAct('slideFind',{});
     let best=null,bd=1e9;for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(walkable(x,y)){const d=Math.hypot(x*T+16-R.sp.x,y*T+16-R.sp.y);if(d<bd){bd=d;best={x,y}}}
-    if(best){player.x=best.x*T+16;player.y=best.y*T+20;unstick(player)}if(!(S.slides>0)){S.slides=1;toast('💦 SPLASH! You swam to shore. Ride the slide again!',2600)}}
+    if(best){player.x=best.x*T+16;player.y=best.y*T+20;unstick(player)}if(!(S.slides>0)){S.slides=1;toast('💦 SPLASH! You swam to shore. Ride the river again!',2600)}}
 }
 function drawSpring(c,p,t){
   const X=p.x*T+16,Y=p.y*T+18,soaked=S.soaked&&S.soaked.day===S.day&&S.soaked.k.includes(p.i);
@@ -1521,15 +1523,21 @@ function drawSpring(c,p,t){
   c.globalAlpha=.55;for(let k=0;k<3;k++){const ph=(t*.6+k/3)%1;ell(c,X-6+k*6+Math.sin(t*2+k)*2,Y-6-ph*26,4+ph*5,3+ph*4,'#ffffff')}c.globalAlpha=1;
   if(!soaked){const g=(Math.sin(t*3+p.x)+1)/2;bubble(c,X,Y-36+g*3,'♨️')}
 }
-function drawSlide(c,t){
-  const X=SLIDE_AT.x*T,Y=SLIDE_AT.y*T,w=2*T;
-  ell(c,X+w/2,Y+w,w/2+4,6,'rgba(0,0,0,.18)');
-  for(const lx of[X+8,X+w-12])rect(c,lx,Y-34,4,w+30,'#c98a4a',1);rect(c,X+6,Y-38,w-12,6,'#a86a32',2);
-  rect(c,X+10,Y-48,w-20,12,'#ff6b8b',4);poly(c,'#ffd23f',X+8,Y-48,X+w-8,Y-48,X+w/2,Y-62);
-  c.lineCap='round';const tube=()=>{c.beginPath();c.moveTo(X+w/2,Y-34);c.bezierCurveTo(X+w+18,Y-24,X+w+18,Y+4,X+w/2,Y+8);c.bezierCurveTo(X-18,Y+12,X-14,Y+40,X+w/2,Y+w+10);c.stroke()};
-  c.strokeStyle='#2a8ad6';c.lineWidth=13;tube();c.strokeStyle='#4fc3f7';c.lineWidth=9;tube();
-  c.strokeStyle='rgba(255,255,255,.7)';c.lineWidth=2;c.setLineDash([4,6]);c.lineDashOffset=-t*30;tube();c.setLineDash([]);
-  if(!player.ride){const g=(Math.sin(t*3)+1)/2;bubble(c,X+w/2,Y-70+g*3,'💦')}
+function drawSlide(c,t){ // a little mountain with a river rushing down it into the lagoon
+  const X=SLIDE_AT.x*T,Y=SLIDE_AT.y*T,w=2*T,m=X+T,P=riverPts();
+  ell(c,m,Y+w,w/2+16,8,'rgba(0,0,0,.18)');
+  poly(c,'#8d8a82',X-18,Y+w,m-4,Y-70,m+6,Y-70,X+w+18,Y+w);poly(c,'#74716a',m+6,Y-70,X+w+18,Y+w,m+18,Y+w);
+  poly(c,'#9f9c93',X-18,Y+w,m-4,Y-70,m-14,Y-30,X-6,Y+10);
+  for(const[gx,gy,rx,ry]of[[X-6,Y+w-6,12,6],[X+w+6,Y+w-4,12,6],[X+2,Y+18,8,4],[X+w-4,Y+24,9,4],[m+10,Y-40,6,3]])ell(c,gx,gy,rx,ry,'#5fa647');
+  ell(c,m+1,Y-68,10,5,'#f4f6f8');poly(c,'#f4f6f8',m-9,Y-66,m+11,Y-66,m+6,Y-58,m+1,Y-62,m-4,Y-57);
+  for(const[tx,ty]of[[X-4,Y+w-14],[X+w+10,Y+w-12]]){rect(c,tx-1.5,ty,3,8,'#7a4f2a');poly(c,'#2f7d32',tx-7,ty+2,tx+7,ty+2,tx,ty-14)}
+  ell(c,P[0][0],P[0][1],7,3.5,'#4fb3e0');
+  c.lineCap='round';c.lineJoin='round';const river=()=>{c.beginPath();c.moveTo(P[0][0],P[0][1]);for(let k=1;k<P.length;k++){const[x0,y0]=P[k-1],[x1,y1]=P[k];c.quadraticCurveTo(x0,y0,(x0+x1)/2,(y0+y1)/2)}c.lineTo(P[P.length-1][0],P[P.length-1][1]);c.stroke()};
+  c.strokeStyle='#5d5a54';c.lineWidth=12;river();c.strokeStyle='#3fa7dc';c.lineWidth=8;river();c.strokeStyle='#7fd0f2';c.lineWidth=4;river();
+  c.strokeStyle='rgba(255,255,255,.85)';c.lineWidth=1.6;c.setLineDash([3,7]);c.lineDashOffset=-t*40;river();c.setLineDash([]);
+  const[ex,ey]=P[P.length-1];c.globalAlpha=.8;for(let k=0;k<4;k++){const ph=(t*1.5+k/4)%1;ell(c,ex-6+k*4,ey-2-ph*8,2.5-ph,2.5-ph,'#ffffff')}c.globalAlpha=1;
+  for(const[rx,ry]of[[X+4,Y+w-2],[X+w-2,Y+w+2],[m+18,Y-14]])ell(c,rx,ry,4,3,'#6a675f');
+  if(!player.ride){const g=(Math.sin(t*3)+1)/2;bubble(c,m,Y-82+g*3,'💦')}
 }
 function pyramidModal(){
   if(S.pyrOpen){openModal('<h2>🔺 The Great Pyramid</h2><p>The pyramid is quiet now. You already found its treasure — the 🎭 Pharaoh Mask!</p><div class="btns"><button class="btn" data-a="close">OK</button></div>');return}
@@ -3136,7 +3144,7 @@ function draw(t){
   for(const a of animals)list.push([a.y,()=>{drawAnimal(ctx,a,t);if(a.zz)zzz(ctx,a.x,a.y-(a.kind==='cow'?34:24),t)}]);
   for(const cr of critters)if(!cr.hide&&!cr.gone)list.push([cr.y+(cr.kind==='parrot'?40:0),()=>drawCritter(ctx,cr,t)]);
   for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried&&!v.atMovie)list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);const bd=isBday(v.v);if(bd)partyHat(ctx,v.x,v.y-Math.sin(v.walk)*.8,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-(bd?54:40),v.v.req.hurt?'🩹':'❗');else if(bd&&!v.talkT&&!(S.bdayGift&&S.bdayGift[v.v.name]===S.day))bubble(ctx,v.x,v.y-54,'🎂')}]);
-  if(!(train&&train.rider)&&!fly)list.push([player.y,()=>{drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t);if(player.frozen>0){rect(ctx,player.x-13,player.y-44,26,46,'rgba(170,220,255,.55)',5);ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=1.5;ctx.strokeRect(player.x-13,player.y-44,26,46);ctx.fillStyle='rgba(255,255,255,.7)';ctx.fillRect(player.x-9,player.y-40,3,14)}}]);
+  if(!(train&&train.rider)&&!fly)list.push([player.ride?1e9:player.y,()=>{drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t);if(player.frozen>0){rect(ctx,player.x-13,player.y-44,26,46,'rgba(170,220,255,.55)',5);ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=1.5;ctx.strokeRect(player.x-13,player.y-44,26,46);ctx.fillStyle='rgba(255,255,255,.7)';ctx.fillRect(player.x-9,player.y-40,3,14)}}]);
   for(const m of muds)list.push([m.y*T+4,()=>{const X=m.x*T+16,Y=m.y*T+22,a=Math.min(1,(10-m.t)/2);ctx.globalAlpha=a;ell(ctx,X,Y,13,6,'#5a4a2a');ell(ctx,X-3,Y-1,7,3,'#6b5a36');ell(ctx,X+4,Y-2,2.5,1.2,'rgba(255,255,255,.35)');ctx.globalAlpha=1}]);
   for(const f of flames)list.push([f.y*T+20,()=>{const X=f.x*T+16,Y=f.y*T+22,a=Math.min(1,(7-f.t)/1.5),fl=Math.sin(t*12+f.x)*2;ctx.globalAlpha=a;ell(ctx,X,Y,8,3,'rgba(255,120,30,.35)');ell(ctx,X,Y-6+fl*.3,5,8+fl,'#ff6a1a');ell(ctx,X,Y-5,3,5,'#ffd23f');ctx.globalAlpha=1}]);
   if(friend&&!friend.in)list.push([friend.y,()=>drawPerson(ctx,friend.x,friend.y,guestMode?PLAYER_LOOK:FRIEND_LOOK,friend.dir,friend.walk,friend.act,t)]);
