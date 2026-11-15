@@ -146,13 +146,14 @@ const BUILD={
   museum:{n:'Museum',cost:1200,w:3,h:2,tall:20,one:1,d:'Donate fossils to build a dinosaur skeleton — and fill the display cases with treasures!'},
   school:{n:'School',cost:700,w:2,h:2,tall:24,one:1,d:'Villagers go to class in the morning — take a quiz to earn ⭐ gold stars for prizes!'},
   library:{n:'Library',cost:600,w:2,h:2,tall:10,one:1,d:'Borrow books full of island secrets — return them for a reward'},
+  cinema:{n:'Movie Theater',cost:800,w:2,h:2,tall:26,one:1,d:'Pick a movie — every evening villagers come to watch, and buy tickets!'},
   zoo:{n:'Zoo',cost:1000,w:2,h:2,tall:30,one:1,d:'Villagers come to see your animal exhibits — 🪙50 for each exhibit they see!'},
   exhibit:{n:'Zoo Exhibit',cost:400,w:3,h:3,tall:8,d:'A big pen — tap it to pick which island\'s animals live inside'},
   observatory:{n:'Observatory',cost:900,w:2,h:2,tall:34,one:1,d:'Look at the stars at night — find constellations and wish on shooting stars!'},
   hospital:{n:'Hospital',cost:300,w:2,h:2,d:'Sells 🩹 band-aids for hurt villagers'},
   lighthouse:{n:'Lighthouse',cost:2500,w:2,h:2,tall:80,d:'Shows the whole island — go inside and decorate it!'},
 };
-const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','wood','hut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','mailbox','museum','school','library','observatory','zoo','exhibit','kitchen','hospital','track','station','balloon','lighthouse'];
+const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','wood','hut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','mailbox','museum','school','library','observatory','zoo','exhibit','cinema','kitchen','hospital','track','station','balloon','lighthouse'];
 let guestMode=false,guestSel='carrot'; // guestMode: you're on a friend's island
 let visit=null,hostPos=null; // visit: the villager house you're in (null: Your House)
 let fly=null; // flying the hot air balloon
@@ -508,7 +509,7 @@ unstick(player);
 function pickAt(wx,wy){
   for(const sc of scorps)if(!sc.hide&&Math.abs(wx-sc.x)<17&&Math.abs(wy-sc.y+6)<15)return{k:'scorp',sc};
   for(const cr of critters){if(cr.hide||cr.gone)continue;const big=cr.kind==='camel'||cr.kind==='bear'||cr.kind==='rex'||cr.kind==='trike'||!!HUNT[cr.kind]||cr.kind==='moa',tall=cr.kind==='camel'?54:cr.kind==='longneck'?76:cr.kind==='rex'?50:HUNT[cr.kind]&&cr.kind!=='bear'||cr.kind==='moa'?44:0,up=cr.zz&&cr.kind==='parrot'?6:cr.kind==='parrot'||cr.kind==='bat'?24:cr.kind==='ptero'?(cr.zz?8:34):cr.kind==='ghost'?14:0;if(Math.abs(wx-cr.x)<(cr.kind==='longneck'?30:big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(tall||(big?32:24)))return{k:'critter',cr}}
-  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
+  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried&&!v.atMovie&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
   {const P=potAt();if(P&&Math.abs(wx-(P.x*T+16))<16&&wy>P.y*T-10&&wy<P.y*T+T)return{k:'pot',x:P.x,y:P.y}}
   if(festNow()){const fs=festSpot();for(const st of FEST_STALLS){const X=(fs.x+st.dx)*T,Y=(fs.y+st.dy)*T;if(wx>X-14&&wx<X+T+14&&wy>Y-46&&wy<Y+T)return{k:'fest',st}}}
   const tx=Math.floor(wx/T),ty=Math.floor(wy/T);
@@ -620,6 +621,7 @@ function useObj(o,act){
     case'library':libraryModal();break;
     case'observatory':obsModal();break;
     case'zoo':zooModal();break;
+    case'cinema':cinemaModal();break;
     case'exhibit':exhibitModal(o);break;
     case'museum':enterHouse(o.id);break;
     case'campfire':toast('🔥 Toasty warm!');break;
@@ -835,6 +837,7 @@ let critters=[];
 function spawnCritters(){
   const kinds=curKind==='dino'?['rex','rex','longneck','longneck','longneck','trike','trike','trike','trike','ptero','ptero','ptero','terror','terror','terror','moa','moa','moa']:curKind==='haunted'?['ghost','ghost','ghost','ghost','ghost','ghost','bat','bat','bat','bat']:curKind==='pirate'?['crab','crab','crab','crab','crab','crab','crab','parrot','parrot']:curKind==='autumn'?['squirrel','squirrel','squirrel','squirrel','squirrel','squirrel']:curKind==='ice'?['peng','peng','peng','peng','peng','peng','peng','bear','bear','bear']:curKind==='jungle'?['monkey','monkey','monkey','monkey','monkey','parrot','parrot','parrot','parrot']:curKind==='volcano'?['terror','terror','terror']:curKind==='desert'?['camel','camel','camel','lizard','lizard','lizard','lizard','lizard']:[];
   kinds.push(...(curKind==='dino'?['chick','chick','chick']:curKind==='ice'?['frost','frost']:curKind==='volcano'?['fire','fire']:curKind==='falls'?['swamp','swamp','swamp']:[])); // the new terror birds
+  kinds.push('gray'); // the gray terror bird: on every island, even home
   if(curKind!=='dino')kinds.push(...(curKind==='volcano'?['moa','moa']:['terror','terror','moa','moa'])); // terror birds and moas live on every island now
   const nightOnly=curKind==='dino'||curKind==='volcano'?['terror','terror','terror','terror']:curKind==='ice'?['bear','bear','bear','frost','terror']:curKind==='haunted'?['ghostbird','ghostbird','ghostbird','terror']:['terror','terror'];kinds.push(...nightOnly); // these only come out at night
   critters=kinds.map((kind,i)=>({kind,night:i>=kinds.length-nightOnly.length?1:0,gone:0,fly:0,loot:null,hide:0,...(kind==='crab'?sandSpot():scorpSpot()),wa:Math.random()*6,wt:0,dir:1,walk:0,happy:0,calm:0,still:false}));
@@ -876,7 +879,7 @@ function critterUpdate(dt){
     if(cr.kind==='swamp'&&cr.walk>0&&(cr.mudT=(cr.mudT||0)-dt)<=0){cr.mudT=.6;const mt=tileOf(cr);if(inMap(mt.x,mt.y)&&ter[mt.y*W+mt.x]!==WATER&&!muds.some(m=>m.x===mt.x&&m.y===mt.y))muds.push({x:mt.x,y:mt.y,t:0})}
     if(cr.kind==='fire'&&(cr.walk>0)&&(cr.fireT=(cr.fireT||0)-dt)<=0){cr.fireT=.45;const ft=tileOf(cr);if(inMap(ft.x,ft.y)&&ter[ft.y*W+ft.x]!==WATER)flames.push({x:ft.x,y:ft.y,t:0})}
     if(cr.rage>0)cr.rage-=dt;
-    if(HUNT[cr.kind]&&!cr.calm&&!fly&&!player.stun&&!player.slide&&!(train&&train.rider)&&(cr.chase>0||d<T*HUNT[cr.kind].see*(cr.rage>0?1.6:1))){ // RUN! It's a terror bird (or a polar bear)!
+    if(HUNT[cr.kind]&&!cr.calm&&!tame(cr)&&!fly&&!player.stun&&!player.slide&&!(train&&train.rider)&&(cr.chase>0||d<T*HUNT[cr.kind].see*(cr.rage>0?1.6:1))){ // RUN! It's a terror bird (or a polar bear)!
       const Hk=HUNT[cr.kind];
       if(!cr.chase){cr.chase=.01;floatAt(cr.x,cr.y-50,Hk.cry);toast(`${Hk.e} A ${Hk.name} spotted you — RUN!`,2200)}
       cr.chase+=dt;if(d>T*10||cr.chase>6){cr.chase=0;cr.calm=5;continue} // it gives up
@@ -884,7 +887,7 @@ function critterUpdate(dt){
       if(d<reach){cr.chase=0;if(cr.kind==='bear'&&S.inv.fish)bearHit(cr);else if(Hk.freeze)freezePlayer(cr);else terrorCatch(cr);continue} // a bear would rather have your fish
       if(cr.kind!=='ghostbird'&&d>T*1.3&&chaseStep(cr,player,T*spd,dt))continue;
       vx=dx;vy=dy;sp=T*spd}
-    else if(HUNT[cr.kind]&&!cr.calm&&!guestMode&&(cr.prey=preyOk(cr.prey)?cr.prey:preyNear(cr))){ // …or one of your villagers!
+    else if(HUNT[cr.kind]&&!cr.calm&&!tame(cr)&&!guestMode&&(cr.prey=preyOk(cr.prey)?cr.prey:preyNear(cr))){ // …or one of your villagers!
       const Hk=HUNT[cr.kind],pv=cr.prey,pdx=pv.x-cr.x,pdy=pv.y-cr.y,pd=Math.hypot(pdx,pdy);
       if(!cr.hunt){cr.hunt=.01;pv.say=`Help! A ${Hk.name}! 😱`;pv.talkT=2.5;floatAt(cr.x,cr.y-50,Hk.cry)}
       cr.hunt+=dt;if(pd>T*10||cr.hunt>8){cr.hunt=0;cr.prey=null;cr.calm=5;continue}
@@ -911,7 +914,7 @@ function chaseStep(cr,e,speed,dt){
   if((cr.repath=(cr.repath||0)-dt)<=0){cr.repath=.35;const ct=tileOf(cr),pt=tileOf(e),r=findPath(ct.x,ct.y,(x,y)=>x===pt.x&&y===pt.y,null,(x,y)=>critOk(cr.kind)(x*T+16,y*T+20));cr.path=r?r.path:[]}
   const dir=cr.dir;if(cr.path&&cr.path.length&&followPath(cr,speed,dt)){cr.dir=cr.dir==='left'?-1:cr.dir==='right'?1:dir;return true}cr.dir=dir;return false;
 }
-const preyOk=v=>v&&villagers.includes(v)&&!v.asleep&&!v.v.hurt&&!isGuest(v.v.name);
+const preyOk=v=>v&&villagers.includes(v)&&!v.asleep&&!v.atMovie&&!v.v.hurt&&!isGuest(v.v.name);
 const preyNear=cr=>villagers.find(v=>preyOk(v)&&Math.hypot(v.x-cr.x,v.y-cr.y)<T*5)||null;
 // a villager pecked by a terror bird needs band-aids — the hospital sells them
 const BANDAID=5;
@@ -1224,6 +1227,43 @@ const EXHIBITS=[
   {k:'swamp',isle:'falls',n:'Swamp Exhibit',e:'🐊',a:['swamp','swamp'],g:'#6a7a48',d:'Swamp terror birds splashing in the mud'}];
 const exOf=k=>EXHIBITS.find(e=>e.k===k);
 const beenTo=k=>isles.list.some(i=>i.kind===k);
+// ── The Movie Theater: you pick the movie, villagers come every evening ──
+const MOVIES=[
+  {k:'squirrel',n:'The Silly Squirrel',e:'🐿️',g:'funny',sc:[['🐿️ 🌰','A squirrel finds the biggest acorn EVER!'],['🌰💨 🐿️','Oh no — it rolls away down the hill…'],['🐿️ 🌰 🐻‍❄️','…right into a polar bear!'],['🐻‍❄️ 😂 🐿️','They become best friends. THE END']],r:['Hahaha! 😂','LOL 🤣','So silly! 😆']},
+  {k:'terror',n:'Night of the Terror Birds',e:'🦤',g:'scary',sc:[['🌙 🌲 🌲','A dark, dark night…'],['🌲 👀 🌲','Something is watching…'],['🦤 ❗','SKRAW!! A terror bird!'],['🏃💨 💡','Run to the lamp post! Phew! THE END']],r:['AAAH! 😱','Eek! 🙈','Too scary! 😨']},
+  {k:'crab',n:'Captain Crab\'s Treasure',e:'🏴‍☠️',g:'action',sc:[['🦀 ⛵ 🌊','Captain Crab sets sail!'],['🌊 🐙 🌊','A GIANT octopus attacks!'],['🦀 ⚔️ 🐙','Snip snap! Captain Crab wins!'],['🦀 💰 👑','The treasure is found! THE END']],r:['Go Captain Crab! 🦀','Whoa! 💥','Yeah!! 🎉']},
+  {k:'peng',n:'Two Penguins in Love',e:'🐧',g:'love',sc:[['🐧 ❄️ 🐧','Two penguins on the ice…'],['🐧 💐 🐧','“A flower for you!”'],['🐧 ❤️ 🐧','Love! ❤️'],['🐧 🐣 🐧','…and a baby penguin! THE END']],r:['Awww! 🥰','So sweet! 💕','*sniff* 🥲']},
+  {k:'moon',n:'Moon Bunnies in Space',e:'🚀',g:'space',sc:[['🐰 🔧 🚀','A bunny builds a rocket!'],['🚀 ✨ 🌙','3… 2… 1… BLAST OFF!'],['🐰 🌙 🥕','The moon is made of carrots!'],['🐰 🚀 🏝️','Home to Seaside Village. THE END']],r:['Woooow! 🚀','To the moon! 🌙','So cool! ✨']},
+  {k:'dino',n:'Dino Dance Party',e:'🦖',g:'funny',sc:[['🦖 🎵','A T-Rex hears some music…'],['🦖 💃 🦕','DANCE PARTY!'],['🦕 🕺 🦤','Even the terror bird dances!'],['🦖 🎉 🦕','Best party ever. THE END']],r:['Dance, dino, dance! 🕺','Hahaha! 😂','I wanna dance too! 💃']}];
+const GENRES={funny:'funny',scary:'scary',action:'action',love:'lovey-dovey',space:'space'},TICKET=30;
+const movieOf=()=>MOVIES.find(m=>m.k===S.movie)||MOVIES[0];
+const favGenre=name=>Object.keys(GENRES)[[...name].reduce((n,ch)=>n+ch.charCodeAt(0),0)%5];
+const movieNow=()=>count('cinema')&&!bedtime()&&tod()>.58&&tod()<.72&&!inside&&!stormNow();
+const cinemaDoor=o=>({x:(o.x+1)*T,y:(o.y+2)*T+8});
+function movieGo(v){
+  if(!movieNow()||guestMode||isGuest(v.v.name)||v.v.hurt)return false;const seen=S.movieSeen||(S.movieSeen={});if(seen[v.v.name]===S.day||v.movieFail===S.day)return false;
+  const o=S.objs.find(o=>o.t==='cinema'),D=cinemaDoor(o);
+  if(Math.hypot(v.x-D.x,v.y-D.y)<T*1.6){v.atMovie=1;v.path=[];v.tour=null;doAct('movieTicket',{name:v.v.name});return true}
+  const t=tileOf(v),r=findPath(t.x,t.y,(x,y)=>y===o.y+2&&x>=o.x&&x<=o.x+1,null);
+  if(!r||!r.path.length){v.movieFail=S.day;return false}
+  v.path=r.path;if(Math.random()<.5){v.say=['Movie night! 🍿','I hope it\'s a good one! 🎬','Popcorn time! 🍿'][Math.random()*3|0];v.talkT=2.5}return true}
+function movieOut(v){
+  v.atMovie=0;const o=S.objs.find(o=>o.t==='cinema');if(o){const D=cinemaDoor(o);v.x=D.x;v.y=D.y+6;unstick(v)}v.path=[];v.wait=1.5;
+  const M=movieOf();v.say=favGenre(v.v.name)===M.g?'My favorite kind of movie! ⭐⭐⭐⭐⭐':['That was great! ⭐⭐⭐⭐','Best movie ever! 🎬',`I loved ${M.n}!`,'Can we watch it again? 🍿'][Math.random()*4|0];v.talkT=3.5}
+function cinemaModal(){
+  const M=movieOf(),seen=Object.values(S.movieSeen||{}).filter(d=>d===S.day).length;
+  let h=`<h2>🎬 ${bname('cinema')}</h2><p>Now showing: <b>${M.e} ${M.n}</b></p><p>Every evening your villagers come to the movies — 🪙${TICKET} a ticket (and a tip if it's their favorite kind of movie!). ${movieNow()?`🍿 The movie is on right now! <b>${seen}</b> watching today.`:''}</p>`;
+  h+='<p style="margin-top:6px"><b>Pick tonight\'s movie:</b></p>';
+  for(const m of MOVIES)h+=`<div class="irow"><span class="ie">${m.e}</span><span class="in">${m.n}<br><span class="ip">${m.g==='action'?'An':'A'} ${GENRES[m.g]} movie${S.villagers.filter(v=>favGenre(v.name)===m.g).length?' — '+S.villagers.filter(v=>favGenre(v.name)===m.g).map(v=>esc2(v.name)).join(', ')+' love'+(S.villagers.filter(v=>favGenre(v.name)===m.g).length>1?'':'s')+' these!':''}</span></span>${m.k===M.k?'<span class="ip">Showing</span>':`<button class="btn" data-a="pick" data-v="${m.k}">Pick</button>`}</div>`;
+  h+=`<div class="btns"><button class="btn blue" data-a="watch">🍿 Watch it!</button><button class="btn gray" data-a="close">Bye!</button></div>`;
+  openModal(h,{pick:k=>{doAct('pickMovie',{k});setTimeout(cinemaModal,guestMode?300:0)},watch:watchMovie});
+}
+function watchMovie(){
+  const M=movieOf();let i=-1;
+  openModal(`<h2>${M.e} ${M.n}</h2><div id="mvStage" style="background:#111;border-radius:12px;padding:18px 8px;margin:8px 0;color:#fff;text-align:center"><div id="mvPic" style="font-size:52px;line-height:1.3;min-height:70px">🎬</div><div id="mvCap" style="font-size:15px;min-height:22px">The lights go down… 🍿</div></div><div class="btns"><button class="btn gray" data-a="close">Leave the theater</button></div>`);
+  const tick=setInterval(()=>{const p=document.getElementById('mvPic'),c=document.getElementById('mvCap');if(!p){clearInterval(tick);return}
+    i++;if(i<M.sc.length){p.textContent=M.sc[i][0];c.textContent=M.sc[i][1]}else{clearInterval(tick);p.textContent='👏 🎉 👏';c.textContent='Everyone claps! What a movie!'}},2200);
+}
 const ZOO_PER=50;
 const ZOO_LINES=['Wow, look at the {e}!','So cool! {e}','I love the {n}!','{e} Hello there, little guy!','Ooh, can I take one home? {e}'];
 // villagers go to the zoo once a day and see every exhibit — 🪙50 for each one they see
@@ -1350,7 +1390,10 @@ const HUNT={terror:{name:'terror bird',e:'🦤',cry:'SKRAAAW!',hit:'PECK!',verb:
   frost:{name:'frost terror bird',e:'❄️',cry:'SKREEEK!',hit:'BRRR!',verb:'froze',got:'BRRR!',spd:3.4,vspd:3,see:6,freeze:1},
   fire:{name:'fire terror bird',e:'🔥',cry:'SKRAAAW!',hit:'SIZZLE!',verb:'singed',got:'SIZZLE!',spd:3.6,vspd:3.2,see:6},
   swamp:{name:'swamp terror bird',e:'💧',cry:'SKRAW-SPLASH!',hit:'SPLAT!',verb:'splatted',got:'SPLAT!',spd:3.4,vspd:3,see:6},
+  gray:{name:'gray terror bird',e:'🩶',cry:'SKRAAAW!',hit:'PECK!',verb:'pecked',got:'CHOMP!',spd:3.5,vspd:3.1,see:6},
   ghostbird:{name:'ghost terror bird',e:'👻',cry:'WOOOO-SKRAW!',hit:'BOO!',verb:'spooked',got:'BOO!',spd:3,vspd:2.8,see:7}};
+// the gray terror bird lives on every island, but only attacks if there's no hospital
+const tame=cr=>cr.kind==='gray'&&count('hospital')>0;
 // how each kind gets around: terror birds hop fences, fire birds cross lava, ghost birds float through anything
 const critOk=k=>k==='swamp'?(x,y)=>{const tx=Math.floor(x/T),ty=Math.floor(y/T);return inMap(tx,ty)&&(ter[ty*W+tx]===WATER&&!objAt(ty*W+tx)||terrorOk(x,y))}:k==='ghostbird'?(x,y)=>inMap(Math.floor(x/T),Math.floor(y/T)):k==='fire'?(x,y)=>{const tx=Math.floor(x/T),ty=Math.floor(y/T);return inMap(tx,ty)&&(ter[ty*W+tx]===WATER&&!objAt(ty*W+tx)||terrorOk(x,y))}:HUNT[k]||k==='chick'?terrorOk:animalOk;
 // a frost terror bird freezes you in a block of ice for a few seconds
@@ -1450,6 +1493,9 @@ function feedCritter(cr){
     if(cr.gave&&cr.gave>now()){toast(['🦤 Boom-boom! The moa gives you a big fluffy hug','🦤 The moa does a happy little dance!','🦤 Boom-boom! Moas are the terror birds\' friendly cousins'][Math.random()*3|0]);return}
     cr.gave=now()+120000;doAct('giveBack',{k:'feather',n:1});floatAt(cr.x,cr.y-40,'+🪶');toast('🦤 Boom-boom! The friendly moa loves you — it gave you a 🪶 Moa Feather!',2800);return}
   if(cr.kind==='chick'){cr.happy=1;floatAt(cr.x,cr.y-20,'peep!');toast('🐣 Peep peep! (Shh — don\'t let its parent see you!)');return}
+  if(cr.kind==='gray'){cr.happy=1.2;
+    if(tame(cr)){floatAt(cr.x,cr.y-56,'😇');toast(['🩶 The gray terror bird sees your 🏥 hospital and is being VERY good','🩶 The gray terror bird gives a polite little bow','🩶 Skraw? (That means “hello” — it won\'t peck while there\'s a hospital here!)'][Math.random()*3|0],2800);return}
+    floatAt(cr.x,cr.y-50,'SKRAW!');toast('🩶 The gray terror bird only behaves on islands with a 🏥 Hospital — RUN!',2800);return}
   if(HUNT[cr.kind]&&cr.kind!=='bear'&&cr.kind!=='terror'){floatAt(cr.x,cr.y-50,HUNT[cr.kind].cry);toast(`${HUNT[cr.kind].e} The ${HUNT[cr.kind].name} is much too fierce to make friends with — RUN!`,2600);return}
   if(cr.kind==='terror'){floatAt(cr.x,cr.y-50,'SKRAW!');toast('🦤 Terror birds are much too fierce to make friends with — RUN!',2600);return}
   if(cr.kind==='ptero'){cr.happy=2;floatAt(cr.x,cr.y-54,'🎵');toast('🦅 '+DINO_SAYS[Math.random()*DINO_SAYS.length|0],2800);return}
@@ -1547,9 +1593,9 @@ function drawCritterRaw(c,cr,t){
 const zzz=(c,x,y,t)=>{c.font='13px sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText('💤',x+10,y+Math.sin(t*2+x)*2)};
 const drawCritter=(c,cr,t)=>{plain(drawCritterRaw)(c,cr,t);if(cr.zz)zzz(c,cr.x,cr.y-(ZZ_UP[cr.kind]||30),t)};
 // Dino Island's dinosaurs
-const DINOS=['rex','longneck','trike','ptero','terror','moa','frost','fire','ghostbird','chick','swamp'],NIGHT_OWLS=['terror','bear','ghost','bat','frost','fire','ghostbird','chick','swamp'],
-  CRIT_NAMES={rex:'T-Rex',longneck:'long-neck',trike:'triceratops',ptero:'pterodactyl',terror:'terror bird',moa:'moa',frost:'frost terror bird',fire:'fire terror bird',ghostbird:'ghost terror bird',swamp:'swamp terror bird',chick:'terror chick',camel:'camel',lizard:'lizard',peng:'penguin',bear:'polar bear',monkey:'monkey',parrot:'parrot',crab:'crab',squirrel:'squirrel'},
-  ZZ_UP={camel:58,lizard:14,moa:50,longneck:78,rex:56,bear:40,ptero:20,parrot:18,crab:26,trike:30,peng:32,monkey:32,squirrel:30};
+const DINOS=['rex','longneck','trike','ptero','terror','gray','moa','frost','fire','ghostbird','chick','swamp'],NIGHT_OWLS=['terror','gray','bear','ghost','bat','frost','fire','ghostbird','chick','swamp'],
+  CRIT_NAMES={rex:'T-Rex',longneck:'long-neck',trike:'triceratops',ptero:'pterodactyl',terror:'terror bird',moa:'moa',frost:'frost terror bird',fire:'fire terror bird',ghostbird:'ghost terror bird',swamp:'swamp terror bird',gray:'gray terror bird',chick:'terror chick',camel:'camel',lizard:'lizard',peng:'penguin',bear:'polar bear',monkey:'monkey',parrot:'parrot',crab:'crab',squirrel:'squirrel'},
+  ZZ_UP={gray:50,camel:58,lizard:14,moa:50,longneck:78,rex:56,bear:40,ptero:20,parrot:18,crab:26,trike:30,peng:32,monkey:32,squirrel:30};
 function drawDino(c,cr,t){
   const s=cr.dir,x=cr.x,hop=cr.happy>0?Math.abs(Math.sin(cr.happy*8))*4:0,y=cr.y-hop,zz=cr.calm>30;
   if(cr.kind==='rex'){const st=cr.walk?Math.sin(cr.walk*.8)*3:0,col='#5e9a3a',dk='#4a7d2c',open=cr.happy>0||cr.calm>0&&cr.calm<6.5&&cr.calm>5;
@@ -1567,8 +1613,8 @@ function drawDino(c,cr,t){
     c.strokeStyle='#d9a23a';c.lineWidth=1.4;for(const k of[-1,1]){c.beginPath();c.moveTo(x+k*2,y2-6);c.lineTo(x+k*2+st*k,y2);c.stroke()}
     ell(c,x,y2-9,6,5.5,'#8a7058');ell(c,x+1*s,y2-8,3,2.5,'#b8a080');ell(c,x+4*s,y2-14,4,3.8,'#8a7058');poly(c,'#e8a33a',x+7*s,y2-15,x+12*s,y2-14,x+7*s,y2-12);ell(c,x+5*s,y2-15,1,1,'#222');
     for(const k of[-1,0,1])ell(c,x+4*s+k*1.5,y2-18,1,2,'#6b5a48');return}
-  if(cr.kind==='terror'||cr.kind==='moa'||cr.kind==='frost'||cr.kind==='fire'||cr.kind==='ghostbird'||cr.kind==='swamp'){
-    const moa=cr.kind==='moa',PAL={terror:['#5e4a3a','#3f3126','#8a7058'],moa:['#2b2b30','#151518','#4a4a54'],frost:['#bfe3f5','#7fb8d8','#f4fbff'],fire:['#e8501a','#a8300a','#ffb03a'],ghostbird:['#9fffc8','#5fd8a0','#e8fff2'],swamp:['#5a6b3a','#3a4a26','#8a7a4a']}[cr.kind];
+  if(cr.kind==='terror'||cr.kind==='moa'||cr.kind==='frost'||cr.kind==='fire'||cr.kind==='ghostbird'||cr.kind==='swamp'||cr.kind==='gray'){
+    const moa=cr.kind==='moa',PAL={terror:['#5e4a3a','#3f3126','#8a7058'],moa:['#2b2b30','#151518','#4a4a54'],frost:['#bfe3f5','#7fb8d8','#f4fbff'],fire:['#e8501a','#a8300a','#ffb03a'],ghostbird:['#9fffc8','#5fd8a0','#e8fff2'],swamp:['#5a6b3a','#3a4a26','#8a7a4a'],gray:['#8a8d93','#5c5f66','#b8bbc2']}[cr.kind];
     const st=cr.walk?Math.sin(cr.walk*1.4)*4:0,col=PAL[0],dk=PAL[1],ch=!moa&&(cr.chase>0||cr.rage>0); // a moa is a black (and friendly) terror bird
     c.save();
     if(cr.kind==='ghostbird'){c.globalAlpha=.55+.15*Math.sin(t*3+x);c.fillStyle='rgba(150,255,200,.25)';c.beginPath();c.arc(x,y-26,26,0,Math.PI*2);c.fill()}
@@ -2075,6 +2121,9 @@ const ACT={
     toast(!k?`🎉 ${name}: “Thank you for the birthday wishes!”`:fav?`💖 ${name}: “${ITEMS[k].e} My FAVORITE! Best birthday ever!” They gave you 🪙${n}!`:`🎁 ${name}: “Oh, ${ITEMS[k].e} — I love it! Thank you!” They gave you 🪙${n}!`,3600)},
   bdayCake({name}){const v=S.villagers.find(v=>v.name===name);if(!v||!isBday(v))return;const c=S.bdayCake||(S.bdayCake={});if(c[name]===S.day)return;c[name]=S.day;give('bdaycake',1);dirty()},
   exhibit({id,ex}){const o=byId(id),E=exOf(ex);if(!o||o.t!=='exhibit'||o.ex||!E||!beenTo(E.isle)||S.objs.some(p=>p.t==='exhibit'&&p.ex===ex))return;o.ex=ex;dirty()},
+  pickMovie({k}){if(!count('cinema')||!MOVIES.find(m=>m.k===k))return;S.movie=k;dirty()},
+  movieTicket({name}){if(!count('cinema'))return;const seen=S.movieSeen||(S.movieSeen={});if(seen[name]===S.day)return;seen[name]=S.day;
+    const fav=favGenre(name)===movieOf().g,pay=TICKET+(fav?20:0);S.coins+=pay;tally('earn',pay);dirty();const o=S.objs.find(o=>o.t==='cinema');if(o)floatAt((o.x+1)*T,o.y*T-10,`+🪙${pay}${fav?' ⭐':''}`)},
   zooPay({id,name}){const o=byId(id);if(!o||o.t!=='exhibit'||!o.ex||!count('zoo'))return;const P=S.zooPaid&&S.zooPaid.day===S.day?S.zooPaid:(S.zooPaid={day:S.day,k:[]}),key=name+':'+o.ex;if(P.k.includes(key))return;
     P.k.push(key);S.coins+=ZOO_PER;tally('earn',ZOO_PER);dirty();const vw=villagers.find(w=>w.v.name===name);floatAt(vw?vw.x:(o.x+1.5)*T,(vw?vw.y:(o.y+3)*T)-44,`+🪙${ZOO_PER}`)},
   quizDone({n}){if(!count('school')||S.quizDay===S.day)return;S.quizDay=S.day;n=Math.max(0,Math.min(3,n|0));S.stars=(S.stars||0)+n;tally('quiz');dirty();refreshTray()},
@@ -2344,6 +2393,7 @@ function update(dt){
         const t=tileOf(v),D=hospDoor(H),gx=D.x,gy=D.y,r=(Math.abs(t.x-gx)<=1&&Math.abs(t.y-gy)<=1)||v.hospTry>3?null:findPath(t.x,t.y,(x,y)=>x===gx&&y===gy,null);
         if(r&&r.path.length){v.path=r.path;if(!v.hospTry){v.say='Ouch… off to the hospital 🤕';v.talkT=2.5}v.hospTry=(v.hospTry||0)+1;continue}
         v.hospTry=0;v.noAmb=0;hv.hosp=H.id;v.inHosp=H.id;patientAt.delete(hv.name);dirty();continue}}
+    if(v.atMovie){if(movieNow()){v.walk=0;continue}movieOut(v)} // in the movie theater
     if(v.asleep){if(sleepy(v)){v.wake=0;continue}
       if(!v.wake)v.wake=.1+Math.random()*6; // everyone gets up at their own time
       if((v.wake-=dt)>0)continue;v.asleep=0;v.wake=0;v.x=v.door.x;v.y=v.door.y;v.path=[];v.wait=1;v.dir='down';v.say=tod()>.3&&tod()<.68?['The storm is over! 🌤️','Phew, that was loud! ⚡','Is it safe now? 🙂'][Math.random()*3|0]:['Good morning! ☀️','*yawn* 🥱','What a lovely sleep!'][Math.random()*3|0];v.talkT=3;continue}
@@ -2355,6 +2405,7 @@ function update(dt){
     v.homing=0;
     if(followPath(v,T*1.8,dt))continue;v.walk=0;
     if(v.tour&&zooTour(v,dt))continue;
+    if(movieGo(v))continue;
     const party=festNow(),fs=party?festSpot():classNow()?schoolSpot():null;
     if(party&&Math.hypot(v.x-(fs.x*T+16),v.y-(fs.y*T+22))<T*6){v.dance=(v.dance||Math.random()*9)+dt*9;v.walk=v.dance} // dancing!
     if((v.wait-=dt)>0)continue;v.wait=2+Math.random()*5;
@@ -2411,23 +2462,23 @@ function ell(c,x,y,rx,ry,col){c.fillStyle=col;c.beginPath();c.ellipse(x,y,rx,ry,
 function rect(c,x,y,w,h,col,r){c.fillStyle=col;c.beginPath();c.roundRect(x,y,w,h,r||0);c.fill()}
 function poly(c,col,...p){c.fillStyle=col;c.beginPath();c.moveTo(p[0],p[1]);for(let i=2;i<p.length;i+=2)c.lineTo(p[i],p[i+1]);c.closePath();c.fill()}
 // ── Volcano Island's own version of everything you build ─────────────────────
-const VNAMES={zoo:'Lava Zoo',exhibit:'Rock Pen',wood:'Charred Raft',hut:'Ember Hut',mailbox:'Lava Mailbox',museum:'Magma Museum',school:'Volcano School',library:'Basalt Library',observatory:'Smoky Observatory',kitchen:'Lava Kitchen',hospital:'Fire Hospital',track:'Basalt Track',station:'Ash Station',balloon:'Smoke Balloon Port',farm:'Ash Farmland',myhouse:'Your Volcano House',path:'Obsidian Path',fence:'Basalt Fence',gate:'Basalt Gate',hedge:'Fire Hedge',bridge:'Obsidian Bridge',
+const VNAMES={cinema:'Lava Cinema',zoo:'Lava Zoo',exhibit:'Rock Pen',wood:'Charred Raft',hut:'Ember Hut',mailbox:'Lava Mailbox',museum:'Magma Museum',school:'Volcano School',library:'Basalt Library',observatory:'Smoky Observatory',kitchen:'Lava Kitchen',hospital:'Fire Hospital',track:'Basalt Track',station:'Ash Station',balloon:'Smoke Balloon Port',farm:'Ash Farmland',myhouse:'Your Volcano House',path:'Obsidian Path',fence:'Basalt Fence',gate:'Basalt Gate',hedge:'Fire Hedge',bridge:'Obsidian Bridge',
   flowers:'Fire Flowers',tree:'Fire Tree',bench:'Stone Bench',lamp:'Lava Lamp',campfire:'Lava Pit',picnic:'Stone Table',statue:'Obsidian Statue',playground:'Rock Playground',
   windmill:'Steam Mill',well:'Magma Well',house:'Basalt House',cabin:'Stone Cabin',coop:'Stone Coop',hive:'Fire Hive',dock:'Dock',barn:'Basalt Barn',pond:'Lava Pond',
   pigpen:'Mud Pen',bakery:'Lava Oven Bakery',creamery:'Stone Creamery',greenhouse:'Glowhouse',bin:'Stone Bin',market:'Ember Market',fountain:'Lava Fountain',lighthouse:'Fire Beacon'};
-const INAMES={zoo:'Snow Zoo',exhibit:'Icy Pen',wood:'Ice Raft',hut:'Ice Fishing Hut',mailbox:'Snowy Mailbox',museum:'Ice Museum',school:'Igloo School',library:'Frosty Library',observatory:'Aurora Observatory',kitchen:'Cocoa Kitchen',hospital:'Snow Hospital',track:'Icy Track',station:'Snow Station',balloon:'Snowflake Balloon Port',farm:'Frost Farmland',myhouse:'Your Igloo',path:'Ice Path',fence:'Icicle Fence',gate:'Icicle Gate',hedge:'Snow Hedge',bridge:'Ice Bridge',
+const INAMES={cinema:'Igloo Cinema',zoo:'Snow Zoo',exhibit:'Icy Pen',wood:'Ice Raft',hut:'Ice Fishing Hut',mailbox:'Snowy Mailbox',museum:'Ice Museum',school:'Igloo School',library:'Frosty Library',observatory:'Aurora Observatory',kitchen:'Cocoa Kitchen',hospital:'Snow Hospital',track:'Icy Track',station:'Snow Station',balloon:'Snowflake Balloon Port',farm:'Frost Farmland',myhouse:'Your Igloo',path:'Ice Path',fence:'Icicle Fence',gate:'Icicle Gate',hedge:'Snow Hedge',bridge:'Ice Bridge',
   flowers:'Frost Flowers',tree:'Snowy Pine',bench:'Ice Bench',lamp:'Ice Lantern',campfire:'Cozy Fire',picnic:'Ice Table',statue:'Ice Statue',playground:'Snow Playground',
   windmill:'Frosty Windmill',well:'Ice Well',house:'Igloo',cabin:'Guest Igloo',coop:'Snowy Coop',hive:'Frost Hive',dock:'Ice Dock',barn:'Snowy Barn',pond:'Frozen Pond',
   pigpen:'Snowy Pen',bakery:'Cocoa Bakery',creamery:'Ice Cream Shop',greenhouse:'Warm Greenhouse',bin:'Ice Bin',market:'Frost Market',fountain:'Ice Fountain',lighthouse:'Ice Lighthouse'};
-const JNAMES={zoo:'Jungle Zoo',exhibit:'Bamboo Pen',wood:'Bamboo Raft',hut:'Stilt Hut',mailbox:'Coconut Mailbox',museum:'Jungle Museum',school:'Treehouse School',library:'Leafy Library',observatory:'Treetop Observatory',kitchen:'Fruit Kitchen',hospital:'Jungle Hospital',track:'Vine Track',station:'Bamboo Station',balloon:'Parrot Balloon Port',farm:'Jungle Farmland',myhouse:'Your Jungle Hut',path:'Jungle Path',fence:'Bamboo Fence',gate:'Bamboo Gate',hedge:'Vine Hedge',bridge:'Rope Bridge',
+const JNAMES={cinema:'Jungle Cinema',zoo:'Jungle Zoo',exhibit:'Bamboo Pen',wood:'Bamboo Raft',hut:'Stilt Hut',mailbox:'Coconut Mailbox',museum:'Jungle Museum',school:'Treehouse School',library:'Leafy Library',observatory:'Treetop Observatory',kitchen:'Fruit Kitchen',hospital:'Jungle Hospital',track:'Vine Track',station:'Bamboo Station',balloon:'Parrot Balloon Port',farm:'Jungle Farmland',myhouse:'Your Jungle Hut',path:'Jungle Path',fence:'Bamboo Fence',gate:'Bamboo Gate',hedge:'Vine Hedge',bridge:'Rope Bridge',
   flowers:'Jungle Flowers',tree:'Banana Tree',bench:'Log Bench',lamp:'Tiki Torch',campfire:'Tiki Fire',picnic:'Bamboo Table',statue:'Tiki Statue',playground:'Vine Swings',
   windmill:'Bamboo Windmill',well:'Jungle Well',house:'Bamboo Hut',cabin:'Guest Hut',coop:'Bamboo Coop',hive:'Jungle Hive',dock:'Bamboo Dock',barn:'Bamboo Barn',pond:'Lily Pond',
   pigpen:'Mud Pen',bakery:'Banana Bakery',creamery:'Coconut Creamery',greenhouse:'Orchid House',bin:'Basket Bin',market:'Fruit Market',fountain:'Jungle Fountain',lighthouse:'Lookout Tower'};
-const HNAMES={zoo:'Spooky Zoo',exhibit:'Haunted Pen',wood:'Ghost Raft',hut:'Haunted Hut',mailbox:'Spooky Mailbox',museum:'Museum of Mysteries',school:'Ghost School',library:'Spellbook Library',observatory:'Moon Tower',kitchen:'Witch Kitchen',hospital:'Spooky Hospital',track:'Ghost Track',station:'Ghost Station',balloon:'Bat Balloon Port',farm:'Spooky Farmland',myhouse:'Your Haunted Mansion',path:'Creepy Path',fence:'Iron Fence',gate:'Creaky Gate',hedge:'Thorn Hedge',bridge:'Rickety Bridge',
+const HNAMES={cinema:'Haunted Movie House',zoo:'Spooky Zoo',exhibit:'Haunted Pen',wood:'Ghost Raft',hut:'Haunted Hut',mailbox:'Spooky Mailbox',museum:'Museum of Mysteries',school:'Ghost School',library:'Spellbook Library',observatory:'Moon Tower',kitchen:'Witch Kitchen',hospital:'Spooky Hospital',track:'Ghost Track',station:'Ghost Station',balloon:'Bat Balloon Port',farm:'Spooky Farmland',myhouse:'Your Haunted Mansion',path:'Creepy Path',fence:'Iron Fence',gate:'Creaky Gate',hedge:'Thorn Hedge',bridge:'Rickety Bridge',
   flowers:'Ghost Flowers',tree:'Spooky Tree',bench:'Graveyard Bench',lamp:'Ghost Lantern',campfire:'Witch Fire',picnic:'Haunted Table',statue:'Gargoyle',playground:'Creepy Swings',
   windmill:'Creaky Windmill',well:'Whispering Well',house:'Haunted House',cabin:'Creepy Cabin',coop:'Ghost Coop',hive:'Spooky Hive',dock:'Old Dock',barn:'Haunted Barn',pond:'Murky Pond',
   pigpen:'Mud Pen',bakery:'Cauldron Bakery',creamery:'Spooky Creamery',greenhouse:'Night Greenhouse',bin:'Coffin Bin',market:'Midnight Market',fountain:'Ghost Fountain',lighthouse:'Ghost Lighthouse'};
-const DNAMES={zoo:'Jurassic Zoo',exhibit:'Bone Pen',farm:'Fern Farmland',myhouse:'Your Stone-Age House',path:'Bone Path',fence:'Bone Fence',gate:'Bone Gate',hedge:'Fern Hedge',bridge:'Log Bridge',wood:'Log Raft',hut:'Cave Fishing Hut',flowers:'Jurassic Flowers',tree:'Tree Fern',bench:'Boulder Bench',lamp:'Torch Post',campfire:'Caveman Fire',picnic:'Stone Slab Table',statue:'Dino Statue',playground:'Bone Playground',windmill:'Leaf Windmill',well:'Stone Well',house:'Cave House',cabin:'Rock Cabin',coop:'Raptor-Proof Coop',hive:'Giant Beehive',dock:'Log Dock',barn:'Stone Barn',pond:'Dino Pond',pigpen:'Mud Wallow',bakery:'Stone Oven Bakery',creamery:'Dino Creamery',greenhouse:'Fern House',bin:'Rock Bin',market:'Fossil Market',fountain:'Geyser Fountain',mailbox:'Stone Mailbox',museum:'Fossil Museum',school:'Stone-Age School',library:'Cave Painting Library',observatory:'Rock Observatory',kitchen:'Cave Kitchen',hospital:'Dino Hospital',track:'Bone Track',station:'Rock Station',balloon:'Pterodactyl Port',lighthouse:'Torch Tower'},PNAMES={zoo:'Pirate Zoo',exhibit:'Plank Pen',farm:'Treasure Farmland',myhouse:'Your Pirate Ship House',path:'Plank Path',fence:'Rope Fence',gate:'Plank Gate',hedge:'Seaweed Hedge',bridge:'Gangplank Bridge',wood:'Raft',hut:'Pirate Shack',flowers:'Sea Flowers',tree:'Palm Tree',bench:'Barrel Bench',lamp:'Ship Lantern',campfire:'Pirate Bonfire',picnic:'Barrel Table',statue:'Pirate Statue',playground:'Ship Playground',windmill:'Sail Mill',well:'Wishing Well',house:'Pirate Cottage',cabin:'Captain\'s Cabin',coop:'Parrot Coop',hive:'Pirate Hive',dock:'Pirate Pier',barn:'Cargo Barn',pond:'Rock Pool',pigpen:'Pirate Pig Pen',bakery:'Hardtack Bakery',creamery:'Grog Creamery',greenhouse:'Bottle House',bin:'Treasure Chest Bin',market:'Pirate Market',fountain:'Mermaid Fountain',mailbox:'Message-in-a-Bottle Box',museum:'Treasure Museum',school:'Pirate School',library:'Map Library',observatory:'Crow\'s Nest',kitchen:'Galley Kitchen',hospital:'Pirate Hospital',track:'Plank Track',station:'Harbor Station',balloon:'Jolly Roger Balloon',lighthouse:'Pirate Lighthouse'},ANAMES={zoo:'Harvest Zoo',exhibit:'Picket Pen',farm:'Harvest Farmland',myhouse:'Your Cozy Cottage',path:'Leafy Path',fence:'Picket Fence',gate:'Picket Gate',hedge:'Maple Hedge',bridge:'Covered Bridge',wood:'Maple Raft',hut:'Cozy Fishing Hut',flowers:'Mums',tree:'Maple Tree',bench:'Leafy Bench',lamp:'Lantern Post',campfire:'Bonfire',picnic:'Harvest Table',statue:'Scarecrow',playground:'Leaf-Pile Playground',windmill:'Old Windmill',well:'Cider Well',house:'Cozy House',cabin:'Log Cabin',coop:'Harvest Coop',hive:'Honey Hive',dock:'Maple Dock',barn:'Red Barn',pond:'Leafy Pond',pigpen:'Pumpkin Pen',bakery:'Pie Bakery',creamery:'Cider Creamery',greenhouse:'Pumpkin House',bin:'Harvest Bin',market:'Farmers Market',fountain:'Acorn Fountain',mailbox:'Acorn Mailbox',museum:'Harvest Museum',school:'Little Red School',library:'Cozy Library',observatory:'Harvest Moon Tower',kitchen:'Pie Kitchen',hospital:'Maple Hospital',track:'Leafy Track',station:'Harvest Station',balloon:'Maple Leaf Balloon',lighthouse:'Harvest Lighthouse'},FNAMES={zoo:'Grotto Zoo',exhibit:'Crystal Pen',farm:'Moss Farmland',myhouse:'Your Crystal Grotto',path:'Glow Path',fence:'Crystal Fence',gate:'Crystal Gate',hedge:'Moss Hedge',bridge:'Stone Bridge',wood:'Moss Raft',hut:'Grotto Hut',flowers:'Glow Flowers',tree:'Moss Mound',bench:'Mossy Bench',lamp:'Glow-Worm Lamp',campfire:'Blue Fire',picnic:'Crystal Table',statue:'Crystal Statue',playground:'Grotto Playground',windmill:'Water Wheel',well:'Crystal Well',house:'Grotto House',cabin:'Grotto Cabin',coop:'Mossy Coop',hive:'Glow Hive',dock:'Grotto Dock',barn:'Grotto Barn',pond:'Crystal Pool',pigpen:'Mossy Pen',bakery:'Mushroom Bakery',creamery:'Grotto Creamery',greenhouse:'Glow House',bin:'Crystal Bin',market:'Grotto Market',fountain:'Crystal Fountain',mailbox:'Mossy Mailbox',museum:'Crystal Museum',school:'Grotto School',library:'Glow Library',observatory:'Crystal Observatory',kitchen:'Mushroom Kitchen',hospital:'Crystal Hospital',track:'Moss Track',station:'Grotto Station',balloon:'Firefly Balloon',lighthouse:'Glow Beacon'},SNAMES={zoo:'Oasis Zoo',exhibit:'Adobe Pen',farm:'Oasis Farmland',myhouse:'Your Desert Palace',path:'Sandstone Path',fence:'Adobe Wall',gate:'Desert Gate',hedge:'Cactus Hedge',bridge:'Sandstone Bridge',wood:'Palm Raft',hut:'Oasis Hut',flowers:'Desert Blooms',tree:'Date Palm',bench:'Sandstone Bench',lamp:'Desert Lantern',campfire:'Desert Campfire',picnic:'Rug Picnic',statue:'Sphinx Statue',playground:'Sand Playground',windmill:'Desert Windmill',well:'Oasis Well',house:'Adobe House',cabin:'Desert Tent',coop:'Adobe Coop',hive:'Desert Hive',dock:'Oasis Dock',barn:'Adobe Barn',pond:'Oasis Pond',pigpen:'Desert Pen',bakery:'Clay Oven Bakery',creamery:'Camel Creamery',greenhouse:'Cactus House',bin:'Clay Pot Bin',market:'Bazaar Stall',fountain:'Oasis Fountain',mailbox:'Clay Mailbox',museum:'Pharaoh Museum',school:'Desert School',library:'Scroll Library',observatory:'Star Tower',kitchen:'Bazaar Kitchen',hospital:'Oasis Hospital',track:'Sandstone Track',station:'Caravan Station',balloon:'Desert Balloon Port',lighthouse:'Sandstone Lighthouse'};
+const DNAMES={cinema:'Cave Cinema',zoo:'Jurassic Zoo',exhibit:'Bone Pen',farm:'Fern Farmland',myhouse:'Your Stone-Age House',path:'Bone Path',fence:'Bone Fence',gate:'Bone Gate',hedge:'Fern Hedge',bridge:'Log Bridge',wood:'Log Raft',hut:'Cave Fishing Hut',flowers:'Jurassic Flowers',tree:'Tree Fern',bench:'Boulder Bench',lamp:'Torch Post',campfire:'Caveman Fire',picnic:'Stone Slab Table',statue:'Dino Statue',playground:'Bone Playground',windmill:'Leaf Windmill',well:'Stone Well',house:'Cave House',cabin:'Rock Cabin',coop:'Raptor-Proof Coop',hive:'Giant Beehive',dock:'Log Dock',barn:'Stone Barn',pond:'Dino Pond',pigpen:'Mud Wallow',bakery:'Stone Oven Bakery',creamery:'Dino Creamery',greenhouse:'Fern House',bin:'Rock Bin',market:'Fossil Market',fountain:'Geyser Fountain',mailbox:'Stone Mailbox',museum:'Fossil Museum',school:'Stone-Age School',library:'Cave Painting Library',observatory:'Rock Observatory',kitchen:'Cave Kitchen',hospital:'Dino Hospital',track:'Bone Track',station:'Rock Station',balloon:'Pterodactyl Port',lighthouse:'Torch Tower'},PNAMES={cinema:'Pirate Picture House',zoo:'Pirate Zoo',exhibit:'Plank Pen',farm:'Treasure Farmland',myhouse:'Your Pirate Ship House',path:'Plank Path',fence:'Rope Fence',gate:'Plank Gate',hedge:'Seaweed Hedge',bridge:'Gangplank Bridge',wood:'Raft',hut:'Pirate Shack',flowers:'Sea Flowers',tree:'Palm Tree',bench:'Barrel Bench',lamp:'Ship Lantern',campfire:'Pirate Bonfire',picnic:'Barrel Table',statue:'Pirate Statue',playground:'Ship Playground',windmill:'Sail Mill',well:'Wishing Well',house:'Pirate Cottage',cabin:'Captain\'s Cabin',coop:'Parrot Coop',hive:'Pirate Hive',dock:'Pirate Pier',barn:'Cargo Barn',pond:'Rock Pool',pigpen:'Pirate Pig Pen',bakery:'Hardtack Bakery',creamery:'Grog Creamery',greenhouse:'Bottle House',bin:'Treasure Chest Bin',market:'Pirate Market',fountain:'Mermaid Fountain',mailbox:'Message-in-a-Bottle Box',museum:'Treasure Museum',school:'Pirate School',library:'Map Library',observatory:'Crow\'s Nest',kitchen:'Galley Kitchen',hospital:'Pirate Hospital',track:'Plank Track',station:'Harbor Station',balloon:'Jolly Roger Balloon',lighthouse:'Pirate Lighthouse'},ANAMES={cinema:'Cozy Cinema',zoo:'Harvest Zoo',exhibit:'Picket Pen',farm:'Harvest Farmland',myhouse:'Your Cozy Cottage',path:'Leafy Path',fence:'Picket Fence',gate:'Picket Gate',hedge:'Maple Hedge',bridge:'Covered Bridge',wood:'Maple Raft',hut:'Cozy Fishing Hut',flowers:'Mums',tree:'Maple Tree',bench:'Leafy Bench',lamp:'Lantern Post',campfire:'Bonfire',picnic:'Harvest Table',statue:'Scarecrow',playground:'Leaf-Pile Playground',windmill:'Old Windmill',well:'Cider Well',house:'Cozy House',cabin:'Log Cabin',coop:'Harvest Coop',hive:'Honey Hive',dock:'Maple Dock',barn:'Red Barn',pond:'Leafy Pond',pigpen:'Pumpkin Pen',bakery:'Pie Bakery',creamery:'Cider Creamery',greenhouse:'Pumpkin House',bin:'Harvest Bin',market:'Farmers Market',fountain:'Acorn Fountain',mailbox:'Acorn Mailbox',museum:'Harvest Museum',school:'Little Red School',library:'Cozy Library',observatory:'Harvest Moon Tower',kitchen:'Pie Kitchen',hospital:'Maple Hospital',track:'Leafy Track',station:'Harvest Station',balloon:'Maple Leaf Balloon',lighthouse:'Harvest Lighthouse'},FNAMES={cinema:'Grotto Cinema',zoo:'Grotto Zoo',exhibit:'Crystal Pen',farm:'Moss Farmland',myhouse:'Your Crystal Grotto',path:'Glow Path',fence:'Crystal Fence',gate:'Crystal Gate',hedge:'Moss Hedge',bridge:'Stone Bridge',wood:'Moss Raft',hut:'Grotto Hut',flowers:'Glow Flowers',tree:'Moss Mound',bench:'Mossy Bench',lamp:'Glow-Worm Lamp',campfire:'Blue Fire',picnic:'Crystal Table',statue:'Crystal Statue',playground:'Grotto Playground',windmill:'Water Wheel',well:'Crystal Well',house:'Grotto House',cabin:'Grotto Cabin',coop:'Mossy Coop',hive:'Glow Hive',dock:'Grotto Dock',barn:'Grotto Barn',pond:'Crystal Pool',pigpen:'Mossy Pen',bakery:'Mushroom Bakery',creamery:'Grotto Creamery',greenhouse:'Glow House',bin:'Crystal Bin',market:'Grotto Market',fountain:'Crystal Fountain',mailbox:'Mossy Mailbox',museum:'Crystal Museum',school:'Grotto School',library:'Glow Library',observatory:'Crystal Observatory',kitchen:'Mushroom Kitchen',hospital:'Crystal Hospital',track:'Moss Track',station:'Grotto Station',balloon:'Firefly Balloon',lighthouse:'Glow Beacon'},SNAMES={cinema:'Starlight Cinema',zoo:'Oasis Zoo',exhibit:'Adobe Pen',farm:'Oasis Farmland',myhouse:'Your Desert Palace',path:'Sandstone Path',fence:'Adobe Wall',gate:'Desert Gate',hedge:'Cactus Hedge',bridge:'Sandstone Bridge',wood:'Palm Raft',hut:'Oasis Hut',flowers:'Desert Blooms',tree:'Date Palm',bench:'Sandstone Bench',lamp:'Desert Lantern',campfire:'Desert Campfire',picnic:'Rug Picnic',statue:'Sphinx Statue',playground:'Sand Playground',windmill:'Desert Windmill',well:'Oasis Well',house:'Adobe House',cabin:'Desert Tent',coop:'Adobe Coop',hive:'Desert Hive',dock:'Oasis Dock',barn:'Adobe Barn',pond:'Oasis Pond',pigpen:'Desert Pen',bakery:'Clay Oven Bakery',creamery:'Camel Creamery',greenhouse:'Cactus House',bin:'Clay Pot Bin',market:'Bazaar Stall',fountain:'Oasis Fountain',mailbox:'Clay Mailbox',museum:'Pharaoh Museum',school:'Desert School',library:'Scroll Library',observatory:'Star Tower',kitchen:'Bazaar Kitchen',hospital:'Oasis Hospital',track:'Sandstone Track',station:'Caravan Station',balloon:'Desert Balloon Port',lighthouse:'Sandstone Lighthouse'};
 const bname=t=>({volcano:VNAMES,ice:INAMES,jungle:JNAMES,haunted:HNAMES,dino:DNAMES,pirate:PNAMES,autumn:ANAMES,falls:FNAMES,desert:SNAMES}[curKind]||{})[t]||BUILD[t].n;
 let themed=null; // the color change to draw with, while drawing Volcano or Ice Island's version of something
 const themeFor=()=>({volcano:volc,ice:icy,jungle,haunted:haunt,dino:dinoT,pirate:pirateT,autumn:autumnT,falls:fallsT,desert:desertT})[curKind]||null;
@@ -2620,6 +2671,14 @@ function drawObjIn(c,o,t,icon){
     for(let k=0;k<4;k++)rect(c,X+8+k*14,Y+22,5,36,'#efe4cc',1);rect(c,X+25,Y+38,14,24,'#5a3a26',2);
     rect(c,X+20,Y+2,24,9,'#fff8e8',2);c.font='8px '+EMOJI_FONT;c.textAlign='center';c.textBaseline='middle';c.fillText('📚',X+32,Y+6.5);
     if(!icon&&S.book)bubble(c,X+32,Y-14,'📖');break}
+  case'cinema':{const M=movieOf(),on=!icon&&villagers.some(v=>v.atMovie);
+    rect(c,X+4,Y+8,56,54,'#7a1f2b',3);rect(c,X+4,Y+56,56,6,'rgba(0,0,0,.15)');rect(c,X+2,Y-14,60,22,'#2a1a2a',4);
+    c.fillStyle='#ffd23f';c.font='bold 10px system-ui';c.textAlign='center';c.textBaseline='middle';c.fillText('MOVIES',X+32,Y-3);
+    for(let k=0;k<10;k++){const lit=icon||Math.sin(t*6+k*1.3)>(night>.2?-.4:.3);ell(c,X+6+k*5.8,Y-14,1.6,1.6,lit?'#fff3a0':'#8a6a3a');ell(c,X+6+k*5.8,Y+8,1.6,1.6,lit?'#fff3a0':'#8a6a3a')}
+    rect(c,X+8,Y+16,16,22,'#f4ead0',2);c.font=`11px ${EMOJI_FONT}`;c.fillText(M.e,X+16,Y+25);c.fillStyle='#7a1f2b';c.fillRect(X+10,Y+32,12,2);
+    rect(c,X+40,Y+16,16,22,'#f4ead0',2);c.font=`11px ${EMOJI_FONT}`;c.fillText('🍿',X+48,Y+25);c.fillStyle='#7a1f2b';c.fillRect(X+42,Y+32,12,2);
+    rect(c,X+25,Y+38,14,24,'#3a1a10',2);rect(c,X+31.3,Y+38,1.4,24,'#ffd23f');
+    if(on){const g=(Math.sin(t*3)+1)/2;bubble(c,X+32,Y-26+g*3,M.sc[Math.floor(t/2.2)%M.sc.length][0].split(' ')[0])}break}
   case'zoo':{rect(c,X+4,Y+30,56,32,'#f4e3b5',3);rect(c,X+40,Y+34,16,22,'#d9534f',2);rect(c,X+42,Y+38,12,8,'#ffe9a0',1);
     rect(c,X+6,Y-4,6,66,'#8a5a2c',2);rect(c,X+52,Y-4,6,66,'#8a5a2c',2);rect(c,X+2,Y-10,60,16,'#3f9a3a',6);
     c.fillStyle='#fff';c.font='bold 11px system-ui';c.textAlign='center';c.textBaseline='middle';c.fillText('ZOO',X+32,Y-2);
@@ -2711,7 +2770,7 @@ function drawObjIn(c,o,t,icon){
   if(PRODUCE[o.t]&&produced(o)){const n=produced(o);bubble(c,X+BUILD[o.t].w*T/2,Y-(o.t==='hive'?0:o.t==='dock'?-4:4),o.t==='dock'?'🎣':PRODUCE[o.t].icon||ITEMS[PRODUCE[o.t].item].e);
     if(n>1){c.font='bold 11px sans-serif';c.fillStyle='#b5651d';c.fillText(n,X+BUILD[o.t].w*T/2+14,Y-24)}}
 }
-function gateOpen(o){const gx=o.x*T+16,gy=o.y*T+20;return[player,...villagers.filter(v=>!v.asleep&&!v.inHosp&&!v.carried),...(friend&&!friend.in?[friend]:[])].some(e=>Math.hypot(e.x-gx,e.y-gy)<34)}
+function gateOpen(o){const gx=o.x*T+16,gy=o.y*T+20;return[player,...villagers.filter(v=>!v.asleep&&!v.inHosp&&!v.carried&&!v.atMovie),...(friend&&!friend.in?[friend]:[])].some(e=>Math.hypot(e.x-gx,e.y-gy)<34)}
 // a little shop: the bakery and the creamery
 function shop(c,X,Y,wall,roof,stripe,sign,icon,t){
   rect(c,X+44,Y+4,8,16,'#a0522d');rect(c,X+6,Y+24,52,38,wall,3);poly(c,roof,X+2,Y+28,X+32,Y+6,X+62,Y+28);
@@ -2937,7 +2996,7 @@ function draw(t){
     for(const b of bombs){const p=Math.min(1,b.t/b.dur);ell(ctx,b.tx,b.ty,6+p*8,3+p*4,`rgba(0,0,0,${.12+p*.25})`)}}
   for(const a of animals)list.push([a.y,()=>{drawAnimal(ctx,a,t);if(a.zz)zzz(ctx,a.x,a.y-(a.kind==='cow'?34:24),t)}]);
   for(const cr of critters)if(!cr.hide&&!cr.gone)list.push([cr.y+(cr.kind==='parrot'?40:0),()=>drawCritter(ctx,cr,t)]);
-  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried)list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);const bd=isBday(v.v);if(bd)partyHat(ctx,v.x,v.y-Math.sin(v.walk)*.8,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-(bd?54:40),v.v.req.hurt?'🩹':'❗');else if(bd&&!v.talkT&&!(S.bdayGift&&S.bdayGift[v.v.name]===S.day))bubble(ctx,v.x,v.y-54,'🎂')}]);
+  for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried&&!v.atMovie)list.push([v.y,()=>{drawPerson(ctx,v.x,v.y,{shirt:v.v.shirt,skin:v.v.skin,hair:v.v.hair},v.dir,v.walk,null,t);const bd=isBday(v.v);if(bd)partyHat(ctx,v.x,v.y-Math.sin(v.walk)*.8,t);if(v.v.req&&!v.talkT)bubble(ctx,v.x,v.y-(bd?54:40),v.v.req.hurt?'🩹':'❗');else if(bd&&!v.talkT&&!(S.bdayGift&&S.bdayGift[v.v.name]===S.day))bubble(ctx,v.x,v.y-54,'🎂')}]);
   if(!(train&&train.rider)&&!fly)list.push([player.y,()=>{drawPerson(ctx,player.x,player.y,guestMode?FRIEND_LOOK:PLAYER_LOOK,player.dir,player.walk,player.act,t);if(player.frozen>0){rect(ctx,player.x-13,player.y-44,26,46,'rgba(170,220,255,.55)',5);ctx.strokeStyle='rgba(255,255,255,.9)';ctx.lineWidth=1.5;ctx.strokeRect(player.x-13,player.y-44,26,46);ctx.fillStyle='rgba(255,255,255,.7)';ctx.fillRect(player.x-9,player.y-40,3,14)}}]);
   for(const m of muds)list.push([m.y*T+4,()=>{const X=m.x*T+16,Y=m.y*T+22,a=Math.min(1,(10-m.t)/2);ctx.globalAlpha=a;ell(ctx,X,Y,13,6,'#5a4a2a');ell(ctx,X-3,Y-1,7,3,'#6b5a36');ell(ctx,X+4,Y-2,2.5,1.2,'rgba(255,255,255,.35)');ctx.globalAlpha=1}]);
   for(const f of flames)list.push([f.y*T+20,()=>{const X=f.x*T+16,Y=f.y*T+22,a=Math.min(1,(7-f.t)/1.5),fl=Math.sin(t*12+f.x)*2;ctx.globalAlpha=a;ell(ctx,X,Y,8,3,'rgba(255,120,30,.35)');ell(ctx,X,Y-6+fl*.3,5,8+fl,'#ff6a1a');ell(ctx,X,Y-5,3,5,'#ffd23f');ctx.globalAlpha=1}]);
@@ -2960,7 +3019,7 @@ function draw(t){
   // Fog over the parts of the island you haven't seen
   ctx.imageSmoothingEnabled=true;ctx.drawImage(fogC,0,0,W,H,0,0,W*T,H*T);
   // Villager chat
-  for(const v of villagers)if(v.talkT>0&&v.say&&!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried){ctx.font='bold 12px system-ui,sans-serif';const w=ctx.measureText(v.say).width+16;
+  for(const v of villagers)if(v.talkT>0&&v.say&&!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried&&!v.atMovie){ctx.font='bold 12px system-ui,sans-serif';const w=ctx.measureText(v.say).width+16;
     rect(ctx,v.x-w/2,v.y-70,w,24,'rgba(255,255,255,.96)',10);poly(ctx,'rgba(255,255,255,.96)',v.x-5,v.y-46,v.x+5,v.y-46,v.x,v.y-40);
     ctx.fillStyle='#4a3410';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(v.say,v.x,v.y-58)}
   // Night
@@ -3104,7 +3163,7 @@ function stopOf(st){for(const[x,y]of[[st.x,st.y+1],[st.x+1,st.y+1],[st.x-1,st.y]
 function trackPath(a,b){if(a.x===b.x&&a.y===b.y)return[];const r=findPath(a.x,a.y,(x,y)=>x===b.x&&y===b.y,null,isTrack);return r?r.path:null}
 const STATION_NAMES=['Seaside','Palm Grove','Sunny Hill','Shell Beach','Maple Stop','Rainbow Junction','Coconut Corner','Starfish Halt'];
 function stationName(o){const sts=S.objs.filter(s=>s.t==='station').sort((a,b)=>a.id-b.id),i=sts.indexOf(o);return(STATION_NAMES[i]||'Station '+(i+1))+' Station'}
-function riders(){if(bedtime())return[];const vs=villagers.filter(v=>!v.asleep&&!v.inHosp&&!v.carried&&!isGuest(v.v.name)).sort(()=>Math.random()-.5);return vs.slice(0,Math.min(vs.length,1+(Math.random()*4|0))).map(v=>v.v)}
+function riders(){if(bedtime())return[];const vs=villagers.filter(v=>!v.asleep&&!v.inHosp&&!v.carried&&!v.atMovie&&!isGuest(v.v.name)).sort(()=>Math.random()-.5);return vs.slice(0,Math.min(vs.length,1+(Math.random()*4|0))).map(v=>v.v)}
 function trainGo(t,id){const st=byId(id),s=st&&st.t==='station'&&stopOf(st),p=s&&trackPath(tileOf(t),s);if(!p)return false;t.path=p;t.dest=id;return true}
 function trainUpdate(dt){
   const sts=S.objs.filter(o=>o.t==='station'&&stopOf(o));
