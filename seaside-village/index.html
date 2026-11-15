@@ -132,6 +132,7 @@ const BUILD={
   well:{n:'Well',cost:80,w:1,h:1,tall:10,d:'Crops nearby grow 2× faster'},
   house:{n:'House',cost:120,w:2,h:2,d:'A villager moves in'},
   cabin:{n:'Cabin',cost:0,w:2,h:2,one:1,d:'A friend can join your island (👥) and stay here'},
+  guesthut:{n:'Guest Fishing Hut',cost:0,w:2,h:2,one:1,d:'A guest cabin that\'s a fishing hut on 🪵 wood — a friend (👥) can stay here'},
   myhouse:{n:'Your House',cost:0,w:3,h:2,tall:24,one:1,d:'Your very own house — go inside and decorate it!'},
   coop:{n:'Chicken Coop',cost:200,w:2,h:2,d:'Chickens lay eggs 🥚'},
   hive:{n:'Beehive',cost:300,w:1,h:1,d:'Bees make honey 🍯'},
@@ -155,7 +156,7 @@ const BUILD={
   hospital:{n:'Hospital',cost:300,w:2,h:2,d:'Sells 🩹 band-aids for hurt villagers'},
   lighthouse:{n:'Lighthouse',cost:2500,w:2,h:2,tall:80,d:'Shows the whole island — go inside and decorate it!'},
 };
-const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','drawbridge','wood','hut','fisherhut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','mailbox','museum','school','library','observatory','zoo','exhibit','cinema','kitchen','hospital','track','station','balloon','lighthouse'];
+const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','drawbridge','wood','hut','fisherhut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','guesthut','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','mailbox','museum','school','library','observatory','zoo','exhibit','cinema','kitchen','hospital','track','station','balloon','lighthouse'];
 let guestMode=false,guestSel='carrot'; // guestMode: you're on a friend's island
 let visit=null,hostPos=null; // visit: the villager house you're in (null: Your House)
 let fly=null; // flying the hot air balloon
@@ -2120,8 +2121,8 @@ function canPlace(t,x,y){
   for(let j=0;j<b.h;j++)for(let i=0;i<b.w;i++){const X=x+i,Y=y+j,k=Y*W+X;
     if(!inMap(X,Y)||!rev[k])return'Explore there first';
     if(objAt(k)&&!(t==='track'&&objAt(k).t==='bridge')||feat[k]||chestHere(k)||inShip(X,Y))return'Something is in the way'; // tracks can go on top of a bridge
-    if(b.one&&S.objs.some(o=>o.t===t&&o!==ignoreObj))return`You can only have one ${b.n}`;
-    if(t==='hut'||t==='fisherhut'){if(!wood[k])return'Fishing huts only go on 🪵 wood';continue}
+    if(b.one&&S.objs.some(o=>o.t===(t==='guesthut'?'cabin':t)&&o!==ignoreObj))return t==='guesthut'||t==='cabin'?'You can only have one guest cabin (a Cabin or a Guest Fishing Hut)':`You can only have one ${b.n}`;
+    if(t==='hut'||t==='fisherhut'||t==='guesthut'){if(!wood[k])return'Fishing huts only go on 🪵 wood';continue}
     if(b.on==='shore'&&curKind==='volcano')return'No fish in lava!';
     if(b.on==='shore'){if(ter[k]!==WATER||wood[k]||!N4.some(([a,c])=>inMap(X+a,Y+c)&&(ter[(Y+c)*W+X+a]!==WATER||wood[(Y+c)*W+X+a])))return'Docks go in the water, next to the beach (or some 🪵 wood)'}
     else if(b.on==='water'){if(ter[k]!==WATER||wood[k])return'Bridges go over water'}
@@ -2143,7 +2144,7 @@ function doPlace(t,x,y){
   S.coins-=b.cost;tally('build:'+t);
   if(t==='wood'){(S.wood||(S.wood=[])).push(y*W+x);applyWood();drawTerrain();takeForage(y*W+x);dirty();refreshTray();return true}
   if(t==='track'){const br=objAt(y*W+x);if(br&&br.t==='bridge'){S.objs=S.objs.filter(q=>q!==br);rebuildOcc()}} // the track takes over the bridge
-  const o={id:S.nextId++,t:t==='fisherhut'?'house':t,x,y};if(PRODUCE[t])o.last=now();if(t==='fisherhut')o.fish=1; // a fisher's hut is a villager's house that sits on wood
+  const o={id:S.nextId++,t:t==='fisherhut'?'house':t==='guesthut'?'cabin':t,x,y};if(PRODUCE[t])o.last=now();if(t==='fisherhut'||t==='guesthut')o.fish=1; // a fisher's hut is a villager's house that sits on wood
   S.objs.push(o);rebuildOcc();
   for(let j=0;j<b.h;j++)for(let i=0;i<b.w;i++)takeForage((y+j)*W+x+i);
   if(t==='house'||t==='fisherhut'){const v=newVillager(o.id);spawnVillager(v);toast(t==='fisherhut'?`🎣 ${v.name} moved into the fisher's hut!`:`🏠 ${v.name} moved in to the village!`,3000)}
@@ -2182,7 +2183,8 @@ function doRemove(o){
   }
 }
 
-function moveWhy(o,x,y){ignoreObj=o;const why=canPlace(o.t,x,y);ignoreObj=null;return why}
+const placeType=o=>o.fish?(o.t==='cabin'?'guesthut':'fisherhut'):o.t;
+function moveWhy(o,x,y){ignoreObj=o;const why=canPlace(placeType(o),x,y);ignoreObj=null;return why}
 function moveObj(o,x,y){
   const why=moveWhy(o,x,y);if(why){toast(why);return false}
   doAct('move',{id:o.id,x,y});return true;
@@ -2905,7 +2907,8 @@ function drawObjIn(c,o,t,icon){
       rect(c,wx-2,Y+44,20,5,'#8a5a2c',2);for(let f=0;f<4;f++)ell(c,wx+1+f*5,Y+43,2.4,2.4,['#ff6b8b','#ffd23f','#b980ff','#ff8c42'][f])}
     rect(c,X+40,Y+36,16,26,'#c0392b',4);ell(c,X+52,Y+50,1.6,1.6,'#ffd24a');ell(c,X+48,Y+63,11,2.5,'#7bc96f')}
     if(!icon&&pets().some(hungry))bubble(c,X+48,Y-24,'🐾');else if(!icon&&guestsIn(0).length)bubble(c,X+48,Y-24,'👋');break;
-  case'cabin':if(curKind==='ice'){igloo(c,o,t,icon,night);break}rect(c,X+43,Y+4,9,18,'#8f96a3',2);rect(c,X+6,Y+26,52,36,'#9c6233',3);
+  case'guesthut':hutArt(c,X,Y,t,icon,night);if(icon){c.font=`14px ${EMOJI_FONT}`;c.textAlign='center';c.textBaseline='middle';c.fillText('👥',X+50,Y+10)}break;
+  case'cabin':if(o.fish){hutArt(c,X,Y,t,icon,night);rect(c,X+18,Y-6,28,12,'#fff3d6',3);c.fillStyle='#5a3a1a';c.font='bold 8px system-ui';c.textAlign='center';c.textBaseline='middle';c.fillText('GUESTS',X+32,Y);break}if(curKind==='ice'){igloo(c,o,t,icon,night);break}rect(c,X+43,Y+4,9,18,'#8f96a3',2);rect(c,X+6,Y+26,52,36,'#9c6233',3);
     for(let k=0;k<6;k++){c.fillStyle='#7d4b24';c.fillRect(X+6,Y+31+k*6,52,1.6);ell(c,X+7,Y+28+k*6,3,3,'#c08a52');ell(c,X+57,Y+28+k*6,3,3,'#c08a52')}
     poly(c,'#4e3b2a',X,Y+30,X+32,Y+4,X+64,Y+30);poly(c,'#3a2b1e',X,Y+30,X+64,Y+30,X+61,Y+26,X+3,Y+26);
     rect(c,X+26,Y+40,12,22,'#5a3418',3);ell(c,X+35,Y+52,1.4,1.4,'#ffd24a');
@@ -3179,7 +3182,7 @@ function draw(t){
   // Building preview
   if(mode==='build'&&lifted){const b=BUILD[lifted.t];ctx.strokeStyle='#ffcf4a';ctx.lineWidth=2;ctx.setLineDash([5,4]);
     ctx.strokeRect(lifted.x*T+1,lifted.y*T+1,b.w*T-2,b.h*T-2);ctx.setLineDash([])}
-  const gt=lifted?lifted.t:tool;
+  const gt=lifted?placeType(lifted):tool;
   if(mode==='build'&&ghost&&BUILD[gt]){const b=BUILD[gt];ignoreObj=lifted;const ok=!canPlace(gt,ghost.x,ghost.y)&&(lifted||S.coins>=b.cost);ignoreObj=null;
     ctx.globalAlpha=.6;drawObj(ctx,{t:gt,x:ghost.x,y:ghost.y,id:lifted?lifted.id:S.nextId,last:now()},t,true);ctx.globalAlpha=1;
     ctx.fillStyle=ok?'rgba(80,255,120,.25)':'rgba(255,60,60,.3)';ctx.fillRect(ghost.x*T,ghost.y*T,b.w*T,b.h*T);
