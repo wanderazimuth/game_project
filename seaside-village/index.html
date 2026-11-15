@@ -112,6 +112,7 @@ const BUILD={
   wood:{n:'Wood',cost:3,w:1,h:1,flat:1,paint:1,d:'Only goes on water — then build anything on it, just like grass! (drag to lay lots)'},
   fisherhut:{n:'Fisher\'s Hut',cost:450,w:2,h:2,d:'A little hut that only goes on 🪵 wood — a villager who loves fishing moves in!'},
   hut:{n:'Fishing Hut',cost:400,w:2,h:2,d:'A cozy hut that only goes on 🪵 wood — go inside and decorate it, like Your House!'},
+  drawbridge:{n:'Drawbridge',cost:60,w:1,h:1,on:'water',walk:1,flat:1,paint:1,d:'Only YOU can cross — it pulls up for everyone else (even terror birds!)'},
   bridge:{n:'Bridge',cost:15,w:1,h:1,on:'water',walk:1,flat:1,paint:1,d:'Walk across the water — drag to build a long one'},
   tree:{n:'Tree',cost:0,w:1,h:1,tall:40,d:'Plant a tree'},
   campfire:{n:'Campfire',cost:40,w:1,h:1,d:'Warm and glowing at night'},
@@ -154,7 +155,7 @@ const BUILD={
   hospital:{n:'Hospital',cost:300,w:2,h:2,d:'Sells 🩹 band-aids for hurt villagers'},
   lighthouse:{n:'Lighthouse',cost:2500,w:2,h:2,tall:80,d:'Shows the whole island — go inside and decorate it!'},
 };
-const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','wood','hut','fisherhut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','mailbox','museum','school','library','observatory','zoo','exhibit','cinema','kitchen','hospital','track','station','balloon','lighthouse'];
+const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','drawbridge','wood','hut','fisherhut','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','mailbox','museum','school','library','observatory','zoo','exhibit','cinema','kitchen','hospital','track','station','balloon','lighthouse'];
 let guestMode=false,guestSel='carrot'; // guestMode: you're on a friend's island
 let visit=null,hostPos=null; // visit: the villager house you're in (null: Your House)
 let fly=null; // flying the hot air balloon
@@ -376,9 +377,10 @@ const objAt=i=>{const o=occ[i]>=0?S.objs[occ[i]]:null;return o===ignoreObj?null:
 const inShip=(x,y)=>x>=SHIP.x&&x<SHIP.x+SHIP.w&&y>=SHIP.y&&y<SHIP.y+SHIP.h;
 // a treasure chest that hasn't been opened yet (opened ones are gone)
 function chestHere(i){return chestAt[i]>=0&&!S.opened.includes(chestAt[i])}
+let meWalk=0; // >0 while working out where YOU can walk (only you can cross a drawbridge)
 function walkable(x,y){
   if(!inMap(x,y))return false;const i=y*W+x,o=objAt(i);
-  if(o)return!!BUILD[o.t].walk;
+  if(o)return o.t==='drawbridge'?meWalk>0:!!BUILD[o.t].walk;
   return(ter[i]!==WATER||wood[i])&&!feat[i]&&!chestHere(i)&&!inShip(x,y);
 }
 const count=t=>S.objs.reduce((n,o)=>n+(o.t===t),0);
@@ -569,7 +571,8 @@ function footprintOf(tg){
   if(tg.k==='xspot')return X_AT;
   return{x:tg.x??tg.i%W,y:tg.y??(tg.i/W|0),w:1,h:1};
 }
-function goToTarget(tg){
+function goToTarget(tg){meWalk++;try{return goToTargetIn(tg)}finally{meWalk--}}
+function goToTargetIn(tg){
   if(fly){flyTap(tg);return}
   if(train&&train.rider){toast('🚂 Choo choo! Sit back and enjoy the ride');return}
   player.steer=null;
@@ -2726,6 +2729,10 @@ const bubble=plain(bubbleRaw);
 function bubbleRaw(c,x,y,txt){rect(c,x-13,y-26,26,24,'rgba(255,255,255,.95)',8);poly(c,'rgba(255,255,255,.95)',x-4,y-3,x+4,y-3,x,y+3);
   c.font=`15px ${EMOJI_FONT}`;c.textAlign='center';c.textBaseline='middle';c.fillText(txt,x,y-13)}
 const ROOFS=['#d9534f','#4a8fd9','#4fae5c','#9b59b6','#f0ad4e','#e8739a'],WALLS=['#fff4dc','#ffe9c7','#f3f0ff','#e8f7ff'];
+// drawbridges come down when you walk up to them, and pull up again for everyone else
+const dbOpen=new Map();
+function dbAnim(o,t,icon){if(icon)return 1;let A=dbOpen.get(o.id);if(!A){A={op:0,t};dbOpen.set(o.id,A)}const dt=Math.min(.1,Math.max(0,t-A.t));A.t=t;
+  const near=!inside&&Math.hypot(player.x-(o.x*T+16),player.y-(o.y*T+16))<T*2.4;A.op=Math.max(0,Math.min(1,A.op+(near?3:-2.5)*dt));return A.op}
 function hutArt(c,X,Y,t,icon,night){const win=night>.2?'#ffe27a':'#9fd8ff';
     for(const px of[X+6,X+56])rect(c,px-2,Y+56,5,8,'#5a3418',1);
     rect(c,X+4,Y+24,56,36,'#9c6a3c',3);c.fillStyle='rgba(0,0,0,.14)';for(let k=0;k<5;k++)c.fillRect(X+4,Y+30+k*7,56,1.5);
@@ -2781,6 +2788,14 @@ function drawObjIn(c,o,t,icon){
   case'hedge':{const has=(dx,dy)=>{if(icon)return dx!==0&&!dy;const n=inMap(o.x+dx,o.y+dy)&&objAt((o.y+dy)*W+o.x+dx);return n&&n.t==='hedge'};
     if(has(-1,0))rect(c,X,Y+6,16,22,'#3a8a36');if(has(1,0))rect(c,X+16,Y+6,16,22,'#3a8a36');if(has(0,-1))rect(c,X+4,Y-4,24,16,'#3a8a36');if(has(0,1))rect(c,X+4,Y+16,24,16,'#3a8a36');
     ell(c,X+16,Y+16,14,13,'#3a8a36');ell(c,X+12,Y+11,7,6,'#4fa64a');ell(c,X+20,Y+14,5,4,'#5cbf54');break}
+  case'drawbridge':{const D=dbAnim(o,t,icon),op=D;
+    c.fillStyle='rgba(0,0,0,.15)';c.fillRect(X,Y+T-3,T,3);
+    for(const px of[X+1,X+T-6]){rect(c,px,Y-18,5,T+18,'#5a3a1a',1);ell(c,px+2.5,Y-18,3.2,2,'#7a5a3a')}
+    const top=Y+(1-op)*-18,h=T*op+22*(1-op);
+    rect(c,X+3,top,T-6,h,op>.5?'#b07b45':'#9a6a3a',2);c.fillStyle='#8a5a2c';
+    if(op>.5)for(let k=1;k<5;k++)c.fillRect(X+3,top+k*h/5,T-6,1.5);else for(let k=1;k<4;k++)c.fillRect(X+3+k*(T-6)/4,top,1.5,h);
+    c.strokeStyle='#666';c.lineWidth=1.2;c.setLineDash([2,2]);c.beginPath();c.moveTo(X+3.5,Y-16);c.lineTo(X+5,top+2);c.moveTo(X+T-3.5,Y-16);c.lineTo(X+T-5,top+2);c.stroke();c.setLineDash([]);
+    if(!icon&&op<.1){ell(c,X+16,Y+T-6,9,2,'rgba(255,255,255,.35)')}break}
   case'bridge':{const n=(dx,dy)=>{const X2=o.x+dx,Y2=o.y+dy;if(!inMap(X2,Y2))return false;const b=objAt(Y2*W+X2);return b&&b.t==='bridge'||ter[Y2*W+X2]!==WATER};
     const vert=!icon&&(n(0,-1)||n(0,1))&&!(n(-1,0)||n(1,0));
     if(vert){rect(c,X+2,Y,T-4,T,'#b07b45');c.fillStyle='#8a5a2c';for(let k=1;k<5;k++)c.fillRect(X+2,Y+k*6.4,T-4,1.5);rect(c,X+1,Y,3,T,'#7a4a24');rect(c,X+T-4,Y,3,T,'#7a4a24')}
@@ -3559,7 +3574,8 @@ const furnBox=f=>{const F=FURN[f.k];return{x:f.x,y:f.y,w:F.w,h:F.h}};
 // what stands on a floor tile (rugs don't count: you walk on them)
 function furnAt(x,y,ignore){return room().items.find(f=>{const F=FURN[f.k];return f!==ignore&&!F.wall&&!F.walk&&x>=f.x&&x<f.x+F.w&&y>=f.y&&y<f.y+F.h})}
 function inWalkable(x,y){if(x===DOOR_X&&y===RH)return!(inCave&&caveLv===2);return x>=0&&y>=0&&x<RW&&y<RH&&!furnAt(x,y)}
-const pWalk=()=>inside?inWalkable:walkable;
+const meWalkable=(x,y)=>{meWalk++;try{return walkable(x,y)}finally{meWalk--}};
+const pWalk=()=>inside?inWalkable:meWalkable;
 function furnWhy(k,x,y,ignore,list=room().items){
   const F=FURN[k],others=list.filter(f=>f!==ignore);
   const hit=(f,G)=>x<f.x+G.w&&x+F.w>f.x&&y<f.y+G.h&&y+F.h>f.y;
