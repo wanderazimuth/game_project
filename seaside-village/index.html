@@ -1004,6 +1004,14 @@ function sandStep(cr,dt){
   if(terrorOk(cr.x+mx,cr.y)){cr.x+=mx;moved=true}if(terrorOk(cr.x,cr.y+my)){cr.y+=my;moved=true}
   if(!moved)cr.wa=Math.random()*Math.PI*2;if(mx)cr.dir=mx<0?-1:1;cr.walk+=dt*8;
 }
+// knocking down a hideout with the 🧹 Remove tool: its terror birds move away, and anyone trapped goes free
+function denHit(wx,wy){const tx=Math.floor(wx/T),ty=Math.floor(wy/T);return allDens().find(D=>tx>=D.x-1&&tx<=D.x+2&&ty>=D.y-1&&ty<=D.y+1)||null}
+function denRemoveModal(D){
+  const egg=critters.find(c=>c.den===D),birds=critters.filter(c=>SNATCH(c.kind)&&denOf(c)===D),nm=egg?egg.name:birds.length>1?`the ${snName(birds[0])}s`:`the ${snName(birds[0]||{kind:'sand'})}`;
+  openModal(`<h2>🧹 Remove the hideout?</h2><p style="font-size:40px;text-align:center">🕳️🦤💨</p><p>Knock down ${egg?esc2(nm)+'\'s':'this'} secret hideout? ${egg?esc2(nm)+' will':birds.length>1?'The terror birds here will':'The terror bird here will'} move away for good${birds.some(b=>b.prey)?', and the trapped villagers go free':''}.</p>${egg?`<p>You get <b>🪙${Math.floor(BUILD.sandegg.cost/2)}</b> back.</p>`:''}
+    <div class="btns"><button class="btn gray" data-a="close">Keep it</button><button class="btn" data-a="yes">🧹 Remove</button></div>`,{yes:()=>{closeModal();doAct('denBye',egg?{id:egg.mid}:{island:1})}});
+}
+function snatchLetGo(cr){const v=cr.prey;cr.prey=null;cr.mode=0;if(!v)return;const D=denOf(cr);v.grab=null;v.carried=0;v.cage=0;if(D){v.x=(D.x+1+(v.slot||0))*T+16;v.y=(D.y+1)*T+24}v.slot=0;unstick(v);v.path=[];v.wait=2;v.say='I\'m free! 😄';v.talkT=3}
 function drawDen(c,t,D){
   const X=D.x*T+16,Y=D.y*T+20,guards=critters.filter(c=>SNATCH(c.kind)&&denOf(c)===D&&c.mode==='guard'&&c.prey);
   const J=curKind==='jungle';ell(c,X+T*.5,Y+4,52,15,J?'#4a6a2e':'#c9a462');ell(c,X+T*.5,Y,44,12,J?'#5f8038':'#d8b878');
@@ -1048,11 +1056,13 @@ function moaNameModal(x,y,k='moa'){
     {dice:()=>ask(pick()),ok:()=>{const n=cleanName(document.getElementById('codeIn').value)||pick();closeModal();doAct('moaEgg',{x,y,name:n,k})}});
   ask(pick())}
 function spawnCritters(){
+  if(S&&S.noDen)DEN=null; // you knocked down this island's hideout
   const kinds=curKind==='dino'?['rex','rex','longneck','longneck','longneck','trike','trike','trike','trike','ptero','ptero','ptero','terror','terror','terror','moa','moa','moa']:curKind==='haunted'?['ghost','ghost','ghost','ghost','ghost','ghost','bat','bat','bat','bat']:curKind==='pirate'?['crab','crab','crab','crab','crab','crab','crab','parrot','parrot']:curKind==='autumn'?['squirrel','squirrel','squirrel','squirrel','squirrel','squirrel']:curKind==='ice'?['peng','peng','peng','peng','peng','peng','peng','bear','bear','bear']:curKind==='jungle'?['vine','vine','monkey','monkey','monkey','monkey','monkey','parrot','parrot','parrot','parrot']:curKind==='volcano'?['terror','terror','terror']:curKind==='lagoon'?['dolphin','dolphin','dolphin','dolphin','crab','crab','crab','parrot','parrot']:curKind==='blossom'?['crane','crane','crane','redpanda','redpanda','redpanda','redpanda','koi','koi','koi','koi','koi']:curKind==='desert'?['sand','sand','camel','camel','camel','lizard','lizard','lizard','lizard','lizard']:[];
   kinds.push(...(curKind==='dino'?['chick','chick','chick']:curKind==='ice'?['frost','frost']:curKind==='volcano'?['fire','fire']:curKind==='falls'?['swamp','swamp','swamp']:[])); // the new terror birds
   kinds.push('gray'); // the gray terror bird: on every island, even home
   if(curKind!=='dino')kinds.push(...(curKind==='volcano'?['moa','moa']:['terror','terror','moa','moa'])); // terror birds and moas live on every island now
   const nightOnly=curKind==='dino'||curKind==='volcano'?['terror','terror','terror','terror']:curKind==='ice'?['bear','bear','bear','frost','terror']:curKind==='haunted'?['ghostbird','ghostbird','ghostbird','terror']:['terror','terror'];kinds.push(...nightOnly); // these only come out at night
+  if(!DEN)for(let k=kinds.length-1;k>=0;k--)if(SNATCH(kinds[k]))kinds.splice(k,1);
   critters=kinds.map((kind,i)=>({kind,night:i>=kinds.length-nightOnly.length?1:0,gone:0,fly:0,loot:null,hide:0,...(SNATCH(kind)&&DEN?{x:DEN.x*T+16,y:(DEN.y+2)*T+20}:kind==='koi'?pondSpot():kind==='dolphin'?lagoonSpot():kind==='crab'?sandSpot():scorpSpot()),wa:Math.random()*6,wt:0,dir:1,walk:0,happy:0,calm:0,still:false}));
 }
 const onIce=e=>{const t=tileOf(e);return inMap(t.x,t.y)&&ter[t.y*W+t.x]===ICE};
@@ -2697,6 +2707,13 @@ const ACT={
     const v=newVillager(o.id);S.keeper=1;spawnVillager(v);dirty();refreshTray();toast(`🗼 ${v.name} moved into the lighthouse as the keeper!`,3200)},
   sleep(){const tod=((now()-S.t0)%DAY_MS)/DAY_MS;if(tod<.6){toast('😴 You\'re not sleepy yet — come back in the evening');return}
     S.t0=now()-(dayNow()+.01)*DAY_MS;dirty();if(!actor)sleepFade=1.2;else netSend({t:'sleep'});toast('💤 Good night… ☀️ Good morning!',2600)},
+  denBye({id,island}){
+    const gone=island?critters.filter(c=>SNATCH(c.kind)&&!c.mid):critters.filter(c=>c.mid===id&&c.den);if(!gone.length&&!(island&&DEN))return;
+    const D=gone.length?denOf(gone[0]):DEN;for(const c of gone)snatchLetGo(c);
+    if(island){S.noDen=1;DEN=null}else{S.moas=(S.moas||[]).filter(m=>m.id!==id);S.coins+=Math.floor(BUILD.sandegg.cost/2);refreshTray()}
+    critters=critters.filter(c=>!gone.includes(c));dirty();
+    if(D){for(let k=0;k<30;k++)confetti.push({x:D.x*T+32,y:D.y*T+20,vx:(Math.random()-.5)*200,vy:-80-Math.random()*160,c:['#d8b878','#c9a462','#fff'][k%3],t:0});floatAt(D.x*T+32,D.y*T,island?'🧹 Gone!':`🧹 +🪙${Math.floor(BUILD.sandegg.cost/2)}`)}
+    toast(`🧹 The hideout is gone — ${gone.length>1?'the terror birds ran':'the terror bird ran'} off and won't be back!`,3000)},
   eggBye({id}){const cr=critters.find(c=>c.mid===id);if(cr&&cr.prey)return;S.moas=(S.moas||[]).filter(m=>m.id!==id);critters=critters.filter(c=>c.mid!==id);dirty();if(cr){floatAt(cr.x,cr.y-50,'SKRAW! 💨');toast(`👋 ${cr.name} ran off into the dunes and won't be back!`,2800)}},
   moaEgg({x,y,name,k}){if(!EGGS[k])k='moa';const E=EGGS[k],bt=E.b;if(placeWhy(bt,x,y))return;const b=BUILD[bt];S.coins-=b.cost;tally('build:'+bt);
     const m={id:S.nextId++,x,y,k,name:cleanName(String(name||''))||E.def||E.n};(S.moas||(S.moas=[])).push(m);dirty();refreshTray();
@@ -2801,7 +2818,7 @@ function endPtr(e){
       else if(quick)toast('Tap something you built to pick it up');
     }
     else if(quick){const tg=pickAt(w.x,w.y);
-      if(tool==='remove'){if(tg.k==='obj')removeObj(tg.o);else if(tg.k==='ground'&&objAt(tg.y*W+tg.x))removeObj(objAt(tg.y*W+tg.x));else if(tg.k==='ground'&&wood[tg.y*W+tg.x])doAct('unwood',{i:tg.y*W+tg.x})}
+      if(tool==='remove'){const D=tg.k!=='obj'&&denHit(w.x,w.y);if(D)denRemoveModal(D);else if(tg.k==='obj')removeObj(tg.o);else if(tg.k==='ground'&&objAt(tg.y*W+tg.x))removeObj(objAt(tg.y*W+tg.x));else if(tg.k==='ground'&&wood[tg.y*W+tg.x])doAct('unwood',{i:tg.y*W+tg.x})}
       else if(tg.k==='obj')toast(`${bname(tg.o.t)}: ${BUILD[tg.o.t].d}`)}
   }else if(quick)goToTarget(pickAt(w.x,w.y));
 }
