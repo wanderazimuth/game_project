@@ -119,6 +119,7 @@ const BUILD={
   campfire:{n:'Campfire',cost:40,w:1,h:1,d:'Warm and glowing at night'},
   picnic:{n:'Picnic Table',cost:45,w:2,h:1,d:'Lunch time!'},
   statue:{n:'Statue',cost:150,w:1,h:1,tall:20,d:'A statue of the captain — you!'},
+  archtower:{n:'Archery Tower',cost:300,w:1,h:1,tall:62,d:'An archer 🏹 stands on top and shoots goblin raiders on Medieval Island!'},
   playground:{n:'Playground',cost:250,w:2,h:2,d:'A swing and a slide'},
   windmill:{n:'Windmill',cost:500,w:2,h:2,tall:40,d:'Round and round it goes'},
   pond:{n:'Fish Pond',cost:300,w:2,h:2,d:'Fish grow in it 🐟'},
@@ -165,7 +166,7 @@ const BUILD={
   hospital:{n:'Hospital',cost:300,w:2,h:2,d:'Sells 🩹 band-aids for hurt villagers'},
   lighthouse:{n:'Lighthouse',cost:2500,w:2,h:2,tall:80,d:'Shows the whole island — go inside and decorate it!'},
 };
-const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','drawbridge','wood','hut','fisherhut','treehouse','flowers','tree','bench','lamp','campfire','picnic','statue','playground','windmill','well','house','cabin','guesthut','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','mailbox','museum','school','library','observatory','moaegg','terroregg','dolphinegg','turtleegg','sandegg','seafence','petpark','zoo','exhibit','cinema','kitchen','hospital','track','station','balloon','fireworks','lighthouse'];
+const BUILD_ORDER=['farm','myhouse','path','fence','gate','hedge','bridge','drawbridge','wood','hut','fisherhut','treehouse','flowers','tree','bench','lamp','campfire','picnic','statue','archtower','playground','windmill','well','house','cabin','guesthut','coop','hive','dock','barn','pond','pigpen','bakery','creamery','greenhouse','bin','market','fountain','mailbox','museum','school','library','observatory','moaegg','terroregg','dolphinegg','turtleegg','sandegg','seafence','petpark','zoo','exhibit','cinema','kitchen','hospital','track','station','balloon','fireworks','lighthouse'];
 let guestMode=false,guestSel='carrot'; // guestMode: you're on a friend's island
 let visit=null,hostPos=null; // visit: the villager house you're in (null: Your House)
 let fly=null; // flying the hot air balloon
@@ -590,6 +591,7 @@ unstick(player);
 // ── What did you tap? ────────────────────────────────────────────────────────
 function pickAt(wx,wy){
   for(const sc of scorps)if(!sc.hide&&Math.abs(wx-sc.x)<17&&Math.abs(wy-sc.y+6)<15)return{k:'scorp',sc};
+  for(const g of goblins)if(Math.abs(wx-g.x)<17&&Math.abs(wy-g.y+16)<22)return{k:'gob',g};
   for(const cr of critters){if(cr.hide||cr.gone)continue;const big=cr.kind==='camel'||cr.kind==='bear'||cr.kind==='rex'||cr.kind==='trike'||!!HUNT[cr.kind]||cr.kind==='moa',tall=cr.kind==='camel'?54:cr.kind==='longneck'?76:cr.kind==='rex'?50:HUNT[cr.kind]&&cr.kind!=='bear'||cr.kind==='moa'?44:0,up=cr.zz&&cr.kind==='parrot'?6:cr.kind==='parrot'||cr.kind==='bat'?24:cr.kind==='ptero'?(cr.zz?8:34):cr.kind==='ghost'?14:0;if(Math.abs(wx-cr.x)<(cr.kind==='longneck'?30:big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(tall||(big?32:24)))return{k:'critter',cr}}
   for(const v of villagers)if(v.cage&&Math.abs(wx-v.x)<18&&wy<v.y+8&&wy>v.y-46)return{k:'captive',v,x:denOf(v.grab).x+1+(v.slot||0),y:denOf(v.grab).y};
   for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried&&!v.atMovie&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
@@ -629,6 +631,7 @@ function footprintOf(tg){
   if(tg.k==='chest'){const c=chests[tg.c];return{x:c.x,y:c.y,w:1,h:1}}
   if(tg.k==='vill'){const t=tileOf(tg.v);return{x:t.x,y:t.y,w:1,h:1}}
   if(tg.k==='scorp'){const t=tileOf(tg.sc);return{x:t.x,y:t.y,w:1,h:1}}
+  if(tg.k==='gob'){const t=tileOf(tg.g);return{x:t.x,y:t.y,w:1,h:1}}
   if(tg.k==='critter'){const t=tileOf(tg.cr);return{x:t.x,y:t.y,w:1,h:1}}
   if(tg.k==='temple')return TEMPLE_AT;
   if(tg.k==='cave')return CAVE_AT;
@@ -654,6 +657,9 @@ function goToTargetIn(tg){
   if(tg.k==='critter'){
     if(Math.hypot(tg.cr.x-player.x,tg.cr.y-player.y)<T*(tg.cr.kind==='dolphin'||tg.cr.kind==='seaturtle'||tg.cr.kind==='clown'||tg.cr.kind==='octo'||tg.cr.kind==='shark'?4.5:tg.cr.kind==='parrot'||tg.cr.kind==='bat'||tg.cr.kind==='ptero'||tg.cr.kind==='longneck'?3:tg.cr.kind==='ghost'?2.2:1.8)){player.path=[];arrive(tg);return}
     const b=tileOf(tg.cr),rr=tg.cr.kind==='dolphin'||tg.cr.kind==='seaturtle'||tg.cr.kind==='clown'||tg.cr.kind==='octo'||tg.cr.kind==='shark'?3:1,r=findPath(pt.x,pt.y,(x,y)=>Math.abs(x-b.x)<=rr&&Math.abs(y-b.y)<=rr,b,avoid);player.path=r?r.path:[];player.target=tg;return}
+  if(tg.k==='gob'){ // close enough to fight it, or run after it
+    if(Math.hypot(tg.g.x-player.x,tg.g.y-player.y)<T*1.8){player.path=[];arrive(tg);return}
+    const b=tileOf(tg.g),r=findPath(pt.x,pt.y,(x,y)=>Math.abs(x-b.x)<=1&&Math.abs(y-b.y)<=1,b);player.path=r?r.path:[];player.target=tg;return}
   if(tg.k==='scorp'){ // close enough to bonk it, or run after it
     if(Math.hypot(tg.sc.x-player.x,tg.sc.y-player.y)<T*1.8){player.path=[];arrive(tg);return}
     const b=tileOf(tg.sc),r=findPath(pt.x,pt.y,(x,y)=>Math.abs(x-b.x)<=1&&Math.abs(y-b.y)<=1,b);player.path=r?r.path:[];player.target=tg;return}
@@ -683,6 +689,7 @@ function arrive(tg){
     case'chest':doAct('chest',{c:tg.c});break;
     case'forage':if(forageAt.has(tg.i))act(250,'pick',()=>doAct('forage',{i:tg.i}));break;
     case'critter':if(Math.hypot(tg.cr.x-player.x,tg.cr.y-player.y)<T*(tg.cr.kind==='dolphin'||tg.cr.kind==='seaturtle'||tg.cr.kind==='clown'||tg.cr.kind==='octo'||tg.cr.kind==='shark'?4.5:tg.cr.kind==='parrot'||tg.cr.kind==='bat'||tg.cr.kind==='ptero'||tg.cr.kind==='longneck'?3.5:tg.cr.kind==='ghost'?2.8:2.4)){facePoint(tg.cr.x,tg.cr.y);feedCritter(tg.cr)}else toast('It wandered off!');break;
+    case'gob':if(!goblins.includes(tg.g))break;if(Math.hypot(tg.g.x-player.x,tg.g.y-player.y)<T*2.2){facePoint(tg.g.x,tg.g.y);act(250,'chop',()=>hitGob(tg.g))}else toast('👺 The goblin ran off — after it!');break;
     case'scorp':if(Math.hypot(tg.sc.x-player.x,tg.sc.y-player.y)<T*2.2){facePoint(tg.sc.x,tg.sc.y);act(250,'chop',()=>bonk(tg.sc))}else toast('🦂 It scuttled away — after it!');break;
     case'temple':templeModal();break;
     case'cave':enterCave();break;
@@ -729,6 +736,7 @@ function useObj(o,act){
     case'campfire':toast('🔥 Toasty warm!');break;
     case'picnic':toast('🧺 What a nice spot for lunch');break;
     case'statue':toast('🗿 The great captain of Seaside Village!');break;
+    case'archtower':toast(curKind==='medieval'?`🏹 The archer is watching for goblins!${S.gobsDown?' ('+S.gobsDown+' goblins chased away so far)':''}`:'🏹 The archer waves at you. No goblins on this island!',2600);break;
     case'playground':toast('🛝 Wheee!');break;
     case'windmill':toast('🌬️ Round and round!');break;
     case'dock':{
@@ -919,6 +927,84 @@ function bonk(sc){
     toast(`💥 Bonk! You got your ${l.coins?'🪙'+l.coins:ITEMS[l.k].e+' '+ITEMS[l.k].n} back!`);sc.loot=null;sc.hide=20;stealCool=3}
   else{sc.stun=2.5;floatAt(sc.x,sc.y-24,'💫');toast('💥 Bonk! Shoo, scorpion!')}
 }
+// ── Medieval Island: goblin raiders land on the beach and try to rob your buildings. Fight them, or build Archery Towers ──
+let goblins=[],arrows=[],raidT=60,gobBonk=0,archAim=new Map(),archCool=new Map(),raid=null;
+const gobWalk=(x,y)=>{if(!walkable(x,y))return false;const o=objAt(y*W+x);return!(o&&o.t==='gate')}; // walls and gates keep goblins out, and they can't cross a drawbridge
+const gobTargets=()=>S.objs.filter(o=>BUILD[o.t].w>=2&&!BUILD[o.t].walk&&o.t!=='exhibit');
+function gobPathTo(g,o){const t=tileOf(g),b=BUILD[o.t],r=findPath(t.x,t.y,(x,y)=>x>=o.x-1&&x<=o.x+b.w&&y>=o.y-1&&y<=o.y+b.h,{x:o.x+b.w/2,y:o.y+b.h/2},gobWalk);g.path=r?r.path:[];g.ok=!!(r&&r.ok)}
+function gobPathHome(g){const t=tileOf(g),r=findPath(t.x,t.y,(x,y)=>x===g.home.x&&y===g.home.y,g.home,gobWalk);g.path=r?r.path:[]}
+function startRaid(){
+  const pt=tileOf(player),side=sideOf(player);let best=null,bd=-1;
+  for(let k=0;k<600;k++){const x=2+(Math.random()*(W-4)|0),y=2+(Math.random()*(H-4)|0);
+    if(ter[y*W+x]!==SAND||!gobWalk(x,y)||side&&!side[y*W+x])continue;const d=Math.hypot(x-pt.x,y-pt.y);if(d>14&&d<34&&d>bd){bd=d;best={x,y}}}
+  if(!best)return;
+  const n=3+(Math.random()*3|0);raid={n,down:0,lost:0};
+  for(let k=0;k<n;k++){const g={x:best.x*T+16+(Math.random()-.5)*40,y:best.y*T+20+(Math.random()-.5)*30,home:best,hp:3,st:'go',path:[],stun:k*.7,hit:0,loot:0,smash:0,atk:0,dir:'right',walk:0,re:0,tgt:null,tries:0};
+    if(!gobWalk(Math.floor(g.x/T),Math.floor((g.y-2)/T))){g.x=best.x*T+16;g.y=best.y*T+20}goblins.push(g)}
+  toast(`🎺 TOOT TOOT! ${n} goblin raiders are landing on the beach! Fight them ⚔️ or build 🏹 Archery Towers!`,3600);
+}
+function gobPick(g){const L=gobTargets();if(!L.length){g.st='chase';g.tgt=null;return}g.tgt=L[Math.random()*L.length|0].id;g.st='go';gobPathTo(g,byId(g.tgt))}
+function gobDown(g,how){
+  goblins=goblins.filter(x=>x!==g);S.gobsDown=(S.gobsDown||0)+1;if(raid)raid.down++;
+  for(let k=0;k<24;k++)confetti.push({x:g.x,y:g.y-14,vx:(Math.random()-.5)*160,vy:-60-Math.random()*140,c:['#6fbf4a','#a8e06a','#fff'][k%3],t:0});
+  const back=g.loot;doAct('giveBack',{coins:back+10});floatAt(g.x,g.y-40,`+🪙${back+10}`);
+  toast(how==='arrow'?`🏹 Thwip! The archer got a goblin!${back?' You got your 🪙'+back+' back!':''} +🪙10`:`💥 POW! Goblin defeated!${back?' You got your 🪙'+back+' back!':''} +🪙10`,2400);gobRaidOver();
+}
+function gobRaidOver(){if(goblins.length||!raid)return;const r=raid;raid=null;
+  if(r.down)setTimeout(()=>toast(r.lost?`👺 The raid is over. ${r.down} goblin${r.down>1?'s':''} beaten, ${r.lost} got away!`:`🎉 You defended the kingdom! Every goblin was beaten! 🏰`,3200),2500)}
+function gobHurt(g,dmg,how){if(!goblins.includes(g))return;g.hp-=dmg;g.hit=.25;g.stun=Math.max(g.stun,.5);
+  const a=Math.atan2(g.y-player.y,g.x-player.x);if(how!=='arrow')for(let k=0;k<4;k++)moveBy(g,Math.cos(a)*5,Math.sin(a)*5,gobWalk);
+  if(g.hp<=0)gobDown(g,how);else floatAt(g.x,g.y-36,how==='arrow'?'🏹':'💥')}
+function hitGob(g){if(!goblins.includes(g))return;const sw=S.inv.sword>0;gobHurt(g,sw?3:1,'hit');if(sw&&!goblins.includes(g))floatAt(player.x,player.y-50,'🗡️✨')}
+function goblinUpdate(dt){
+  gobBonk=Math.max(0,gobBonk-dt);
+  if(!guestMode&&!bedtime()&&!goblins.length&&(raidT-=dt)<=0){raidT=150+Math.random()*90;startRaid()}
+  for(const g of goblins.slice()){
+    g.hit=Math.max(0,g.hit-dt);g.atk=Math.max(0,g.atk-dt);
+    if(g.stun>0){g.stun-=dt;g.walk=0;continue}
+    const pd=Math.hypot(player.x-g.x,player.y-g.y);
+    if(g.st!=='run'&&pd<20&&!g.atk&&!gobBonk&&!player.stun){g.atk=2.2;gobBonk=2.5;player.stun=.6;player.path=[];player.target=null;player.act=null;floatAt(player.x,player.y-44,'💫');toast('👺 BONK! A goblin hit you with its club! Tap it to fight back!',2200);continue}
+    if(g.st==='go'){const o=g.tgt!=null&&byId(g.tgt);if(!o){if(++g.tries>4){g.st='run';gobPathHome(g)}else gobPick(g);continue}
+      if(!followPath(g,T*1.3,dt)){const b=BUILD[o.t],nx=Math.max(o.x*T,Math.min(g.x,(o.x+b.w)*T)),ny=Math.max(o.y*T,Math.min(g.y,(o.y+b.h)*T));
+        if(Math.hypot(nx-g.x,ny-g.y)<T*1.8){g.st='smash';g.smash=4}else if(++g.tries>4){g.st='run';gobPathHome(g)}else gobPick(g)}}
+    else if(g.st==='smash'){g.walk=0;const o=byId(g.tgt);if(!o){g.st='go';gobPick(g);continue}
+      const was=Math.ceil(g.smash);g.smash-=dt;if(Math.ceil(g.smash)!==was&&g.smash>0)floatAt(g.x+(Math.random()-.5)*20,g.y-44,['BONK!','SMASH!','💢'][Math.random()*3|0]);
+      if(g.smash<=0){const n=Math.min(S.coins,15+(Math.random()*16|0));
+        if(n>0){g.loot=n;doAct('steal',{coins:n});floatAt(g.x,g.y-50,`-🪙${n}`);toast(`👺 A goblin smashed into your ${bname(o.t)} and stole 🪙${n}! Catch it before it gets back to its boat!`,3000)}
+        else toast('👺 The goblin found no coins to steal! It runs off grumbling',2400);
+        g.st='run';gobPathHome(g)}}
+    else if(g.st==='chase'){if((g.re-=dt)<=0){g.re=1;const t=tileOf(g),pt=tileOf(player),r=findPath(t.x,t.y,(x,y)=>x===pt.x&&y===pt.y,pt,gobWalk);g.path=r?r.path:[];if(gobTargets().length)gobPick(g)}
+      if(!followPath(g,T*1.6,dt)&&pd<40){const dx=player.x-g.x,dy=player.y-g.y;moveBy(g,dx/pd*T*1.6*dt,dy/pd*T*1.6*dt,gobWalk)}
+      if(pd<22){const n=Math.min(S.coins,10+(Math.random()*15|0));if(n>0){g.loot=n;doAct('steal',{coins:n});floatAt(player.x,player.y-50,`-🪙${n}`);toast(`👺 A goblin grabbed 🪙${n} from you! Catch it!`,2600)}g.st='run';gobPathHome(g)}}
+    else if(g.st==='run'){if(!followPath(g,T*1.5,dt)){goblins=goblins.filter(x=>x!==g);if(raid)raid.lost++;
+      toast(g.loot?`⛵ A goblin escaped on its boat with 🪙${g.loot}!`:'⛵ A goblin sailed away',2600);gobRaidOver()}}
+  }
+  // the archers on the Archery Towers
+  for(const o of S.objs){if(o.t!=='archtower')continue;const ax=o.x*T+16,ay=o.y*T-40;let best=null,bd=T*7;
+    for(const g of goblins){const d=Math.hypot(g.x-ax,g.y-14-ay);if(d<bd){bd=d;best=g}}
+    let cd=(archCool.get(o.id)||0)-dt;
+    if(best){archAim.set(o.id,Math.atan2(best.y-14-ay,best.x-ax));if(cd<=0){cd=1.4;arrows.push({x:ax,y:ay,g:best,t:0})}}
+    archCool.set(o.id,Math.max(-1,cd))}
+  for(const a of arrows){a.t+=dt;if(!goblins.includes(a.g)){a.done=1;continue}const dx=a.g.x-a.x,dy=a.g.y-14-a.y,d=Math.hypot(dx,dy),st=T*13*dt;
+    a.ang=Math.atan2(dy,dx);if(d<=st+4){a.done=1;gobHurt(a.g,1,'arrow')}else{a.x+=dx/d*st;a.y+=dy/d*st}if(a.t>3)a.done=1}
+  arrows=arrows.filter(a=>!a.done);
+}
+function drawGoblin(c,g,t){
+  const s=g.dir==='left'?-1:1,bob=g.walk?Math.abs(Math.sin(g.walk))*2:0,x=g.x,y=g.y-bob,G=g.hit>0?'#ffffff':'#a6d63a',D='#4f9a34',sm=g.st==='smash'?Math.sin(t*14):0;
+  ell(c,x,g.y,11,3.5,'rgba(0,0,0,.2)');c.save();c.translate(x,y);c.scale(s,1);
+  c.save();c.translate(9,-12);c.rotate(.5+sm*.9);rect(c,-1.5,-14,3,14,'#6a4020',1.5);ell(c,0,-15,3.6,4.4,'#5a3418');c.restore();
+  rect(c,-5,-6,3.5,6,'#2f5a1e',1);rect(c,1.5,-6,3.5,6,'#2f5a1e',1);rect(c,-7.5,-17.5,15,13,'#3a2412',3);rect(c,-7,-17,14,12,'#8a3a2a',3);rect(c,-7,-10,14,2,'#3a2412');
+  poly(c,'#2f5a1e',-6,-26,-17,-31,-5,-19);poly(c,'#2f5a1e',6,-26,17,-31,5,-19);poly(c,G,-7,-25,-15,-29.5,-6,-20);poly(c,G,7,-25,15,-29.5,6,-20);
+  ell(c,0,-23,9,8,'#2f5a1e');ell(c,0,-23,8,7,G);
+  c.fillStyle='#6a6a72';c.beginPath();c.arc(0,-25,8.4,Math.PI,0);c.fill();rect(c,-9,-26,18,2.4,'#55555c',1);poly(c,'#e8e0c8',-7,-30,-11,-37,-4,-31);poly(c,'#e8e0c8',7,-30,11,-37,4,-31);
+  ell(c,-3,-22,2.4,2.6,'#ffe14a');ell(c,3,-22,2.4,2.6,'#ffe14a');c.fillStyle='#111';c.fillRect(-2.6,-22,1.4,1.6);c.fillRect(3.4,-22,1.4,1.6);
+  c.strokeStyle='#1a2a10';c.lineWidth=1.2;c.beginPath();c.arc(0,-17.5,2.6,Math.PI+.4,-.4);c.stroke();
+  if(g.loot){ell(c,-9,-12,5,5.5,'#c9a24a');poly(c,'#a8822a',-11,-17,-7,-17,-9,-20);c.font='7px sans-serif';c.textAlign='center';c.fillText('🪙',-9,-10)}
+  c.restore();
+  if(g.hp<3)for(let k=0;k<3;k++)ell(c,x-8+k*8,y-44,2.8,2.8,k<g.hp?'#e8402a':'rgba(0,0,0,.25)');
+}
+function drawArrow(c,a){c.save();c.translate(a.x,a.y);c.rotate(a.ang||0);c.strokeStyle='#7a4a24';c.lineWidth=1.6;c.beginPath();c.moveTo(-9,0);c.lineTo(6,0);c.stroke();
+  poly(c,'#9aa0a8',6,-2.5,11,0,6,2.5);poly(c,'#e8e8e8',-9,0,-12,-3,-7,0);poly(c,'#e8e8e8',-9,0,-12,3,-7,0);c.restore()}
 function drawVolcano(c,t){
   const X=(VOLCANO.x+.5)*T,Y=(VOLCANO.y+2.6)*T,top=Y-5.4*T;
   ell(c,X,Y,4.2*T,1*T,'rgba(0,0,0,.2)');
@@ -3024,6 +3110,7 @@ function update(dt){
   // Player
   if(curKind==='volcano'&&!inside)volcanoUpdate(dt);
   if(critters.length&&!inside)critterUpdate(dt);
+  if(curKind==='medieval'&&!inside)goblinUpdate(dt);
   if(fly){flyUpdate(dt);player.path=[];player.walk=0}
   else if(train&&train.rider){player.x=train.x;player.y=train.y;player.path=[];player.target=null;player.steer=null;player.walk=0}
   else if(player.act){if(tNow>=player.act.end){const f=player.act.fn;player.act=null;f()}}
@@ -3368,6 +3455,16 @@ function drawObjIn(c,o,t,icon){
   case'picnic':rect(c,X+4,Y+2,56,5,'#8a5a2c',2);rect(c,X+8,Y+16,4,10,'#7a4a24');rect(c,X+52,Y+16,4,10,'#7a4a24');rect(c,X+2,Y+8,60,12,'#c4864a',3);
     for(let i=0;i<8;i++)for(let j=0;j<3;j++)if((i+j)%2)c.fillRect(X+16+i*4,Y+8+j*4,4,4);rect(c,X+4,Y+24,56,5,'#8a5a2c',2);
     ell(c,X+24,Y+13,3.5,2.5,'#e74c3c');ell(c,X+40,Y+13,4,2.5,'#f7d23b');break;
+  case'archtower':{const a=icon?0:(archAim.get(o.id)||0),fx=Math.cos(a)<0?-1:1;
+    ell(c,X+16,Y+29,14,4,'rgba(0,0,0,.2)');rect(c,X+5,Y-24,22,54,'#a9a59c',2);c.fillStyle='rgba(0,0,0,.1)';for(let r=0;r<9;r++)c.fillRect(X+6+(r%2)*5,Y-20+r*6,14,1.2);
+    rect(c,X+12,Y+14,8,15,'#5a3a22',4);rect(c,X+13,Y-8,6,8,'#2a2a3a',3);
+    rect(c,X+2,Y-30,28,7,'#8f8b83',1.5);for(let k=0;k<4;k++)rect(c,X+2+k*7.5,Y-35,5,6,'#8f8b83',1);
+    // the archer on top
+    const AX=X+16,AY=Y-34;rect(c,AX-4,AY-12,8,11,'#3f8a3a',2);ell(c,AX,AY-15,4.2,4.2,'#f2c9a0');poly(c,'#3f8a3a',AX-5,AY-15,AX+5,AY-15,AX,AY-23);
+    c.fillStyle='#111';c.fillRect(AX+fx*1.5-.6,AY-16,1.3,1.3);
+    c.save();c.translate(AX,AY-9);c.rotate(a);c.strokeStyle='#7a4a24';c.lineWidth=1.8;c.beginPath();c.arc(4,0,8,-1.2,1.2);c.stroke();
+    c.strokeStyle='#eee';c.lineWidth=.8;c.beginPath();c.moveTo(4+8*Math.cos(-1.2),8*Math.sin(-1.2));c.lineTo(4+8*Math.cos(1.2),8*Math.sin(1.2));c.stroke();c.restore();
+    rect(c,AX-1,AY-30,2,8,'#5a4a3a');poly(c,'#c8343a',AX+1,AY-30,AX+9,AY-28,AX+1,AY-26);break}
   case'statue':rect(c,X+5,Y+16,22,13,'#b3b9c2',2);rect(c,X+3,Y+13,26,5,'#cdd2d9',2);
     drawPerson(c,X+16,Y+14,{shirt:'#a7adb8',skin:'#c3c8cf',hat:1,band:'#9aa0a8'},'down',0,null,0);break;
   case'playground':{c.strokeStyle='#3d7fc4';c.lineWidth=3;c.lineCap='round';c.beginPath();c.moveTo(X+5,Y+58);c.lineTo(X+10,Y+12);c.moveTo(X+31,Y+58);c.lineTo(X+26,Y+12);c.moveTo(X+8,Y+12);c.lineTo(X+28,Y+12);c.stroke();
@@ -3748,6 +3845,7 @@ function draw(t){
   {const P=potAt();if(P)list.push([P.y*T+20,()=>drawPot(ctx,P,t)])}
   if(festNow())drawFest(list,t);
   if(train)drawTrainList(list,t);
+  for(const g of goblins)list.push([g.y,()=>plain(drawGoblin)(ctx,g,t)]);for(const a of arrows)list.push([a.y+60,()=>plain(drawArrow)(ctx,a)]);
   if(VOLCANO){list.push([(VOLCANO.y+3)*T,()=>drawVolcano(ctx,t)]);
     for(const d of lavaDrops)list.push([d.y,()=>drawLavaRock(ctx,d,t)]);
     for(const sc of scorps)if(!sc.hide)list.push([sc.y,()=>{drawScorp(ctx,sc,t);if(sc.zz)zzz(ctx,sc.x,sc.y-22,t)}]);
@@ -4980,7 +5078,7 @@ function applySnap(m){
   landRev=0;
   for(let i=0;i<W*H;i++){const r=S.rev[i]==='1'||!first&&rev[i]?1:0;rev[i]=r;fogImg.data[i*4+3]=r?0:255;if(r&&ter[i]!==WATER)landRev++}
   fogX.putImageData(fogImg,0,0);
-  rebuildOcc();loadForage();if(curKind!=='volcano')scorps=[];else if(!scorps.length)spawnScorps();
+  rebuildOcc();loadForage();goblins=[];arrows=[];raid=null;raidT=60;if(curKind!=='volcano')scorps=[];else if(!scorps.length)spawnScorps();
   const who=s=>JSON.stringify(s.villagers.map(v=>[v.name,v.house]));
   if(first||who(old)!==who(S)){villagers=[];S.villagers.forEach(spawnVillager)}
   else for(const vw of villagers)vw.v=S.villagers.find(v=>v.name===vw.v.name)||vw.v;
