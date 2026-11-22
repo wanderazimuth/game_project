@@ -928,7 +928,7 @@ function bonk(sc){
   else{sc.stun=2.5;floatAt(sc.x,sc.y-24,'💫');toast('💥 Bonk! Shoo, scorpion!')}
 }
 // ── Medieval Island: goblin raiders land on the beach and try to rob your buildings. Fight them, or build Archery Towers ──
-let goblins=[],arrows=[],raidT=60,gobBonk=0,archAim=new Map(),archCool=new Map(),raid=null;
+let goblins=[],arrows=[],raidT=30,gobBonk=0,archAim=new Map(),archCool=new Map(),raid=null;
 const gobWalk=(x,y)=>{if(!walkable(x,y))return false;const o=objAt(y*W+x);return!(o&&o.t==='gate')}; // walls and gates keep goblins out, and they can't cross a drawbridge
 const gobTargets=()=>S.objs.filter(o=>BUILD[o.t].w>=2&&!BUILD[o.t].walk&&o.t!=='exhibit');
 function gobPathTo(g,o){const t=tileOf(g),b=BUILD[o.t],r=findPath(t.x,t.y,(x,y)=>x>=o.x-1&&x<=o.x+b.w&&y>=o.y-1&&y<=o.y+b.h,{x:o.x+b.w/2,y:o.y+b.h/2},gobWalk);g.path=r?r.path:[];g.ok=!!(r&&r.ok)}
@@ -958,7 +958,7 @@ function gobHurt(g,dmg,how){if(!goblins.includes(g))return;g.hp-=dmg;g.hit=.25;g
 function hitGob(g){if(!goblins.includes(g))return;const sw=S.inv.sword>0;gobHurt(g,sw?3:1,'hit');if(sw&&!goblins.includes(g))floatAt(player.x,player.y-50,'🗡️✨')}
 function goblinUpdate(dt){
   gobBonk=Math.max(0,gobBonk-dt);
-  if(!guestMode&&!bedtime()&&!goblins.length&&(raidT-=dt)<=0){raidT=150+Math.random()*90;startRaid()}
+  if(!guestMode&&!bedtime()&&!goblins.length&&(raidT-=dt)<=0){raidT=60+Math.random()*30;startRaid()}
   for(const g of goblins.slice()){
     g.hit=Math.max(0,g.hit-dt);g.atk=Math.max(0,g.atk-dt);
     if(g.stun>0){g.stun-=dt;g.walk=0;continue}
@@ -5078,7 +5078,7 @@ function applySnap(m){
   landRev=0;
   for(let i=0;i<W*H;i++){const r=S.rev[i]==='1'||!first&&rev[i]?1:0;rev[i]=r;fogImg.data[i*4+3]=r?0:255;if(r&&ter[i]!==WATER)landRev++}
   fogX.putImageData(fogImg,0,0);
-  rebuildOcc();loadForage();goblins=[];arrows=[];raid=null;raidT=60;if(curKind!=='volcano')scorps=[];else if(!scorps.length)spawnScorps();
+  rebuildOcc();loadForage();goblins=[];arrows=[];raid=null;raidT=30;if(curKind!=='volcano')scorps=[];else if(!scorps.length)spawnScorps();
   const who=s=>JSON.stringify(s.villagers.map(v=>[v.name,v.house]));
   if(first||who(old)!==who(S)){villagers=[];S.villagers.forEach(spawnVillager)}
   else for(const vw of villagers)vw.v=S.villagers.find(v=>v.name===vw.v.name)||vw.v;
