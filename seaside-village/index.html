@@ -591,7 +591,7 @@ unstick(player);
 // ── What did you tap? ────────────────────────────────────────────────────────
 function pickAt(wx,wy){
   for(const sc of scorps)if(!sc.hide&&Math.abs(wx-sc.x)<17&&Math.abs(wy-sc.y+6)<15)return{k:'scorp',sc};
-  for(const g of goblins)if(Math.abs(wx-g.x)<17&&Math.abs(wy-g.y+16)<22)return{k:'gob',g};
+  for(const g of goblins){const big=g.kind==='troll';if(Math.abs(wx-g.x)<(big?28:17)&&Math.abs(wy-g.y+(big?40:16))<(big?44:22))return{k:'gob',g}}
   for(const cr of critters){if(cr.hide||cr.gone)continue;const big=cr.kind==='camel'||cr.kind==='bear'||cr.kind==='rex'||cr.kind==='trike'||!!HUNT[cr.kind]||cr.kind==='moa',tall=cr.kind==='camel'?54:cr.kind==='longneck'?76:cr.kind==='rex'?50:HUNT[cr.kind]&&cr.kind!=='bear'||cr.kind==='moa'?44:0,up=cr.zz&&cr.kind==='parrot'?6:cr.kind==='parrot'||cr.kind==='bat'?24:cr.kind==='ptero'?(cr.zz?8:34):cr.kind==='ghost'?14:0;if(Math.abs(wx-cr.x)<(cr.kind==='longneck'?30:big?20:13)&&wy<cr.y-up+5&&wy>cr.y-up-(tall||(big?32:24)))return{k:'critter',cr}}
   for(const v of villagers)if(v.cage&&Math.abs(wx-v.x)<18&&wy<v.y+8&&wy>v.y-46)return{k:'captive',v,x:denOf(v.grab).x+1+(v.slot||0),y:denOf(v.grab).y};
   for(const v of villagers)if(!isGuest(v.v.name)&&!v.asleep&&!v.inHosp&&!v.carried&&!v.atMovie&&Math.abs(wx-v.x)<13&&wy<v.y+5&&wy>v.y-42)return{k:'vill',v};
@@ -689,7 +689,7 @@ function arrive(tg){
     case'chest':doAct('chest',{c:tg.c});break;
     case'forage':if(forageAt.has(tg.i))act(250,'pick',()=>doAct('forage',{i:tg.i}));break;
     case'critter':if(Math.hypot(tg.cr.x-player.x,tg.cr.y-player.y)<T*(tg.cr.kind==='dolphin'||tg.cr.kind==='seaturtle'||tg.cr.kind==='clown'||tg.cr.kind==='octo'||tg.cr.kind==='shark'?4.5:tg.cr.kind==='parrot'||tg.cr.kind==='bat'||tg.cr.kind==='ptero'||tg.cr.kind==='longneck'?3.5:tg.cr.kind==='ghost'?2.8:2.4)){facePoint(tg.cr.x,tg.cr.y);feedCritter(tg.cr)}else toast('It wandered off!');break;
-    case'gob':if(!goblins.includes(tg.g))break;if(Math.hypot(tg.g.x-player.x,tg.g.y-player.y)<T*2.2){facePoint(tg.g.x,tg.g.y);act(250,'chop',()=>hitGob(tg.g))}else toast('👺 The goblin ran off — after it!');break;
+    case'gob':if(!goblins.includes(tg.g))break;if(Math.hypot(tg.g.x-player.x,tg.g.y-player.y)<T*2.2){facePoint(tg.g.x,tg.g.y);act(250,'chop',()=>hitGob(tg.g))}else toast(`${RAIDERS[tg.g.kind].e} The ${RAIDERS[tg.g.kind].n} ran off — after it!`);break;
     case'scorp':if(Math.hypot(tg.sc.x-player.x,tg.sc.y-player.y)<T*2.2){facePoint(tg.sc.x,tg.sc.y);act(250,'chop',()=>bonk(tg.sc))}else toast('🦂 It scuttled away — after it!');break;
     case'temple':templeModal();break;
     case'cave':enterCave();break;
@@ -927,10 +927,12 @@ function bonk(sc){
     toast(`💥 Bonk! You got your ${l.coins?'🪙'+l.coins:ITEMS[l.k].e+' '+ITEMS[l.k].n} back!`);sc.loot=null;sc.hide=20;stealCool=3}
   else{sc.stun=2.5;floatAt(sc.x,sc.y-24,'💫');toast('💥 Bonk! Shoo, scorpion!')}
 }
-// ── Medieval Island: goblin raiders land on the beach and try to rob your buildings. Fight them, or build Archery Towers ──
-let goblins=[],arrows=[],raidT=30,gobBonk=0,archAim=new Map(),archCool=new Map(),raid=null;
-const gobWalk=(x,y)=>{if(!walkable(x,y))return false;const o=objAt(y*W+x);return!(o&&o.t==='gate')}; // walls and gates keep goblins out, and they can't cross a drawbridge
+// ── Medieval Island: raiders land on the beach — goblins and trolls rob your buildings, wolves chase you and snatch from your bag. Fight them, or build Archery Towers ──
+let goblins=[],arrows=[],rings=[],raidT=30,raidNo=0,gobBonk=0,archAim=new Map(),archCool=new Map(),raid=null;
+const RAIDERS={gob:{hp:3,sp:1.3,e:'👺',n:'goblin',prize:10},wolf:{hp:2,sp:2.4,e:'🐺',n:'wolf',prize:10},troll:{hp:6,sp:.65,e:'👹',n:'troll',prize:25}};
+const gobWalk=(x,y)=>{if(!walkable(x,y))return false;const o=objAt(y*W+x);return!(o&&o.t==='gate')}; // walls and gates keep raiders out, and they can't cross a drawbridge
 const gobTargets=()=>S.objs.filter(o=>BUILD[o.t].w>=2&&!BUILD[o.t].walk&&o.t!=='exhibit');
+const gobSp=g=>RAIDERS[g.kind].sp*T*(g.haste>0?1.6:1);
 function gobPathTo(g,o){const t=tileOf(g),b=BUILD[o.t],r=findPath(t.x,t.y,(x,y)=>x>=o.x-1&&x<=o.x+b.w&&y>=o.y-1&&y<=o.y+b.h,{x:o.x+b.w/2,y:o.y+b.h/2},gobWalk);g.path=r?r.path:[];g.ok=!!(r&&r.ok)}
 function gobPathHome(g){const t=tileOf(g),r=findPath(t.x,t.y,(x,y)=>x===g.home.x&&y===g.home.y,g.home,gobWalk);g.path=r?r.path:[]}
 function startRaid(){
@@ -938,46 +940,70 @@ function startRaid(){
   for(let k=0;k<600;k++){const x=2+(Math.random()*(W-4)|0),y=2+(Math.random()*(H-4)|0);
     if(ter[y*W+x]!==SAND||!gobWalk(x,y)||side&&!side[y*W+x])continue;const d=Math.hypot(x-pt.x,y-pt.y);if(d>14&&d<34&&d>bd){bd=d;best={x,y}}}
   if(!best)return;
-  const n=3+(Math.random()*3|0);raid={n,down:0,lost:0};
-  for(let k=0;k<n;k++){const g={x:best.x*T+16+(Math.random()-.5)*40,y:best.y*T+20+(Math.random()-.5)*30,home:best,hp:3,st:'go',path:[],stun:k*.7,hit:0,loot:0,smash:0,atk:0,dir:'right',walk:0,re:0,tgt:null,tries:0};
-    if(!gobWalk(Math.floor(g.x/T),Math.floor((g.y-2)/T))){g.x=best.x*T+16;g.y=best.y*T+20}goblins.push(g)}
-  toast(`🎺 TOOT TOOT! ${n} goblin raiders are landing on the beach! Fight them ⚔️ or build 🏹 Archery Towers!`,3600);
+  raidNo++;const kinds=[];
+  for(let k=2+(Math.random()*2|0);k>0;k--)kinds.push('gob');
+  for(let k=1+(Math.random()*2|0);k>0;k--)kinds.push('wolf');
+  for(let k=raidNo===1||Math.random()<.6?1:0;k>0;k--)kinds.unshift('troll');
+  raid={n:kinds.length,down:0,lost:0};
+  kinds.forEach((kind,k)=>{const R=RAIDERS[kind],g={kind,x:best.x*T+16+(Math.random()-.5)*40,y:best.y*T+20+(Math.random()-.5)*30,home:best,hp:R.hp,st:kind==='wolf'?'chase':'go',path:[],stun:kind==='troll'?1.5:k*.6,hit:0,loot:0,item:null,smash:0,atk:0,dir:'right',walk:0,re:0,tgt:null,tries:0,haste:0,howl:2+Math.random()*2};
+    if(!gobWalk(Math.floor(g.x/T),Math.floor((g.y-2)/T))){g.x=best.x*T+16;g.y=best.y*T+20}goblins.push(g)});
+  const nG=kinds.filter(k=>k==='gob').length,nW=kinds.filter(k=>k==='wolf').length,nT=kinds.filter(k=>k==='troll').length,L=[`${nG} 👺 goblin${nG>1?'s':''}`];
+  if(nT)L.push(`${nT} 👹 troll${nT>1?'s':''}`);if(nW)L.push(`${nW} 🐺 wol${nW>1?'ves':'f'}`);
+  if(nT)shake=Math.max(shake,.4);
+  toast(`🎺 TOOT TOOT! Raiders on the beach: ${L.slice(0,-1).join(', ')} and ${L[L.length-1]}! Fight them ⚔️ or build 🏹 Archery Towers!`,3800);
 }
 function gobPick(g){const L=gobTargets();if(!L.length){g.st='chase';g.tgt=null;return}g.tgt=L[Math.random()*L.length|0].id;g.st='go';gobPathTo(g,byId(g.tgt))}
 function gobDown(g,how){
-  goblins=goblins.filter(x=>x!==g);S.gobsDown=(S.gobsDown||0)+1;if(raid)raid.down++;
-  for(let k=0;k<24;k++)confetti.push({x:g.x,y:g.y-14,vx:(Math.random()-.5)*160,vy:-60-Math.random()*140,c:['#6fbf4a','#a8e06a','#fff'][k%3],t:0});
-  const back=g.loot;doAct('giveBack',{coins:back+10});floatAt(g.x,g.y-40,`+🪙${back+10}`);
-  toast(how==='arrow'?`🏹 Thwip! The archer got a goblin!${back?' You got your 🪙'+back+' back!':''} +🪙10`:`💥 POW! Goblin defeated!${back?' You got your 🪙'+back+' back!':''} +🪙10`,2400);gobRaidOver();
+  const R=RAIDERS[g.kind];goblins=goblins.filter(x=>x!==g);S.gobsDown=(S.gobsDown||0)+1;if(raid)raid.down++;
+  const cols=g.kind==='troll'?['#9b7ac8','#ffd23f','#fff']:g.kind==='wolf'?['#8f969e','#c8ccd2','#fff']:['#6fbf4a','#a8e06a','#fff'];
+  for(let k=0;k<(g.kind==='troll'?45:24);k++)confetti.push({x:g.x,y:g.y-14,vx:(Math.random()-.5)*(g.kind==='troll'?320:160),vy:-60-Math.random()*(g.kind==='troll'?260:140),c:cols[k%3],t:0});
+  const back=g.loot,got=back+R.prize;doAct('giveBack',{coins:got});if(g.item)doAct('giveBack',g.item);floatAt(g.x,g.y-40,`+🪙${got}${g.item?' +'+g.item.n+' '+ITEMS[g.item.k].e:''}`);
+  const what=g.item?` You got your ${g.item.n} ${ITEMS[g.item.k].e} back!`:back?` You got your 🪙${back} back!`:'';
+  if(g.kind==='troll')shake=Math.max(shake,.4);
+  toast(how==='arrow'?`🏹 Thwip! The archer got a ${R.n}!${what} +🪙${R.prize}`:`💥 POW! ${R.n[0].toUpperCase()+R.n.slice(1)} defeated!${what} +🪙${R.prize}`,2400);
+  gobRaidOver();
 }
 function gobRaidOver(){if(goblins.length||!raid)return;const r=raid;raid=null;
-  if(r.down)setTimeout(()=>toast(r.lost?`👺 The raid is over. ${r.down} goblin${r.down>1?'s':''} beaten, ${r.lost} got away!`:`🎉 You defended the kingdom! Every goblin was beaten! 🏰`,3200),2500)}
-function gobHurt(g,dmg,how){if(!goblins.includes(g))return;g.hp-=dmg;g.hit=.25;g.stun=Math.max(g.stun,.5);
-  const a=Math.atan2(g.y-player.y,g.x-player.x);if(how!=='arrow')for(let k=0;k<4;k++)moveBy(g,Math.cos(a)*5,Math.sin(a)*5,gobWalk);
-  if(g.hp<=0)gobDown(g,how);else floatAt(g.x,g.y-36,how==='arrow'?'🏹':'💥')}
+  if(r.down)setTimeout(()=>toast(r.lost?`🏰 The raid is over. ${r.down} raider${r.down>1?'s':''} beaten, ${r.lost} got away!`:`🎉 You defended the kingdom! Every raider was beaten! 🏰`,3200),2500)}
+function gobHurt(g,dmg,how){if(!goblins.includes(g))return;g.hp-=dmg;g.hit=.25;g.stun=Math.max(g.stun,g.kind==='troll'?.15:.5);
+  const a=Math.atan2(g.y-player.y,g.x-player.x);if(how!=='arrow'&&g.kind!=='troll')for(let k=0;k<4;k++)moveBy(g,Math.cos(a)*5,Math.sin(a)*5,gobWalk);
+  if(g.hp<=0)gobDown(g,how);else floatAt(g.x,g.y-(g.kind==='troll'?70:36),how==='arrow'?'🏹':'💥')}
 function hitGob(g){if(!goblins.includes(g))return;const sw=S.inv.sword>0;gobHurt(g,sw?3:1,'hit');if(sw&&!goblins.includes(g))floatAt(player.x,player.y-50,'🗡️✨')}
+// a wolf grabs something from your bag (or some coins) and runs for the boat
+function wolfSnatch(g){
+  const ks=Object.keys(S.inv).filter(k=>S.inv[k]>0&&ITEMS[k]&&!ITEMS[k].keep);
+  if(ks.length){const k=ks[Math.random()*ks.length|0],n=Math.min(S.inv[k],1+(Math.random()*3|0));g.item={k,n};doAct('steal',{k,n});floatAt(player.x,player.y-50,`-${n} ${ITEMS[k].e}`);toast(`🐺 CHOMP! A wolf snatched ${n} ${ITEMS[k].e} ${ITEMS[k].n} from your bag! Catch it!`,2800)}
+  else{const n=Math.min(S.coins,10+(Math.random()*15|0));if(n>0){g.loot=n;doAct('steal',{coins:n});floatAt(player.x,player.y-50,`-🪙${n}`);toast(`🐺 CHOMP! A wolf grabbed 🪙${n}! Catch it!`,2600)}else toast('🐺 The wolf sniffs your empty bag and runs off')}
+  player.stun=.5;player.path=[];player.target=null;player.act=null;g.st='run';gobPathHome(g);
+}
 function goblinUpdate(dt){
   gobBonk=Math.max(0,gobBonk-dt);
   if(!guestMode&&!bedtime()&&!goblins.length&&(raidT-=dt)<=0){raidT=60+Math.random()*30;startRaid()}
+  for(const r of rings)r.t+=dt;rings=rings.filter(r=>r.t<.7);
   for(const g of goblins.slice()){
-    g.hit=Math.max(0,g.hit-dt);g.atk=Math.max(0,g.atk-dt);
+    g.hit=Math.max(0,g.hit-dt);g.atk=Math.max(0,g.atk-dt);g.haste=Math.max(0,g.haste-dt);
+    if(g.kind==='wolf'&&g.st!=='run'&&(g.howl-=dt)<=0){g.howl=5;rings.push({x:g.x,y:g.y-10,t:0});floatAt(g.x,g.y-36,'AWOOO!');
+      for(const o of goblins)if(Math.hypot(o.x-g.x,o.y-g.y)<T*4)o.haste=3}
     if(g.stun>0){g.stun-=dt;g.walk=0;continue}
-    const pd=Math.hypot(player.x-g.x,player.y-g.y);
-    if(g.st!=='run'&&pd<20&&!g.atk&&!gobBonk&&!player.stun){g.atk=2.2;gobBonk=2.5;player.stun=.6;player.path=[];player.target=null;player.act=null;floatAt(player.x,player.y-44,'💫');toast('👺 BONK! A goblin hit you with its club! Tap it to fight back!',2200);continue}
+    const pd=Math.hypot(player.x-g.x,player.y-g.y),big=g.kind==='troll';
+    if(g.kind!=='wolf'&&g.st!=='run'&&pd<(big?30:20)&&!g.atk&&!gobBonk&&!player.stun){g.atk=big?3:2.2;gobBonk=2.5;player.stun=big?1.1:.6;player.path=[];player.target=null;player.act=null;
+      if(big){shake=Math.max(shake,.4);const a=Math.atan2(player.y-g.y,player.x-g.x);for(let k=0;k<6;k++)moveBy(player,Math.cos(a)*6,Math.sin(a)*6,walkable)}
+      floatAt(player.x,player.y-44,'💫');toast(big?'👹 WHAM! A troll swatted you with its giant club!':'👺 BONK! A goblin hit you with its club! Tap it to fight back!',2200);continue}
     if(g.st==='go'){const o=g.tgt!=null&&byId(g.tgt);if(!o){if(++g.tries>4){g.st='run';gobPathHome(g)}else gobPick(g);continue}
-      if(!followPath(g,T*1.3,dt)){const b=BUILD[o.t],nx=Math.max(o.x*T,Math.min(g.x,(o.x+b.w)*T)),ny=Math.max(o.y*T,Math.min(g.y,(o.y+b.h)*T));
-        if(Math.hypot(nx-g.x,ny-g.y)<T*1.8){g.st='smash';g.smash=4}else if(++g.tries>4){g.st='run';gobPathHome(g)}else gobPick(g)}}
+      if(!followPath(g,gobSp(g),dt)){const b=BUILD[o.t],nx=Math.max(o.x*T,Math.min(g.x,(o.x+b.w)*T)),ny=Math.max(o.y*T,Math.min(g.y,(o.y+b.h)*T));
+        if(Math.hypot(nx-g.x,ny-g.y)<T*(big?2.3:1.8)){g.st='smash';g.smash=big?6:4}else if(++g.tries>4){g.st='run';gobPathHome(g)}else gobPick(g)}}
     else if(g.st==='smash'){g.walk=0;const o=byId(g.tgt);if(!o){g.st='go';gobPick(g);continue}
-      const was=Math.ceil(g.smash);g.smash-=dt;if(Math.ceil(g.smash)!==was&&g.smash>0)floatAt(g.x+(Math.random()-.5)*20,g.y-44,['BONK!','SMASH!','💢'][Math.random()*3|0]);
-      if(g.smash<=0){const n=Math.min(S.coins,15+(Math.random()*16|0));
-        if(n>0){g.loot=n;doAct('steal',{coins:n});floatAt(g.x,g.y-50,`-🪙${n}`);toast(`👺 A goblin smashed into your ${bname(o.t)} and stole 🪙${n}! Catch it before it gets back to its boat!`,3000)}
-        else toast('👺 The goblin found no coins to steal! It runs off grumbling',2400);
+      const was=Math.ceil(g.smash);g.smash-=dt;if(Math.ceil(g.smash)!==was&&g.smash>0){floatAt(g.x+(Math.random()-.5)*20,g.y-(big?80:44),big?['BOOM!','CRUNCH!','💢'][Math.random()*3|0]:['BONK!','SMASH!','💢'][Math.random()*3|0]);if(big)shake=Math.max(shake,.25)}
+      if(g.smash<=0){const n=Math.min(S.coins,big?40+(Math.random()*21|0):15+(Math.random()*16|0)),R=RAIDERS[g.kind];
+        if(n>0){g.loot=n;doAct('steal',{coins:n});floatAt(g.x,g.y-50,`-🪙${n}`);toast(`${R.e} A ${R.n} smashed into your ${bname(o.t)} and stole 🪙${n}! Catch it before it gets back to the boat!`,3000)}
+        else toast(`${R.e} The ${R.n} found no coins to steal! It ${big?'stomps':'runs'} off grumbling`,2400);
         g.st='run';gobPathHome(g)}}
-    else if(g.st==='chase'){if((g.re-=dt)<=0){g.re=1;const t=tileOf(g),pt=tileOf(player),r=findPath(t.x,t.y,(x,y)=>x===pt.x&&y===pt.y,pt,gobWalk);g.path=r?r.path:[];if(gobTargets().length)gobPick(g)}
-      if(!followPath(g,T*1.6,dt)&&pd<40){const dx=player.x-g.x,dy=player.y-g.y;moveBy(g,dx/pd*T*1.6*dt,dy/pd*T*1.6*dt,gobWalk)}
-      if(pd<22){const n=Math.min(S.coins,10+(Math.random()*15|0));if(n>0){g.loot=n;doAct('steal',{coins:n});floatAt(player.x,player.y-50,`-🪙${n}`);toast(`👺 A goblin grabbed 🪙${n} from you! Catch it!`,2600)}g.st='run';gobPathHome(g)}}
-    else if(g.st==='run'){if(!followPath(g,T*1.5,dt)){goblins=goblins.filter(x=>x!==g);if(raid)raid.lost++;
-      toast(g.loot?`⛵ A goblin escaped on its boat with 🪙${g.loot}!`:'⛵ A goblin sailed away',2600);gobRaidOver()}}
+    else if(g.st==='chase'){if((g.re-=dt)<=0){g.re=g.kind==='wolf'?.6:1;const t=tileOf(g),pt=tileOf(player),r=findPath(t.x,t.y,(x,y)=>x===pt.x&&y===pt.y,pt,gobWalk);g.path=r?r.path:[];if(g.kind!=='wolf'&&gobTargets().length)gobPick(g)}
+      if(!followPath(g,gobSp(g)*(g.kind==='wolf'?1:1.2),dt)&&pd<40){const dx=player.x-g.x,dy=player.y-g.y;moveBy(g,dx/pd*gobSp(g)*dt,dy/pd*gobSp(g)*dt,gobWalk)}
+      if(pd<22){if(g.kind==='wolf'){if(!player.stun)wolfSnatch(g)}
+        else{const n=Math.min(S.coins,10+(Math.random()*15|0));if(n>0){g.loot=n;doAct('steal',{coins:n});floatAt(player.x,player.y-50,`-🪙${n}`);toast(`👺 A goblin grabbed 🪙${n} from you! Catch it!`,2600)}g.st='run';gobPathHome(g)}}}
+    else if(g.st==='run'){if(!followPath(g,gobSp(g)*(g.kind==='wolf'?.8:1.15),dt)){const R=RAIDERS[g.kind];goblins=goblins.filter(x=>x!==g);if(raid)raid.lost++;
+      toast(g.item?`⛵ A wolf escaped on the boat with your ${g.item.n} ${ITEMS[g.item.k].e}!`:g.loot?`⛵ ${R.e} The ${R.n} escaped on the boat with 🪙${g.loot}!`:`⛵ The ${R.n} sailed away`,2600);gobRaidOver()}}
   }
   // the archers on the Archery Towers
   for(const o of S.objs){if(o.t!=='archtower')continue;const ax=o.x*T+16,ay=o.y*T-40;let best=null,bd=T*7;
@@ -985,11 +1011,14 @@ function goblinUpdate(dt){
     let cd=(archCool.get(o.id)||0)-dt;
     if(best){archAim.set(o.id,Math.atan2(best.y-14-ay,best.x-ax));if(cd<=0){cd=1.4;arrows.push({x:ax,y:ay,g:best,t:0})}}
     archCool.set(o.id,Math.max(-1,cd))}
-  for(const a of arrows){a.t+=dt;if(!goblins.includes(a.g)){a.done=1;continue}const dx=a.g.x-a.x,dy=a.g.y-14-a.y,d=Math.hypot(dx,dy),st=T*13*dt;
+  for(const a of arrows){a.t+=dt;if(!goblins.includes(a.g)){a.done=1;continue}const hy=a.g.kind==='troll'?34:14,dx=a.g.x-a.x,dy=a.g.y-hy-a.y,d=Math.hypot(dx,dy),st=T*13*dt;
     a.ang=Math.atan2(dy,dx);if(d<=st+4){a.done=1;gobHurt(a.g,1,'arrow')}else{a.x+=dx/d*st;a.y+=dy/d*st}if(a.t>3)a.done=1}
   arrows=arrows.filter(a=>!a.done);
 }
 function drawGoblin(c,g,t){
+  if(g.haste>0){c.strokeStyle='rgba(255,190,90,.7)';c.lineWidth=2;const s=g.dir==='left'?1:-1;for(const o of[-6,0,6]){c.beginPath();c.moveTo(g.x+s*10,g.y-12+o);c.lineTo(g.x+s*22,g.y-12+o);c.stroke()}}
+  if(g.kind==='wolf'){drawWolf(c,g,t);return}
+  if(g.kind==='troll'){drawTroll(c,g,t);return}
   const s=g.dir==='left'?-1:1,bob=g.walk?Math.abs(Math.sin(g.walk))*2:0,x=g.x,y=g.y-bob,G=g.hit>0?'#ffffff':'#a6d63a',D='#4f9a34',sm=g.st==='smash'?Math.sin(t*14):0;
   ell(c,x,g.y,11,3.5,'rgba(0,0,0,.2)');c.save();c.translate(x,y);c.scale(s,1);
   c.save();c.translate(9,-12);c.rotate(.5+sm*.9);rect(c,-1.5,-14,3,14,'#6a4020',1.5);ell(c,0,-15,3.6,4.4,'#5a3418');c.restore();
@@ -1003,6 +1032,35 @@ function drawGoblin(c,g,t){
   c.restore();
   if(g.hp<3)for(let k=0;k<3;k++)ell(c,x-8+k*8,y-44,2.8,2.8,k<g.hp?'#e8402a':'rgba(0,0,0,.25)');
 }
+function drawWolf(c,g,t){
+  const s=g.dir==='left'?-1:1,x=g.x,y=g.y-(g.walk?Math.abs(Math.sin(g.walk*1.3))*2.5:0),st=g.walk?Math.sin(g.walk*1.3)*3:0,C=g.hit>0?'#ffffff':'#8f969e',D='#6a7076',L='#c8ccd2';
+  ell(c,x,g.y,15,4,'rgba(0,0,0,.2)');c.save();c.translate(x,y);c.scale(s,1);
+  for(const dx of[-9,-5,6,10])rect(c,dx-1.6,-11+(dx<0?st:-st)*.4,3.4,11,D,1.5);
+  poly(c,D,-12,-15,-22,-20+Math.sin(t*6)*2,-20,-12);ell(c,-1,-14,13,6.5,C);ell(c,0,-11,9,3,L);
+  ell(c,13,-19,6.5,5.5,C);poly(c,C,15,-21,24,-17,15,-15);ell(c,23.5,-17.5,1.6,1.4,'#222');
+  poly(c,D,9,-23,11,-31,14,-23);poly(c,D,13,-23,16,-30,17,-22);
+  c.fillStyle='#ff4030';c.fillRect(14.5,-21,2,1.6);
+  if(g.item){c.font='10px sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText(ITEMS[g.item.k].e,21,-12)}
+  if(g.loot){ell(c,21,-12,4,4.5,'#c9a24a')}
+  c.restore();
+  if(g.hp<2)for(let k=0;k<2;k++)ell(c,x-4+k*8,y-36,2.8,2.8,k<g.hp?'#e8402a':'rgba(0,0,0,.25)');
+}
+function drawTroll(c,g,t){
+  const s=g.dir==='left'?-1:1,x=g.x,y=g.y-(g.walk?Math.abs(Math.sin(g.walk*.7))*3:0),st=g.walk?Math.sin(g.walk*.7)*4:0,C=g.hit>0?'#ffffff':'#7a6a9a',D='#5a4a7a',sm=g.st==='smash'?Math.sin(t*9):0;
+  ell(c,x,g.y,26,7,'rgba(0,0,0,.25)');c.save();c.translate(x,y);c.scale(s,1);
+  c.save();c.translate(20,-34);c.rotate(.4+sm*1.1);rect(c,-3,-34,6,34,'#5a3418',3);ell(c,0,-36,8,10,'#4a2a12');for(const[a,b]of[[-6,-40],[6,-34],[-4,-30]])poly(c,'#ccc',a,b,a+(a<0?-4:4),b-2,a,b+3);c.restore();
+  rect(c,-14,-18,10,18+st*.3,D,4);rect(c,4,-18,10,18-st*.3,D,4);
+  ell(c,0,-34,22,20,C);ell(c,0,-28,14,11,'#9a8aba');rect(c,-20,-24,40,6,'#5a3a1a',2);
+  ell(c,-22,-34,6,13,C);ell(c,22,-34,6,13,C);
+  ell(c,0,-60,14,12,C);ell(c,0,-54,6,4,'#8a7aaa');
+  ell(c,-5,-63,3.4,3,'#ff4040');ell(c,5,-63,3.4,3,'#ff4040');c.fillStyle='#111';c.fillRect(-5.8,-64,1.8,2);c.fillRect(4.2,-64,1.8,2);
+  poly(c,'#fff',-6,-51,-4,-46,-2,-51);poly(c,'#fff',6,-51,4,-46,2,-51);
+  for(const hx of[-6,6])poly(c,'#4a3a5a',hx-3,-68,hx+3,-68,hx+(hx<0?-2:2),-74);
+  if(g.loot){ell(c,-22,-24,8,9,'#c9a24a');poly(c,'#a8822a',-25,-32,-19,-32,-22,-36)}
+  c.restore();
+  const bw=40,bx=x-bw/2,by=y-84,M=RAIDERS.troll.hp;if(g.hp<M){rect(c,bx-1,by-1,bw+2,7,'rgba(0,0,0,.6)',2);c.fillStyle=g.hp/M>.5?'#55cc55':g.hp/M>.25?'#eecc33':'#ee3333';c.fillRect(bx,by,bw*Math.max(0,g.hp/M),5)}
+}
+function drawRings(c){for(const r of rings){c.strokeStyle=`rgba(255,190,90,${.7*(1-r.t/.7)})`;c.lineWidth=3;c.beginPath();c.ellipse(r.x,r.y,T*4*r.t/.7,T*4*r.t/.7*.55,0,0,Math.PI*2);c.stroke()}}
 function drawArrow(c,a){c.save();c.translate(a.x,a.y);c.rotate(a.ang||0);c.strokeStyle='#7a4a24';c.lineWidth=1.6;c.beginPath();c.moveTo(-9,0);c.lineTo(6,0);c.stroke();
   poly(c,'#9aa0a8',6,-2.5,11,0,6,2.5);poly(c,'#e8e8e8',-9,0,-12,-3,-7,0);poly(c,'#e8e8e8',-9,0,-12,3,-7,0);c.restore()}
 function drawVolcano(c,t){
@@ -3847,7 +3905,7 @@ function draw(t){
   {const P=potAt();if(P)list.push([P.y*T+20,()=>drawPot(ctx,P,t)])}
   if(festNow())drawFest(list,t);
   if(train)drawTrainList(list,t);
-  for(const g of goblins)list.push([g.y,()=>plain(drawGoblin)(ctx,g,t)]);for(const a of arrows)list.push([a.y+60,()=>plain(drawArrow)(ctx,a)]);
+  for(const g of goblins)list.push([g.y,()=>plain(drawGoblin)(ctx,g,t)]);for(const a of arrows)list.push([a.y+60,()=>plain(drawArrow)(ctx,a)]);if(rings.length)list.push([0,()=>drawRings(ctx)]);
   if(VOLCANO){list.push([(VOLCANO.y+3)*T,()=>drawVolcano(ctx,t)]);
     for(const d of lavaDrops)list.push([d.y,()=>drawLavaRock(ctx,d,t)]);
     for(const sc of scorps)if(!sc.hide)list.push([sc.y,()=>{drawScorp(ctx,sc,t);if(sc.zz)zzz(ctx,sc.x,sc.y-22,t)}]);
@@ -5127,7 +5185,7 @@ function applySnap(m){
   landRev=0;
   for(let i=0;i<W*H;i++){const r=S.rev[i]==='1'||!first&&rev[i]?1:0;rev[i]=r;fogImg.data[i*4+3]=r?0:255;if(r&&ter[i]!==WATER)landRev++}
   fogX.putImageData(fogImg,0,0);
-  rebuildOcc();loadForage();goblins=[];arrows=[];raid=null;raidT=30;if(curKind!=='volcano')scorps=[];else if(!scorps.length)spawnScorps();
+  rebuildOcc();loadForage();goblins=[];arrows=[];raid=null;raidT=30;rings=[];if(curKind!=='volcano')scorps=[];else if(!scorps.length)spawnScorps();
   const who=s=>JSON.stringify(s.villagers.map(v=>[v.name,v.house]));
   if(first||who(old)!==who(S)){villagers=[];S.villagers.forEach(spawnVillager)}
   else for(const vw of villagers)vw.v=S.villagers.find(v=>v.name===vw.v.name)||vw.v;
